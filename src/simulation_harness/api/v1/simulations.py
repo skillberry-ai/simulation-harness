@@ -88,9 +88,12 @@ async def create_simulation(
                 detail=f"OpenAPI parsing failed: {str(e)}",
             )
         
-        # Extract simulation name from spec
-        simulation_name = body.openapi_spec.get("info", {}).get("title", "simulation")
-        simulation_name = simulation_name.lower().replace(" ", "-")
+        # Derive simulation name from override or spec title
+        if body.name:
+            simulation_name = body.name.lower().replace(" ", "-")
+        else:
+            simulation_name = body.openapi_spec.get("info", {}).get("title", "simulation")
+            simulation_name = simulation_name.lower().replace(" ", "-")
         
         # Ensure skill exists
         try:

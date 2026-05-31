@@ -125,27 +125,33 @@ with tab2:
     st.subheader("1️⃣ Create Simulation")
     
     spec = render_openapi_editor()
-    
+
+    name_override = st.text_input(
+        "Simulation name (optional)",
+        placeholder="Defaults to spec info.title",
+        help="Override the simulation name derived from the OpenAPI spec's info.title field.",
+    )
+
     col1, col2 = st.columns([3, 1])
     with col1:
         regenerate = st.checkbox("Regenerate skill if exists", value=False)
     with col2:
         create_button = st.button("Create Simulation", type="primary", disabled=spec is None)
-    
+
     if create_button and spec:
         async def create_sim():
             client = HarnessAPIClient(state.harness_url)
-            response = await client.create_simulation(spec, regenerate)
+            response = await client.create_simulation(spec, name_override or None, regenerate)
             await client.close()
             return response
-        
+
         response = asyncio.run(create_sim())
-        
+
         # Add to history
         state.add_request(
             "POST",
             "/api/v1/simulation",
-            {"openapi_spec": spec, "regenerate_skill": regenerate},
+            {"openapi_spec": spec, "name": name_override or None, "regenerate_skill": regenerate},
             response.status_code,
             response.data,
             response.duration_ms,
