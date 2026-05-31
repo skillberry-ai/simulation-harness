@@ -1,0 +1,563 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Flight Reservation System API",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/tools/book_reservation": {
+      "post": {
+        "summary": "Creates a flight reservation for a user with specified travel details.",
+        "operationId": "book_reservation",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "user_id": {
+                    "description": "Identifier of the user making the reservation.",
+                    "title": "Identifier of the user making the reservation.",
+                    "type": "string"
+                  },
+                  "origin": {
+                    "description": "Departure location.",
+                    "title": "Departure location.",
+                    "type": "string"
+                  },
+                  "destination": {
+                    "description": "Arrival location.",
+                    "title": "Arrival location.",
+                    "type": "string"
+                  },
+                  "flight_type": {
+                    "description": "Type of flight (e.g., one-way, round-trip).",
+                    "title": "Type of flight (e.g., one-way, round-trip).",
+                    "type": "string"
+                  },
+                  "cabin": {
+                    "description": "Cabin class (e.g., economy, business).",
+                    "title": "Cabin class (e.g., economy, business).",
+                    "type": "string"
+                  },
+                  "flights": {
+                    "description": "Flight identifiers or details.",
+                    "title": "Flight identifiers or details.",
+                    "type": "string"
+                  },
+                  "passengers": {
+                    "description": "Passenger information.",
+                    "title": "Passenger information.",
+                    "type": "string"
+                  },
+                  "payment_methods": {
+                    "description": "Selected payment method(s).",
+                    "title": "Selected payment method(s).",
+                    "type": "string"
+                  },
+                  "total_baggages": {
+                    "description": "Total number of baggages.",
+                    "title": "Total number of baggages.",
+                    "type": "string"
+                  },
+                  "nonfree_baggages": {
+                    "description": "Number of baggages requiring payment.",
+                    "title": "Number of baggages requiring payment.",
+                    "type": "string"
+                  },
+                  "insurance": {
+                    "description": "Insurance option selected.",
+                    "title": "Insurance option selected.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "user_id",
+                  "origin",
+                  "destination",
+                  "flight_type",
+                  "cabin",
+                  "flights",
+                  "passengers",
+                  "payment_methods",
+                  "total_baggages",
+                  "nonfree_baggages",
+                  "insurance"
+                ],
+                "title": "book_reservationArguments",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/tools/calculate": {
+      "post": {
+        "summary": "Calculate the result of a mathematical expression.",
+        "operationId": "calculate",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "expression": {
+                    "description": "The mathematical expression to calculate, such as '2 + 2'. The expression can contain numbers, operators (+, -, *, /), parentheses, and spaces.",
+                    "title": "The mathematical expression to calculate, such as '2 + 2'. The expression can contain numbers, operators (+, -, *, /), parentheses, and spaces.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "expression"
+                ],
+                "title": "calculateArguments",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/tools/cancel_reservation": {
+      "post": {
+        "summary": "Cancel the whole reservation.",
+        "operationId": "cancel_reservation",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "reservation_id": {
+                    "description": "The reservation ID, such as 'ZFA04Y'.",
+                    "title": "The reservation ID, such as 'ZFA04Y'.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "reservation_id"
+                ],
+                "title": "cancel_reservationArguments",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/tools/get_reservation_details": {
+      "post": {
+        "summary": "Get the details of a reservation.",
+        "operationId": "get_reservation_details",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "reservation_id": {
+                    "description": "The reservation ID, such as '8JX2WO'.",
+                    "title": "The reservation ID, such as '8JX2WO'.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "reservation_id"
+                ],
+                "title": "get_reservation_detailsArguments",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/tools/get_user_details": {
+      "post": {
+        "summary": "Get the details of a user, including their reservations.",
+        "operationId": "get_user_details",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "user_id": {
+                    "description": "The user ID, such as 'sara_doe_496'.",
+                    "title": "The user ID, such as 'sara_doe_496'.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "user_id"
+                ],
+                "title": "get_user_detailsArguments",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/tools/search_direct_flight": {
+      "post": {
+        "summary": "Search for direct flights between two cities on a specific date.",
+        "operationId": "search_direct_flight",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "origin": {
+                    "description": "The origin city airport in three letters, such as 'JFK'.",
+                    "title": "The origin city airport in three letters, such as 'JFK'.",
+                    "type": "string"
+                  },
+                  "destination": {
+                    "description": "The destination city airport in three letters, such as 'LAX'.",
+                    "title": "The destination city airport in three letters, such as 'LAX'.",
+                    "type": "string"
+                  },
+                  "date": {
+                    "description": "The date of the flight in the format 'YYYY-MM-DD', such as '2024-01-01'.",
+                    "title": "The date of the flight in the format 'YYYY-MM-DD', such as '2024-01-01'.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "origin",
+                  "destination",
+                  "date"
+                ],
+                "title": "search_direct_flightArguments",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/tools/search_onestop_flight": {
+      "post": {
+        "summary": "Search for one-stop flights between two cities on a specific date.",
+        "operationId": "search_onestop_flight",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "origin": {
+                    "description": "The origin city airport in three letters, such as 'JFK'.",
+                    "title": "The origin city airport in three letters, such as 'JFK'.",
+                    "type": "string"
+                  },
+                  "destination": {
+                    "description": "The destination city airport in three letters, such as 'LAX'.",
+                    "title": "The destination city airport in three letters, such as 'LAX'.",
+                    "type": "string"
+                  },
+                  "date": {
+                    "description": "The date of the flight in the format 'YYYY-MM-DD', such as '2024-05-01'.",
+                    "title": "The date of the flight in the format 'YYYY-MM-DD', such as '2024-05-01'.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "origin",
+                  "destination",
+                  "date"
+                ],
+                "title": "search_onestop_flightArguments",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/tools/send_certificate": {
+      "post": {
+        "summary": "Send a certificate to a user. Be careful!",
+        "operationId": "send_certificate",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "user_id": {
+                    "description": "The ID of the user to book the reservation, such as 'sara_doe_496'.",
+                    "title": "The ID of the user to book the reservation, such as 'sara_doe_496'.",
+                    "type": "string"
+                  },
+                  "amount": {
+                    "description": "The amount of the certificate to send.",
+                    "title": "The amount of the certificate to send.",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "user_id",
+                  "amount"
+                ],
+                "title": "send_certificateArguments",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/tools/update_reservation_baggages": {
+      "post": {
+        "summary": "Update the baggage information of a reservation.",
+        "operationId": "update_reservation_baggages",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "reservation_id": {
+                    "description": "The reservation ID, such as 'ZFA04Y'",
+                    "title": "The reservation ID, such as 'ZFA04Y'",
+                    "type": "string"
+                  },
+                  "total_baggages": {
+                    "description": "The updated total number of baggage items included in the reservation.",
+                    "title": "The updated total number of baggage items included in the reservation.",
+                    "type": "integer"
+                  },
+                  "nonfree_baggages": {
+                    "description": "The updated number of non-free baggage items included in the reservation.",
+                    "title": "The updated number of non-free baggage items included in the reservation.",
+                    "type": "integer"
+                  },
+                  "payment_id": {
+                    "description": "The payment id stored in user profile, such as 'credit_card_7815826', 'gift_card_7815826', 'certificate_7815826'.",
+                    "title": "The payment id stored in user profile, such as 'credit_card_7815826', 'gift_card_7815826', 'certificate_7815826'.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "reservation_id",
+                  "total_baggages",
+                  "nonfree_baggages",
+                  "payment_id"
+                ],
+                "title": "update_reservation_baggagesArguments",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/tools/update_reservation_flights": {
+      "post": {
+        "summary": "Update the flight information of a reservation.",
+        "operationId": "update_reservation_flights",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "reservation_id": {
+                    "description": "The reservation ID, such as 'ZFA04Y'.",
+                    "title": "The reservation ID, such as 'ZFA04Y'.",
+                    "type": "string"
+                  },
+                  "cabin": {
+                    "description": "The cabin class of the reservation",
+                    "title": "The cabin class of the reservation",
+                    "type": "string"
+                  },
+                  "flights": {
+                    "description": "An array of objects containing details about each piece of flight in the ENTIRE new reservation. Even if the a flight segment is not changed, it should still be included in the array.",
+                    "title": "An array of objects containing details about each piece of flight in the ENTIRE new reservation. Even if the a flight segment is not changed, it should still be included in the array.",
+                    "type": "string"
+                  },
+                  "payment_id": {
+                    "description": "The payment id stored in user profile, such as 'credit_card_7815826', 'gift_card_7815826', 'certificate_7815826'.",
+                    "title": "The payment id stored in user profile, such as 'credit_card_7815826', 'gift_card_7815826', 'certificate_7815826'.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "reservation_id",
+                  "cabin",
+                  "flights",
+                  "payment_id"
+                ],
+                "title": "update_reservation_flightsArguments",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/tools/update_reservation_passengers": {
+      "post": {
+        "summary": "Update the passenger information of a reservation.",
+        "operationId": "update_reservation_passengers",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "reservation_id": {
+                    "description": "The reservation ID, such as 'ZFA04Y'.",
+                    "title": "The reservation ID, such as 'ZFA04Y'.",
+                    "type": "string"
+                  },
+                  "passengers": {
+                    "description": "An array of objects containing details about each passenger.",
+                    "title": "An array of objects containing details about each passenger.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "reservation_id",
+                  "passengers"
+                ],
+                "title": "update_reservation_passengersArguments",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/tools/get_flight_status": {
+      "post": {
+        "summary": "Get the status of a flight.",
+        "operationId": "get_flight_status",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "flight_number": {
+                    "description": "The flight number.",
+                    "title": "The flight number.",
+                    "type": "string"
+                  },
+                  "date": {
+                    "description": "The date of the flight.",
+                    "title": "The date of the flight.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "flight_number",
+                  "date"
+                ],
+                "title": "get_flight_statusArguments",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/tools/transfer_to_human_agents": {
+      "post": {
+        "summary": "Transfer the user to a human agent, with a summary of the user's issue. Only transfer if the user explicitly asks for a human agent OR given the policy and the available tools, you cannot solve the user's issue.",
+        "operationId": "transfer_to_human_agents",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "summary": {
+                    "description": "A summary of the user's issue.",
+                    "title": "A summary of the user's issue.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "summary"
+                ],
+                "title": "transfer_to_human_agentsArguments",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    }
+  }
+}

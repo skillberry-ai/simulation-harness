@@ -1,0 +1,199 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Flight Reservation System API",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/tools/cancel_reservation_policy": {
+      "post": {
+        "summary": "Cancel the whole reservation. First check whether policy cancellation rules apply. If yes, cancel the reservation. Otherwise, raise Exception with a message that the reservation can not be cancelled because it does not meet policy cancellation rules.",
+        "operationId": "cancel_reservation_policy",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "reservation_id": {
+                    "description": "The reservation ID, such as 'ZFA04Y'.",
+                    "title": "The reservation ID, such as 'ZFA04Y'.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "reservation_id"
+                ],
+                "title": "cancel_reservation_policyArguments",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/tools/get_reservations_details": {
+      "post": {
+        "summary": "Get the details of all reservations that belong to a user.",
+        "operationId": "get_reservations_details",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "user_id": {
+                    "description": "The user ID, such as 'sara_doe_496'.",
+                    "title": "The user ID, such as 'sara_doe_496'.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "user_id"
+                ],
+                "title": "get_reservations_detailsArguments",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/tools/search_direct_flight_wrapper": {
+      "post": {
+        "summary": "Search for direct flights between two cities on a specific date. If no direct flights found, an exception with proper message is being raised.",
+        "operationId": "search_direct_flight_wrapper",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "origin": {
+                    "description": "The origin city airport in three letters, such as 'JFK'.",
+                    "title": "The origin city airport in three letters, such as 'JFK'.",
+                    "type": "string"
+                  },
+                  "destination": {
+                    "description": "The destination city airport in three letters, such as 'LAX'.",
+                    "title": "The destination city airport in three letters, such as 'LAX'.",
+                    "type": "string"
+                  },
+                  "date": {
+                    "description": "The date of the flight in the format 'YYYY-MM-DD', such as '2024-01-01'.",
+                    "title": "The date of the flight in the format 'YYYY-MM-DD', such as '2024-01-01'.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "origin",
+                  "destination",
+                  "date"
+                ],
+                "title": "search_direct_flight_wrapperArguments",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/tools/search_onestop_flight_wrapper": {
+      "post": {
+        "summary": "Search for one-stop flights between two cities on a specific date. If no one-stop flights found, an exception with proper message is being raised.",
+        "operationId": "search_onestop_flight_wrapper",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "origin": {
+                    "description": "The origin city airport in three letters, such as 'JFK'.",
+                    "title": "The origin city airport in three letters, such as 'JFK'.",
+                    "type": "string"
+                  },
+                  "destination": {
+                    "description": "The destination city airport in three letters, such as 'LAX'.",
+                    "title": "The destination city airport in three letters, such as 'LAX'.",
+                    "type": "string"
+                  },
+                  "date": {
+                    "description": "The date of the flight in the format 'YYYY-MM-DD', such as '2024-01-01'.",
+                    "title": "The date of the flight in the format 'YYYY-MM-DD', such as '2024-01-01'.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "origin",
+                  "destination",
+                  "date"
+                ],
+                "title": "search_onestop_flight_wrapperArguments",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/tools/update_reservation_flight_nonestop_policy": {
+      "post": {
+        "summary": "Update given reservation with none-stop (direct) flight using the provided payment id. First check whether policy flight modification rules apply. If yes, update the reservation. Otherwise, raise Exception with a message that the reservation can not be updated because it does not meet policy flight modification rules.",
+        "operationId": "update_reservation_flight_nonestop_policy",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "reservation_id": {
+                    "description": "The reservation ID, such as 'ZFA04Y'.",
+                    "title": "The reservation ID, such as 'ZFA04Y'.",
+                    "type": "string"
+                  },
+                  "payment_id": {
+                    "description": "The payment id stored in user profile, such as 'credit_card_7815826', 'gift_card_7815826', 'certificate_7815826'.",
+                    "title": "The payment id stored in user profile, such as 'credit_card_7815826', 'gift_card_7815826', 'certificate_7815826'.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "reservation_id",
+                  "payment_id"
+                ],
+                "title": "update_reservation_flight_nonestop_policyArguments",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    }
+  }
+}
