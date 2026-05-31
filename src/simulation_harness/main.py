@@ -168,6 +168,7 @@ try:
 
             mcp_server = MCPServerWrapper(instance)
 
+            from starlette.responses import Response as StarletteResponse
             async with _sse_transport.connect_sse(
                 request.scope, request.receive, request._send
             ) as (read_stream, write_stream):
@@ -176,6 +177,7 @@ try:
                     write_stream,
                     mcp_server.server.create_initialization_options(),
                 )
+            return StarletteResponse()
 
         @app.post("/mcp/messages")
         async def mcp_messages_endpoint(
