@@ -46,6 +46,22 @@ async def validate_body_size(request: Request) -> None:
     "/simulation",
     status_code=status.HTTP_201_CREATED,
     response_model=SimulationResponse,
+    summary="Create simulation",
+    description=(
+        "Create a new simulation from an OpenAPI specification.\n\n"
+        "The harness will:\n"
+        "1. Validate the OpenAPI spec (OpenAPI 3.x)\n"
+        "2. Generate (or reuse) an LLM skill for the spec\n"
+        "3. Start a stateful MCP server backed by that skill\n\n"
+        "Only **one simulation** can be active at a time. Delete the current one first, "
+        "or pass `regenerate_skill: true` to force skill regeneration for the same name."
+    ),
+    responses={
+        409: {"description": "A simulation is already active — delete it first"},
+        413: {"description": "Request body exceeds the 10 MB limit"},
+        422: {"description": "Invalid or unprocessable OpenAPI specification"},
+        500: {"description": "Skill generation failed or internal server error"},
+    },
 )
 async def create_simulation(
     request: Request,
@@ -149,6 +165,11 @@ async def create_simulation(
     "/simulation",
     status_code=status.HTTP_200_OK,
     response_model=SimulationResponse,
+    summary="Get simulation",
+    description="Return the status and session counters of the currently active simulation.",
+    responses={
+        404: {"description": "No simulation is currently active"},
+    },
 )
 async def get_simulation(
     simulation_host: SimulationHostDep,
@@ -187,6 +208,16 @@ async def get_simulation(
 @router.delete(
     "/simulation",
     status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete simulation",
+    description=(
+        "Stop and remove the active simulation. "
+        "The MCP server is torn down and all session state is discarded. "
+        "A new simulation can be created afterwards."
+    ),
+    responses={
+        204: {"description": "Simulation deleted successfully"},
+        404: {"description": "No simulation is currently active"},
+    },
 )
 async def delete_simulation(
     simulation_host: SimulationHostDep,
@@ -218,6 +249,15 @@ async def delete_simulation(
 @router.post(
     "/simulation/reset",
     status_code=status.HTTP_200_OK,
+    summary="Reset session",
+    description=(
+        "Reset the session counters (tool-call count, queue depth, idle timer) of the active "
+        "simulation without tearing it down. Useful for starting a fresh test run against the "
+        "same simulated API."
+    ),
+    responses={
+        404: {"description": "No simulation is currently active"},
+    },
 )
 async def reset_session(
     simulation_host: SimulationHostDep,
@@ -249,6 +289,16 @@ async def reset_session(
 @router.get(
     "/simulation/tools",
     status_code=status.HTTP_200_OK,
+    summary="List simulation tools",
+    description=(
+        "Return the MCP tool schemas available in the active simulation. "
+        "Each entry corresponds to one OpenAPI operation and includes the tool name, description, "
+        "and JSON Schema input definition. "
+        "This is a convenience REST endpoint — no MCP/SSE connection is required."
+    ),
+    responses={
+        503: {"description": "No simulation is currently active"},
+    },
 )
 async def list_simulation_tools(
     simulation_host: SimulationHostDep,

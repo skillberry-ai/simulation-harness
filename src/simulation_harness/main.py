@@ -114,8 +114,45 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 # Create FastAPI app
 app = FastAPI(
     title="Simulation Harness",
-    description="MCP server simulation and testing harness",
+    description=(
+        "Spin up a stateful [MCP](https://modelcontextprotocol.io/) server that simulates "
+        "any REST API described by an OpenAPI specification — without hitting real backends.\n\n"
+        "## Workflow\n\n"
+        "1. **Create a simulation** — `POST /api/v1/simulation` with your OpenAPI spec. "
+        "The harness validates the spec, generates an LLM skill, and starts an MCP server.\n"
+        "2. **Connect your MCP client** — point it at the MCP transport endpoint below.\n"
+        "3. **Call tools** — each tool maps 1-to-1 with an OpenAPI operation; responses are "
+        "synthesised by an LLM using the spec's schemas and examples.\n"
+        "4. **Reset or delete** the simulation when you're done.\n\n"
+        "## MCP Transports\n\n"
+        "| Transport | Connect | Messages |\n"
+        "|-----------|---------|----------|\n"
+        "| SSE *(default)* | `GET /mcp/sse` | `POST /mcp/messages` |\n"
+        "| Streamable HTTP | `POST /mcp` | — |\n\n"
+        "Only **one simulation** can be active at a time."
+    ),
     version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+    contact={"name": "Simulation Harness"},
+    openapi_tags=[
+        {
+            "name": "simulations",
+            "description": "Manage the active simulation lifecycle — create, inspect, reset, and delete.",
+        },
+        {
+            "name": "mcp",
+            "description": (
+                "MCP transport endpoints. Connect your MCP client here after creating a simulation. "
+                "The active transport type is configured in `harness.yaml`."
+            ),
+        },
+        {
+            "name": "health",
+            "description": "Liveness probe.",
+        },
+    ],
     lifespan=lifespan,
 )
 
@@ -150,7 +187,20 @@ try:
         # operate on the same session registry.
         _sse_transport = SseServerTransport("/mcp/messages")
 
-        @app.get("/mcp/sse")
+        @app.get(
+            "/mcp/sse",
+            tags=["mcp"],
+            summary="MCP SSE — connect",
+            description=(
+                "Open a long-lived Server-Sent Events stream that carries MCP protocol messages. "
+                "Keep this connection open for the duration of the MCP session, then send individual "
+                "messages via `POST /mcp/messages`.\n\n"
+                "Requires an active simulation (created via `POST /api/v1/simulation`)."
+            ),
+            responses={
+                503: {"description": "No simulation is currently active"},
+            },
+        )
         async def mcp_sse_endpoint(
             request: Request,
             host: SimulationHost = Depends(get_simulation_host)
@@ -179,7 +229,18 @@ try:
                 )
             return StarletteResponse()
 
-        @app.post("/mcp/messages")
+        @app.post(
+            "/mcp/messages",
+            tags=["mcp"],
+            summary="MCP SSE — send message",
+            description=(
+                "Send a single MCP protocol message over the SSE transport. "
+                "Requires an open SSE connection established via `GET /mcp/sse`."
+            ),
+            responses={
+                503: {"description": "No simulation is currently active"},
+            },
+        )
         async def mcp_messages_endpoint(
             request: Request,
             host: SimulationHost = Depends(get_simulation_host)
@@ -221,7 +282,19 @@ try:
         logger.info("SSE transport endpoints mounted at /mcp/sse and /mcp/messages")
     
     elif config.mcp.transport.value == "streamable_http":
-        @app.post("/mcp")
+        @app.post(
+            "/mcp",
+            tags=["mcp"],
+            summary="MCP Streamable HTTP",
+            description=(
+                "Single endpoint for the MCP Streamable HTTP transport. "
+                "Each request carries a complete MCP message and the response streams the reply.\n\n"
+                "Requires an active simulation (created via `POST /api/v1/simulation`)."
+            ),
+            responses={
+                503: {"description": "No simulation is currently active"},
+            },
+        )
         async def mcp_streamable_endpoint(
             request: Request,
             host: SimulationHost = Depends(get_simulation_host)
