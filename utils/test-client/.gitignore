@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.streamlit/
+*.log
+.venv/
+.python-version
+
+# Made with Bob

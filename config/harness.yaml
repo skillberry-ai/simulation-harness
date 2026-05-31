@@ -1,0 +1,32 @@
+# Simulation Harness Configuration
+# See docs/design/REQUIREMENTS.md §1.6 for field descriptions
+
+llm:
+  provider: openai
+  api_key_env: OPENAI_API_KEY  # or use api_key: "sk-..." for literal
+  api_base_env: OPENAI_API_BASE  # Optional env-backed custom endpoint
+  skill_generation_model: azure/gpt-5.4
+  simulation_model: azure/gpt-5.4
+  temperature: 0
+  # max_tokens: 4096  # Optional
+
+skills:
+  folder: ./skills
+
+sessions:
+  max_messages: 100
+  idle_timeout_seconds: 3600
+  max_concurrent_queue_depth: 8
+
+mcp:
+  transport: sse  # or streamable_http
+
+server:
+  host: 0.0.0.0  # Host to bind the server to (use 0.0.0.0 for all interfaces)
+  port: 8086       # Port to bind the server to
+
+logging:
+  level: INFO
+  destination_folder: ./logs
+
+# Made with Bob

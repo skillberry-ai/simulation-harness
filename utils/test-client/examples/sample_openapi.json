@@ -1,0 +1,98 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Sample Calculator API",
+    "version": "1.0.0",
+    "description": "Simple calculator for testing"
+  },
+  "paths": {
+    "/add": {
+      "post": {
+        "operationId": "add_numbers",
+        "summary": "Add two numbers",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["a", "b"],
+                "properties": {
+                  "a": {
+                    "type": "number",
+                    "description": "First number"
+                  },
+                  "b": {
+                    "type": "number",
+                    "description": "Second number"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sum of the numbers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/multiply": {
+      "post": {
+        "operationId": "multiply_numbers",
+        "summary": "Multiply two numbers",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["a", "b"],
+                "properties": {
+                  "a": {
+                    "type": "number",
+                    "description": "First number"
+                  },
+                  "b": {
+                    "type": "number",
+                    "description": "Second number"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Product of the numbers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
