@@ -37,6 +37,9 @@ htmlcov/
 .tox/
 .hypothesis/
 
+# Lint
+.ruff_cache/
+
 # IDEs
 .vscode/
 .idea/
