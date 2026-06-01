@@ -10,8 +10,10 @@ The Simulation Harness provides a managed environment for simulating MCP (Model 
 - 🎯 **Platform-agnostic** — Works with any MCP-capable consumer
 - 🔄 **LLM-driven simulation** — Generates plausible, schema-valid responses
 - 🚀 **Zero setup** — No credentials, sandboxes, or test data required
-- 📦 **Kubernetes-ready** — Standard deployment patterns
-- 🔌 **MCP-native** — Exposes tools through standard MCP protocol
+- 📦 **Service-level simulation** — One OpenAPI spec → one skill → one simulation
+- 🔌 **MCP-native** — Exposes tools through standard MCP protocol (SSE & Streamable HTTP)
+- 🧵 **Stateful sessions** — Multi-call coherence with configurable limits
+- 🛡️ **Robust error handling** — Structured error payloads with detailed diagnostics
 
 ## Use Cases
 
@@ -28,9 +30,18 @@ Let agents rehearse actions with potentially irreversible impacts before executi
 
 The harness consists of:
 - **Simulation Host** — Manages simulation lifecycle and routing
-- **Simulation Instance** — Executes simulated tool calls via LLM
+- **Simulation Instance** — Executes simulated tool calls via LLM (LangChain + LangGraph)
 - **Skill Registry** — Manages skill definitions and OpenAPI specs
-- **MCP Integration** — Exposes tools through standard MCP protocol
+- **MCP Integration** — Exposes tools through standard MCP protocol (SSE & Streamable HTTP transports)
+- **State Management** — Persistent session state with configurable expiry
+
+### Session Model
+
+Each harness instance hosts **one stateful agent thread** for the lifetime of the simulation:
+- All MCP `tools/call` invocations land on this single thread for context accumulation
+- Sessions expire based on: tool-call count (`max_messages`), idle timeout, or explicit reset
+- Concurrent calls are serialized via a bounded FIFO queue (configurable depth)
+- Failed calls preserve thread state; successful calls advance counters
 
 ## Quick Start
 
@@ -74,7 +85,21 @@ sessions:
 
 mcp:
   transport: sse  # or streamable_http
+
+server:
+  host: 0.0.0.0
+  port: 8000
+
+logging:
+  level: INFO
+  destination_folder: ./logs
 ```
+
+**Configuration Notes:**
+- The YAML is read once at startup; changes require a process restart
+- API keys can be literal values or environment variable references
+- `api_base_env` supports custom endpoints for self-hosted/gateway deployments
+- MCP transport selection is configured (not runtime) — choose `sse` or `streamable_http`
 
 ### Running the Service
 
@@ -122,17 +147,30 @@ POST /api/v1/simulation
 Content-Type: application/json
 
 {
-  "openapi_spec": "https://example.com/api/openapi.json",
+  "openapi_spec": { ... },  # Inline OpenAPI 3.0.x or 3.1.x JSON
   "skill_name": "example-skill",
-  "session_id": "optional-session-id"
+  "session_id": "optional-session-id",
+  "regenerate": false  # Optional: force skill regeneration
 }
 ```
+
+**Skill Reuse:** The harness automatically reuses existing skills if `<skills_folder>/<name>/SKILL.md` exists. Pass `regenerate: true` to force regeneration. A warning is logged on reuse to remind operators to regenerate if the spec changed.
+
+**Validation:** OpenAPI specs are validated via `openapi-spec-validator`. Both 3.0.x and 3.1.x are supported. Request body is capped at 10 MB. Validation failures return 422 with structured errors.
 
 ### List Active Simulations
 
 ```bash
 GET /api/v1/simulation
 ```
+
+Returns simulation details including live session counters:
+- `tool_call_count` — Number of successful tool calls
+- `max_messages` — Configured limit
+- `seconds_since_last_call` — Idle time
+- `idle_timeout_seconds` — Configured timeout
+- `queue_depth` — Current queue size
+- `max_concurrent_queue_depth` — Configured queue limit
 
 ### Delete a Simulation
 
@@ -146,12 +184,29 @@ DELETE /api/v1/simulation?session_id=your-session-id
 POST /api/v1/simulation/reset?session_id=your-session-id
 ```
 
+Clears the singleton thread; the next tool call starts fresh.
+
 ## MCP Integration
 
-Once a simulation is created, it exposes MCP tools that can be called by any MCP-compatible client:
+Once a simulation is created, it exposes MCP tools through the configured transport:
+
+### SSE Transport
+- Endpoint: `GET /mcp/sse` (with companion `POST /mcp/messages`)
+- Standard Server-Sent Events transport
+
+### Streamable HTTP Transport
+- Endpoint: `/mcp` (single ASGI mount)
+- Stateless mode (no `Mcp-Session-Id` negotiation)
+
+### Transport Parity
+Both transports provide identical functionality:
+- Same `tools/list` and `tools/call` semantics
+- Same structured error payloads
+- Same session bookkeeping behavior
+
+### Example Usage
 
 ```python
-# Example: Using the MCP client
 from mcp import ClientSession
 
 async with ClientSession(server_url) as session:
@@ -161,6 +216,19 @@ async with ClientSession(server_url) as session:
     # Call a tool
     result = await session.call_tool("tool_name", {"arg": "value"})
 ```
+
+### Error Handling
+
+MCP `tools/call` returns structured errors with `isError: true` and detailed `reason` fields:
+
+- `max_messages_exceeded` — Session hit tool-call limit
+- `idle_timeout_exceeded` — Session idle timeout expired
+- `concurrent_queue_full` — Queue depth exceeded
+- `llm_provider_error` — LLM provider failure
+- `tool_invocation_error` — Tool execution failure
+- `internal_error` — Harness internal error
+
+Error payloads include relevant context (limits, observed values) for programmatic handling.
 
 ## Development
 
@@ -197,20 +265,53 @@ make check
 simulation-harness/
 ├── src/simulation_harness/
 │   ├── agent/              # LLM agent and prompt management
+│   │   ├── deep_agent.py   # LangChain + LangGraph agent
+│   │   ├── prompts.py      # Prompt templates
+│   │   ├── session_manager.py  # Session lifecycle
+│   │   └── templates/      # Jinja2 templates
 │   ├── api/                # FastAPI REST endpoints
+│   │   └── v1/             # API v1 routes
 │   ├── config/             # Configuration models and settings
 │   ├── core/               # Core simulation logic
+│   │   ├── simulation_host.py      # Simulation lifecycle
+│   │   ├── simulation_instance.py  # Tool execution
+│   │   └── skill_registry.py       # Skill management
 │   ├── mcp_integration/    # MCP server implementation
+│   │   ├── mcp_server.py   # MCP server wrapper
+│   │   └── transport.py    # SSE & Streamable HTTP
 │   ├── models/             # Domain models and schemas
 │   ├── openapi/            # OpenAPI parsing and validation
+│   │   ├── parser.py       # OpenAPI spec parsing
+│   │   ├── schema_validator.py  # Schema validation
+│   │   └── tool_generator.py    # MCP tool generation
 │   ├── skills/             # Skill generation and management
+│   │   ├── generator.py    # Skill generation utility
+│   │   └── assets/         # Prompt templates
+│   ├── state/              # State management
+│   │   ├── store.py        # State storage
+│   │   ├── registry.py     # State registry
+│   │   ├── tools.py        # State manipulation tools
+│   │   └── validator.py    # State validation
 │   └── utils/              # Utilities and error handling
 ├── tests/
-│   ├── unit/               # Unit tests
+│   ├── unit/               # Unit tests (mirrors src structure)
 │   └── integration/        # Integration tests
+│       ├── test_app.py     # Full app lifecycle
+│       ├── test_mcp_tools.py  # MCP tool execution
+│       ├── test_session_limits.py  # Session expiry
+│       └── test_simulation_lifecycle.py
 ├── config/                 # Configuration files
+│   └── harness.yaml        # Main configuration
 ├── docs/                   # Design documentation
-└── skills/                 # Skill definitions
+│   └── design/
+│       ├── README.md       # Master document
+│       ├── USER_NEED.md    # User personas
+│       ├── REQUIREMENTS.md # Technical requirements
+│       ├── DESIGN.md       # Architecture details
+│       └── ALPHA_USE_CASE.md  # Skillberry integration
+├── utils/                  # Development utilities
+│   └── test-client/        # Interactive test client
+└── skills/                 # Generated skill definitions
 ```
 
 ## Deployment
@@ -225,6 +326,7 @@ docker build -t simulation-harness:latest .
 docker run -p 8000:8000 \
   -e OPENAI_API_KEY=your-key \
   -v $(pwd)/config:/app/config \
+  -v $(pwd)/skills:/app/skills \
   simulation-harness:latest
 ```
 
@@ -238,7 +340,29 @@ kubectl apply -f k8s/
 kubectl get pods -l app=simulation-harness
 ```
 
-See `docs/design/DESIGN.md` for detailed deployment configurations.
+**Deployment Notes:**
+- Each instance hosts exactly one simulation (one OpenAPI spec → one skill → one MCP endpoint)
+- Multi-service orchestration is handled at the deployment layer (multiple instances)
+- The MCP URL is the simulation identifier
+- Phase 1 is single-tenant per instance; deploy more instances for concurrent users
+
+See [`docs/design/DESIGN.md`](docs/design/DESIGN.md) for detailed deployment configurations.
+
+## Test Client
+
+An interactive test client is available in `utils/test-client/`:
+
+```bash
+cd utils/test-client
+make setup
+make run
+```
+
+Features:
+- Create simulations from OpenAPI specs
+- List and call MCP tools
+- Monitor session state
+- Test both SSE and Streamable HTTP transports
 
 ## Documentation
 
@@ -250,33 +374,57 @@ Comprehensive design documentation is available in the `docs/design/` directory:
 - **[DESIGN.md](docs/design/DESIGN.md)** — Architecture and component design
 - **[ALPHA_USE_CASE.md](docs/design/ALPHA_USE_CASE.md)** — Skillberry Store integration example
 
-## Roadmap
+## Current Status
 
-### Phase 1 (Current) — Foundation
+### Phase 1 — Foundation (Complete)
+
+**Implemented Features:**
 - ✅ Single OpenAPI spec → single skill → single simulation
-- ✅ MCP tool exposure
-- ✅ Session management
-- ✅ Basic error handling
+- ✅ MCP tool exposure (SSE & Streamable HTTP transports)
+- ✅ Session management with configurable limits
+- ✅ Skill generation and reuse
+- ✅ Stateful agent thread with multi-call coherence
+- ✅ Bounded FIFO queue for concurrent calls
+- ✅ Structured error handling with detailed diagnostics
+- ✅ OpenAPI 3.0.x and 3.1.x validation
+- ✅ Comprehensive test coverage (unit + integration)
+- ✅ Interactive test client
+- ✅ Per-tool-call logging with outcome tracking
+
+**Architecture Highlights:**
+- LangChain + LangGraph based Deep Agent
+- FastAPI REST management API
+- MCP protocol integration via official SDK
+- YAML-based configuration
+- Atomic skill generation with temp-dir pattern
+- Session expiry with fail-then-reset semantics
+
+## Roadmap
 
 ### Phase 2 — Multi-Service Composition
 - Multiple OpenAPI specs per simulation
 - Cross-service state management
+- Dual-transport concurrent operation
 
 ### Phase 3 — Runtime Skill Mutation
 - Dynamic skill updates
 - Conversational skill refinement
+- Spec fingerprinting for reuse validation
 
 ### Phase 4 — Production Readiness
 - Authentication and multi-tenancy
-- Persistent storage
-- Advanced observability
+- Persistent storage (beyond in-memory checkpointer)
+- Advanced observability (Prometheus, OpenTelemetry)
+- Application-level rate limiting and cost caps
+- Configuration hot-reload
 
 ## Contributing
 
 Contributions are welcome! Please ensure:
-- All tests pass (`pytest`)
-- Code follows project conventions
+- All tests pass (`make test`)
+- Code follows project conventions (`make check`)
 - New features include tests and documentation
+- Changes align with design documents in `docs/design/`
 
 ## License
 
@@ -288,5 +436,7 @@ For questions, issues, or feature requests, please [open an issue](link-to-issue
 
 ---
 
-**Status:** Phase 1 — Foundation (Draft)  
-**Last Updated:** 2026-05-30
+**Status:** Phase 1 — Foundation (Complete)  
+**Last Updated:** 2026-06-01  
+**Python:** 3.11+  
+**MCP SDK:** 1.0.0+
