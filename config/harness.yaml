@@ -11,7 +11,7 @@ llm:
   # max_tokens: 4096  # Optional
 
 skills:
-  folder: ./skills
+  folder: ./skills-store
 
 sessions:
   max_messages: 100

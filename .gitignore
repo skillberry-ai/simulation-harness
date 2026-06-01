@@ -53,7 +53,7 @@ Thumbs.db
 .env
 config/local.yaml
 .harness.pid
-skills/
+skills-store/
 logs/
 
 # AI lifecycle artifacts
