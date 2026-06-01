@@ -1,8 +1,10 @@
 """Tests for DeepAgent."""
 
 import json
+from pathlib import Path
 import pytest
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
+from langchain_core.messages import SystemMessage
 from simulation_harness.agent.deep_agent import DeepAgent
 from simulation_harness.openapi.parser import OpenAPISpec, OpenAPIOperation
 
@@ -241,5 +243,40 @@ async def test_shutdown(mock_spec, mock_operation):
     await agent.shutdown()
     
     assert agent.session_manager._running is False
+
+def test_deep_agent_uses_prompt_for_stateful_react_agent(mock_spec, mock_operation):
+    """Test stateful agent creation passes system prompt via supported prompt kwarg."""
+    mock_react_agent = Mock()
+
+    with (
+        patch("simulation_harness.agent.deep_agent.ChatOpenAI") as mock_chat_openai,
+        patch("simulation_harness.agent.deep_agent.StoreRegistry"),
+        patch("simulation_harness.agent.deep_agent.create_state_tools", return_value=[]),
+        patch("simulation_harness.agent.deep_agent.create_react_agent", return_value=mock_react_agent) as mock_create_react_agent,
+    ):
+        mock_llm = Mock()
+        mock_llm.bind_tools.return_value = mock_llm
+        mock_chat_openai.return_value = mock_llm
+
+        agent = DeepAgent(
+            api_key="test-key",
+            model="gpt-4",
+            temperature=0.7,
+            max_tokens=1000,
+            base_url=None,
+            spec=mock_spec,
+            operations=[mock_operation],
+            skill_dir=Path("/tmp/test-skill"),
+        )
+
+    assert agent.agent is mock_react_agent
+    mock_create_react_agent.assert_called_once()
+    kwargs = mock_create_react_agent.call_args.kwargs
+    assert kwargs["checkpointer"] is agent.checkpointer
+    assert "prompt" in kwargs
+    assert "state_modifier" not in kwargs
+    assert isinstance(kwargs["prompt"], SystemMessage)
+    assert kwargs["prompt"].content == agent.system_prompt
+
 
 # Made with Bob

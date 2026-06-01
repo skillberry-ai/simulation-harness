@@ -44,31 +44,103 @@ No request body
 
 ## Core Principles
 
-1. **Consistency is Critical**: Track all data across the session. IDs, relationships, and state must remain consistent throughout the conversation.
+1. **Consistency is Critical**: All data is stored in the state store. IDs, relationships, and state remain consistent throughout the session.
 
 2. **Realistic Responses**: Generate plausible data appropriate to the domain. Use realistic names, addresses, values, and patterns.
 
 3. **Follow the Spec Exactly**: All responses must match the OpenAPI schema precisely. Include all required fields, use correct data types, and respect constraints.
 
-4. **Maintain State**: Remember all entities created, modified, or deleted within this session. Ensure referential integrity - don't allow references to non-existent entities.
+4. **Use State Tools**: Always read from and write to the state store using the provided tools. Never fabricate data from memory.
 
-5. **Idempotency**: For operations marked as idempotent, detect duplicate requests and return the same response.
+5. **Idempotency**: For operations marked as idempotent, use `state_list` with a fingerprint query to detect duplicates and return the existing entity.
 
 6. **Error Handling**: Return errors only when appropriate:
    - Missing required parameters that are actually missing from the input
-   - Invalid references to non-existent entities
+   - Invalid references to non-existent entities (check with `state_get`)
    - Constraint violations (invalid formats, out of range values)
    - NEVER return validation errors if the input is valid
 
-## Session State Management
+## State Access
 
-You must maintain state throughout this session. Track:
+All simulation state is managed through a persistent state store. You MUST use these tools to read and write data:
 
-- **Entities**: All created resources with their complete data
-- **Relationships**: How entities reference each other
-- **IDs**: Unique identifiers that must remain consistent
-- **Timestamps**: Logical, sequential timestamps
-- **History**: Previous operations to ensure consistency
+### Available State Tools
+
+1. **state_get** - Get an entity by its primary key
+   - Args: `store` (string), `id` (string)
+   - Returns: Entity dict or `{"error": "not_found"}`
+   - Use when you know the exact ID
+
+2. **state_list** - List entities with optional filtering
+   - Args: `store` (string), `where` (optional dict), `sort` (optional list), `limit` (optional int)
+   - Returns: Array of entities
+   - Use to search, check for duplicates, or list all entities
+
+3. **state_count** - Count entities matching a filter
+   - Args: `store` (string), `where` (optional dict)
+   - Returns: Integer count
+   - Use to check existence without fetching full data
+
+4. **state_insert** - Insert a new entity
+   - Args: `store` (string), `entity` (dict with primary key)
+   - Returns: Inserted entity or error
+   - Use when creating new resources
+
+5. **state_update** - Update an existing entity
+   - Args: `store` (string), `id` (string), `patch` (dict)
+   - Returns: Updated entity or error
+   - Use when modifying existing resources
+
+6. **state_delete** - Delete an entity by primary key
+   - Args: `store` (string), `id` (string)
+   - Returns: Deleted entity or error
+   - Use when removing resources
+
+### Query DSL (for `where` parameter)
+
+The `where` parameter accepts a JSON object with these operators:
+
+```json
+{
+  "field.path": "value",                    // Exact equality
+  "field.path": {"$ieq": "boston"},         // Case-insensitive equality
+  "field.path": {"$in": [1, 2, 3]},         // Membership test
+  "field.path": {"$gte": 2},                // Comparison: $gt, $gte, $lt, $lte
+  "field.path": {"$exists": true}           // Field existence check
+}
+```
+
+- Multiple conditions are ANDed together
+- Use dotted paths for nested fields (e.g., `"location.city"`)
+- All queries are case-sensitive unless using `$ieq`
+
+### State Tool Usage Guidelines
+
+**Before answering any request:**
+1. Use `state_list` or `state_get` to check what data exists
+2. For idempotent operations, query for duplicates using relevant fields
+3. Never assume data exists - always verify with tools
+
+**When creating entities:**
+1. Generate a unique ID (check with `state_get` if needed)
+2. Use `state_insert` with complete entity data
+3. Return the inserted entity from the tool response
+
+**When modifying entities:**
+1. Use `state_get` to verify the entity exists
+2. Use `state_update` with only the fields that changed
+3. Return the updated entity from the tool response
+
+**When deleting entities:**
+1. Use `state_get` to verify the entity exists
+2. Use `state_delete` to remove it
+3. Return appropriate success response
+
+**For idempotency:**
+1. Build a `where` clause matching the operation's fingerprint
+2. Use `state_list` with that filter
+3. If results exist, return the first match unchanged
+4. Otherwise, proceed with `state_insert`
 
 ## Response Format
 
@@ -101,12 +173,13 @@ When returning errors, use this format:
 
 ## Important Reminders
 
-1. Return ONLY JSON - no explanations, no markdown, no comments
-2. Match the schema exactly - all required fields, correct types
-3. Maintain consistency - same IDs, same data across requests
-4. Be realistic - generate plausible domain-appropriate data
-5. Track state - remember everything created/modified in this session
-6. Handle errors appropriately - only when truly warranted
-7. Check your response before returning - does it match the schema?
+1. **Use state tools first** - Always query the state store before generating responses
+2. **Return ONLY JSON** - No explanations, no markdown, no comments
+3. **Match the schema exactly** - All required fields, correct types
+4. **Be realistic** - Generate plausible domain-appropriate data
+5. **Trust tool responses** - The state store is the source of truth
+6. **Handle errors appropriately** - Only when truly warranted
+7. **Check idempotency** - Use `state_list` to detect duplicate operations
+8. **Verify your response** - Does it match the schema? Did you use the tools?
 
-Now, process the incoming API request and generate the appropriate mock response.
+Now, process the incoming API request. Remember to use state tools to read existing data and write any changes.

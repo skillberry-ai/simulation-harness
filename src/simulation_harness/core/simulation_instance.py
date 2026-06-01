@@ -3,6 +3,7 @@
 import asyncio
 import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 from simulation_harness.agent.deep_agent import DeepAgent
@@ -27,6 +28,8 @@ class SimulationInstance:
         model: str,
         temperature: float,
         max_tokens: int,
+        skill_dir: Path | None = None,
+        agent_recursion_limit: int = 10,
     ) -> None:
         """Initialize simulation instance.
 
@@ -39,6 +42,8 @@ class SimulationInstance:
             model: Model name
             temperature: Temperature for generation
             max_tokens: Maximum tokens to generate
+            skill_dir: Optional path to skill directory for state store
+            agent_recursion_limit: Maximum recursion depth for agent
         """
         self.spec = spec
         self._max_messages = max_messages
@@ -67,6 +72,8 @@ class SimulationInstance:
             spec=parsed_spec,
             operations=operations,
             session_timeout_seconds=idle_timeout_seconds,
+            skill_dir=skill_dir,
+            agent_recursion_limit=agent_recursion_limit,
         )
 
         logger.info(
@@ -197,6 +204,25 @@ class SimulationInstance:
         self._last_activity = None  # Timer starts on first call after reset
         await self._agent.reset()
         logger.info("Session reset")
+
+    def get_state_snapshot(self, thread_id: str = "default") -> dict[str, Any]:
+        """Get state snapshot for a thread.
+        
+        Args:
+            thread_id: The thread identifier (default: "default")
+            
+        Returns:
+            Dictionary mapping store names to lists of entities, or empty dict if no store
+        """
+        if not hasattr(self, '_agent'):
+            return {}
+        
+        store_registry = self._agent.store_registry
+        if store_registry is None:
+            return {}
+        
+        store = store_registry.for_thread(thread_id)
+        return store.snapshot()
 
     async def shutdown(self) -> None:
         """Shutdown the instance and cleanup resources."""
