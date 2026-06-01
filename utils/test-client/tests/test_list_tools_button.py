@@ -2,13 +2,13 @@
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from lib.mcp_client import MCPResponse
+from src.mcp_client import MCPResponse
 
 
 @pytest.mark.asyncio
 async def test_list_tools_returns_data():
     """Test that list_tools returns properly formatted data."""
-    from lib.mcp_client import HarnessMCPClient
+    from src.mcp_client import HarnessMCPClient
     
     # Mock the SSE client and session
     mock_tool = MagicMock()

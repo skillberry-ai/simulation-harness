@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from lib.mcp_client import HarnessMCPClient
+from src.mcp_client import HarnessMCPClient
 
 
 class _AsyncContextManager:

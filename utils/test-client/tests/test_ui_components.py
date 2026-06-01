@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, mock_open, patch
 import pytest
 import yaml
 
-from lib.ui_components import load_spec_from_file
+from src.ui_components import load_spec_from_file
 
 
 class TestLoadSpecFromFile:

@@ -7,10 +7,10 @@ from datetime import datetime
 import streamlit as st
 import yaml
 
-from lib.api_client import HarnessAPIClient
-from lib.mcp_client import HarnessMCPClient
-from lib.state import get_state
-from lib.ui_components import (
+from src.api_client import HarnessAPIClient
+from src.mcp_client import HarnessMCPClient
+from src.state import get_state
+from src.ui_components import (
     render_connection_status,
     render_history_table,
     render_json_viewer,
@@ -315,7 +315,7 @@ with tab3:
                             return response
                         except asyncio.TimeoutError:
                             await client.close()
-                            from lib.mcp_client import MCPResponse
+                            from src.mcp_client import MCPResponse
                             return MCPResponse(
                                 success=False,
                                 data=None,
@@ -335,7 +335,7 @@ with tab3:
                     import traceback
                     st.code(traceback.format_exc())
                     # Store error in session state too
-                    from lib.mcp_client import MCPResponse
+                    from src.mcp_client import MCPResponse
                     st.session_state.last_list_tools_response = MCPResponse(
                         success=False,
                         data=None,
