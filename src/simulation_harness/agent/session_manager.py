@@ -28,6 +28,7 @@ class SessionManager:
         timeout_seconds: int,
         max_sessions: int,
         cleanup_interval_seconds: int = 60,
+        store_registry: Any | None = None,
     ):
         """Initialize SessionManager.
 
@@ -36,11 +37,13 @@ class SessionManager:
             timeout_seconds: Session inactivity timeout in seconds
             max_sessions: Maximum number of concurrent sessions
             cleanup_interval_seconds: How often to run cleanup (default: 60s)
+            store_registry: Optional StoreRegistry for cleaning up state stores
         """
         self.checkpointer = checkpointer
         self.timeout_seconds = timeout_seconds
         self.max_sessions = max_sessions
         self.cleanup_interval = cleanup_interval_seconds
+        self.store_registry = store_registry
 
         # Track last activity time for each thread_id
         self.last_activity: dict[str, float] = {}
@@ -125,6 +128,10 @@ class SessionManager:
                     for key in keys_to_remove:
                         del self.checkpointer.storage[key]
 
+                # Drop store for this thread if registry exists
+                if self.store_registry:
+                    self.store_registry.drop(thread_id)
+
                 cleaned_count += 1
 
                 logger.debug(
@@ -175,6 +182,10 @@ class SessionManager:
                     ]
                     for key in keys_to_remove:
                         del self.checkpointer.storage[key]
+
+                # Drop store for this thread if registry exists
+                if self.store_registry:
+                    self.store_registry.drop(thread_id)
 
                 evicted += 1
 
@@ -272,6 +283,10 @@ class SessionManager:
                 for key in keys_to_remove:
                     del self.checkpointer.storage[key]
 
+            # Drop store for this thread if registry exists
+            if self.store_registry:
+                self.store_registry.drop(thread_id)
+
             logger.info(f"Session cleared manually: thread_id={thread_id}")
             return True
 
@@ -294,6 +309,10 @@ class SessionManager:
         # Clear checkpointer storage
         if self.checkpointer and hasattr(self.checkpointer, "storage"):
             self.checkpointer.storage.clear()
+
+        # Drop all stores if registry exists
+        if self.store_registry:
+            self.store_registry.drop_all()
 
         logger.info(f"All sessions cleared: count={count}")
         return count

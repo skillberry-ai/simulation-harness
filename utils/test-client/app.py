@@ -256,8 +256,43 @@ with tab2:
     
     st.divider()
     
+    # Get Simulation State
+    st.subheader("4️⃣ Get Simulation State")
+    
+    if st.button("Get Simulation State"):
+        async def get_sim_state():
+            client = HarnessAPIClient(state.harness_url)
+            response = await client.get_simulation_state()
+            await client.close()
+            return response
+        
+        response = asyncio.run(get_sim_state())
+        
+        state.add_request(
+            "GET",
+            "/api/v1/simulation/state",
+            None,
+            response.status_code,
+            response.data,
+            response.duration_ms,
+            response.error,
+        )
+        
+        render_response_metrics(
+            response.status_code,
+            response.duration_ms,
+            response.success,
+        )
+        
+        if response.success and response.data is not None:
+            render_json_viewer(response.data, "Simulation State")
+        elif response.error:
+            st.error(f"Error: {response.error}")
+    
+    st.divider()
+    
     # Delete Simulation
-    st.subheader("4️⃣ Delete Simulation")
+    st.subheader("5️⃣ Delete Simulation")
     
     if st.button("Delete Simulation", type="secondary"):
         async def delete_sim():

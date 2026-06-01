@@ -2,6 +2,7 @@
 
 import pytest
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -71,6 +72,7 @@ def mock_simulation_instance():
     )
     instance.get_session_state.return_value = session_state
     instance.reset_session = AsyncMock()
+    instance.get_state_snapshot = MagicMock()
     return instance
 
 
@@ -105,7 +107,7 @@ class TestCreateSimulation:
     ):
         """Test successful simulation creation."""
         # Setup mocks
-        mock_skill_registry.ensure_skill.return_value = "/path/to/skill.md"
+        mock_skill_registry.ensure_skill.return_value = Path("/path/to/skill.md")
         mock_simulation_host.create_simulation.return_value = mock_simulation_instance
         
         # Make request
@@ -308,6 +310,100 @@ class TestResetSession:
         assert response.status_code == 404
         detail = response.json()["detail"].lower()
         assert "simulation" in detail and "found" in detail
+
+
+class TestGetSimulationState:
+    """Tests for GET /api/v1/simulation/state endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_get_simulation_state_success(
+        self, client, mock_simulation_host, mock_simulation_instance
+    ):
+        """Test getting simulation state snapshot successfully."""
+        # Setup mock to return state snapshot
+        mock_simulation_instance.get_state_snapshot.return_value = {
+            "restaurants": [
+                {"id": "1", "name": "Test Restaurant", "cuisine": "Italian"}
+            ],
+            "reservations": [
+                {"id": "101", "restaurant_id": "1", "guest_name": "John Doe"}
+            ]
+        }
+        
+        mock_simulation_host.get_simulation.return_value = mock_simulation_instance
+        
+        # Make request
+        response = client.get("/api/v1/simulation/state")
+        
+        # Verify response
+        assert response.status_code == 200
+        data = response.json()
+        assert "restaurants" in data
+        assert "reservations" in data
+        assert len(data["restaurants"]) == 1
+        assert data["restaurants"][0]["name"] == "Test Restaurant"
+        assert len(data["reservations"]) == 1
+        
+        # Verify get_state_snapshot was called with default thread_id
+        mock_simulation_instance.get_state_snapshot.assert_called_once_with("default")
+
+    @pytest.mark.asyncio
+    async def test_get_simulation_state_custom_thread_id(
+        self, client, mock_simulation_host, mock_simulation_instance
+    ):
+        """Test getting state with custom thread_id parameter."""
+        # Setup mock
+        mock_simulation_instance.get_state_snapshot.return_value = {
+            "restaurants": [{"id": "2", "name": "Custom Thread Restaurant"}]
+        }
+        
+        mock_simulation_host.get_simulation.return_value = mock_simulation_instance
+        
+        # Make request with custom thread_id
+        response = client.get("/api/v1/simulation/state?thread_id=custom-thread-123")
+        
+        # Verify response
+        assert response.status_code == 200
+        data = response.json()
+        assert "restaurants" in data
+        assert data["restaurants"][0]["name"] == "Custom Thread Restaurant"
+        
+        # Verify get_state_snapshot was called with custom thread_id
+        mock_simulation_instance.get_state_snapshot.assert_called_once_with("custom-thread-123")
+
+    @pytest.mark.asyncio
+    async def test_get_simulation_state_no_simulation(
+        self, client, mock_simulation_host
+    ):
+        """Test getting state when no simulation exists returns 404."""
+        # Setup mock
+        mock_simulation_host.get_simulation.return_value = None
+        
+        # Make request
+        response = client.get("/api/v1/simulation/state")
+        
+        # Verify response
+        assert response.status_code == 404
+        detail = response.json()["detail"].lower()
+        assert "simulation" in detail and "found" in detail
+
+    @pytest.mark.asyncio
+    async def test_get_simulation_state_no_store_registry(
+        self, client, mock_simulation_host, mock_simulation_instance
+    ):
+        """Test getting state when simulation has no store registry returns empty state."""
+        # Setup mock to return empty dict (no store registry)
+        mock_simulation_instance.get_state_snapshot.return_value = {}
+        
+        mock_simulation_host.get_simulation.return_value = mock_simulation_instance
+        
+        # Make request
+        response = client.get("/api/v1/simulation/state")
+        
+        # Verify response - should return empty dict
+        assert response.status_code == 200
+        data = response.json()
+        assert data == {}
 
 
 class TestBodySizeLimit:

@@ -87,7 +87,9 @@ async def test_call_tool_executes_via_simulation_instance(mock_simulation_instan
 async def test_call_tool_handles_session_expired_error(mock_simulation_instance):
     """Test that SessionExpiredError is translated to MCP error result."""
     mock_simulation_instance.execute_tool.side_effect = SessionExpiredError(
-        "Session expired: max_messages=100 reached"
+        reason="max_messages_exceeded",
+        limit=100,
+        observed=101
     )
     
     wrapper = MCPServerWrapper(mock_simulation_instance)

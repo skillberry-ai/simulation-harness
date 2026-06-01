@@ -95,6 +95,9 @@ Your entire response must be a single JSON object with three fields:
 - Must be a valid JSON Schema (Draft 2020-12) object.
 - Top-level `properties` keys match store names from SKILL.md.
 - All entity schemas in `$defs` must have `"additionalProperties": false`.
+- **All entity schemas in `$defs` must have `"x-primary-key"` annotation** specifying
+  the primary key field name (e.g., `"x-primary-key": "id"`). This field must be
+  required and of type string in the entity schema.
 - Must NOT include simulator-only metadata fields (internal-only fields).
 - Must faithfully transcribe all fields, types, formats, enums, and constraints
   from the OpenAPI component schemas.

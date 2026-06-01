@@ -189,6 +189,40 @@ class HarnessAPIClient:
                 error=str(e),
                 duration_ms=duration_ms,
             )
+
+    async def get_simulation_state(self, thread_id: str = "default") -> APIResponse:
+        """Get current simulation state snapshot.
+        
+        Args:
+            thread_id: Thread identifier to get state for
+        
+        Returns:
+            APIResponse with simulation state data
+        """
+        start = time.time()
+        try:
+            response = await self.client.get(
+                f"{self.base_url}/api/v1/simulation/state",
+                params={"thread_id": thread_id},
+            )
+            duration_ms = (time.time() - start) * 1000
+
+            return APIResponse(
+                success=response.status_code == 200,
+                status_code=response.status_code,
+                data=response.json() if response.status_code == 200 else None,
+                error=None if response.status_code == 200 else response.text,
+                duration_ms=duration_ms,
+            )
+        except Exception as e:
+            duration_ms = (time.time() - start) * 1000
+            return APIResponse(
+                success=False,
+                status_code=0,
+                data=None,
+                error=str(e),
+                duration_ms=duration_ms,
+            )
     
     async def close(self) -> None:
         """Close the HTTP client."""

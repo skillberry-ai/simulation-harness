@@ -111,13 +111,15 @@ async def create_simulation(
             simulation_name = body.openapi_spec.get("info", {}).get("title", "simulation")
             simulation_name = simulation_name.lower().replace(" ", "-")
         
-        # Ensure skill exists
+        # Ensure skill exists and get skill directory
         try:
-            await skill_registry.ensure_skill(
+            skill_file_path = await skill_registry.ensure_skill(
                 simulation_name=simulation_name,
                 openapi_spec=body.openapi_spec,
                 regenerate=body.regenerate_skill,
             )
+            # skill_file_path is Path to SKILL.md, get parent directory
+            skill_dir = skill_file_path.parent
         except Exception as e:
             logger.error(f"Skill generation failed: {e}")
             raise HTTPException(
@@ -131,9 +133,9 @@ async def create_simulation(
             openapi_spec=body.openapi_spec,
         )
         
-        # Create simulation instance
+        # Create simulation instance with skill directory
         try:
-            instance = await simulation_host.create_simulation(spec)
+            instance = await simulation_host.create_simulation(spec, skill_dir=skill_dir)
         except SimulationAlreadyExistsError as e:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -330,6 +332,49 @@ async def list_simulation_tools(
     tools = await wrapper.list_tools()
     
     return tools
+
+
+@router.get(
+    "/simulation/state",
+    status_code=status.HTTP_200_OK,
+    summary="Get simulation state",
+    description=(
+        "Return the current state snapshot for the active simulation. "
+        "This endpoint returns the complete state from the StoreRegistry for a specific thread. "
+        "The thread_id parameter allows inspecting state for different MCP sessions. "
+        "Defaults to 'default' thread for debugging purposes. "
+        "If the simulation has no state store (no skill_dir), returns an empty object."
+    ),
+    responses={
+        404: {"description": "No simulation is currently active"},
+    },
+)
+async def get_simulation_state(
+    simulation_host: SimulationHostDep,
+    thread_id: str = "default",
+) -> dict[str, Any]:
+    """Get current simulation state snapshot.
+    
+    Args:
+        simulation_host: SimulationHost dependency
+        thread_id: Thread identifier to get state for (default: "default")
+        
+    Returns:
+        State snapshot as dictionary mapping store names to entity lists
+        
+    Raises:
+        HTTPException: 404 if no simulation exists
+    """
+    instance = await simulation_host.get_simulation()
+    
+    if instance is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No simulation found",
+        )
+    
+    # Use the public method to get state snapshot
+    return instance.get_state_snapshot(thread_id)
 
 
 # Made with Bob

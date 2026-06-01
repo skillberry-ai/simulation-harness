@@ -1,6 +1,7 @@
 """SimulationHost - singleton holder for simulation instances."""
 
 import asyncio
+from pathlib import Path
 from typing import Optional
 
 from simulation_harness.config.settings import get_config
@@ -17,11 +18,16 @@ class SimulationHost:
         self._instance: Optional[SimulationInstance] = None
         self._lifecycle_lock = asyncio.Lock()
 
-    async def create_simulation(self, spec: SimulationSpec) -> SimulationInstance:
+    async def create_simulation(
+        self,
+        spec: SimulationSpec,
+        skill_dir: Path | None = None,
+    ) -> SimulationInstance:
         """Create a new simulation instance.
 
         Args:
             spec: Simulation specification
+            skill_dir: Optional path to skill directory for state store
 
         Returns:
             Created simulation instance
@@ -48,6 +54,8 @@ class SimulationHost:
                 model=config.llm.simulation_model,
                 temperature=config.llm.temperature,
                 max_tokens=config.llm.max_tokens,
+                skill_dir=skill_dir,
+                agent_recursion_limit=getattr(config.sessions, "agent_recursion_limit", 10),
             )
             return self._instance
 

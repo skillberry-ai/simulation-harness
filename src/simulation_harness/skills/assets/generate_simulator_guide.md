@@ -423,6 +423,9 @@ The schema.json output must be a valid JSON Schema (Draft 2020-12) object with:
 **Entity schema rules:**
 
 - All entity schemas must have `"additionalProperties": false`
+- **All entity schemas must include `"x-primary-key"` annotation** specifying the
+  primary key field name (e.g., `"x-primary-key": "id"` or `"x-primary-key": "reservation_id"`).
+  This field must be a required string field in the entity schema.
 - Include all fields from OpenAPI component schemas
 - **Exclude simulator-only metadata fields** (internal-only fields)
 - Use correct JSON Schema types: `string`, `number`, `integer`, `boolean`,
@@ -486,6 +489,8 @@ Walk the generated outputs against this checklist mentally. If any answer is
 - Every store property in the top-level `properties` matches a store name from
   SKILL.md.
 - All entity schemas have `"additionalProperties": false`.
+- **All entity schemas have `"x-primary-key"` annotation** specifying the primary
+  key field name, and that field is required and of type string.
 - Simulator-only metadata fields are absent from all entity schemas.
 - All `required` fields from OpenAPI component schemas are marked as required.
 - Enum values, formats, and constraints are faithfully transcribed.

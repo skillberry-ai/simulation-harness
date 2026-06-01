@@ -5,6 +5,7 @@ LangChain and LangGraph directly (without the deepagents library).
 """
 
 import json
+from pathlib import Path
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -13,9 +14,12 @@ from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.prebuilt import create_react_agent
 from pydantic import SecretStr
 
 from simulation_harness.openapi.parser import OpenAPIOperation, OpenAPISpec
+from simulation_harness.state.registry import StoreRegistry
+from simulation_harness.state.tools import create_state_tools
 from simulation_harness.utils.logging import get_logger
 from simulation_harness.agent.prompts import render_system_prompt
 from simulation_harness.agent.session_manager import SessionManager
@@ -36,6 +40,8 @@ class DeepAgent:
         spec: OpenAPISpec,
         operations: list[OpenAPIOperation],
         session_timeout_seconds: int = 3600,
+        skill_dir: Path | None = None,
+        agent_recursion_limit: int = 10,
     ):
         """Initialize Deep Agent.
 
@@ -48,10 +54,14 @@ class DeepAgent:
             spec: OpenAPI specification
             operations: List of API operations
             session_timeout_seconds: Session timeout in seconds
+            skill_dir: Optional path to skill directory for state store
+            agent_recursion_limit: Maximum recursion depth for agent (default: 10)
         """
         self.spec = spec
         self.operations = operations
         self.session_timeout_seconds = session_timeout_seconds
+        self.skill_dir = skill_dir
+        self.agent_recursion_limit = agent_recursion_limit
 
         # Initialize LLM
         llm_kwargs = {
@@ -76,11 +86,18 @@ class DeepAgent:
         # Initialize checkpointer for session management
         self.checkpointer = MemorySaver()
 
+        # Initialize state store registry if skill_dir provided
+        self.store_registry: StoreRegistry | None = None
+        if skill_dir:
+            self.store_registry = StoreRegistry(skill_dir)
+            logger.info(f"State store registry initialized for skill: {skill_dir}")
+
         # Initialize session cleanup manager
         self.session_manager = SessionManager(
             checkpointer=self.checkpointer,
             timeout_seconds=session_timeout_seconds,
             max_sessions=100,  # Default max sessions
+            store_registry=self.store_registry,
         )
 
         # Create LangGraph agent
@@ -92,7 +109,8 @@ class DeepAgent:
         logger.info(
             f"Deep Agent initialized: model={model}, "
             f"operation_count={len(operations)}, "
-            f"session_timeout={session_timeout_seconds}s"
+            f"session_timeout={session_timeout_seconds}s, "
+            f"state_store={'enabled' if skill_dir else 'disabled'}"
         )
 
     def start_session_cleanup(self) -> None:
@@ -109,7 +127,23 @@ class DeepAgent:
         Returns:
             Compiled state graph
         """
-        # Define the agent function
+        # If state store is enabled, use ReAct agent with tools
+        if self.store_registry:
+            tools = create_state_tools()
+            model_with_tools = self.llm.bind_tools(tools)
+            
+            # Create ReAct agent with tools
+            agent = create_react_agent(
+                model=model_with_tools,
+                tools=tools,
+                checkpointer=self.checkpointer,
+                prompt=SystemMessage(content=self.system_prompt),
+            )
+            
+            logger.info(f"Created ReAct agent with {len(tools)} state tools")
+            return agent
+        
+        # Otherwise, use simple stateless agent (legacy mode)
         def agent_node(state: MessagesState) -> MessagesState:
             """Process messages and generate response."""
             messages = state["messages"]
@@ -181,7 +215,12 @@ class DeepAgent:
             # Build config with thread_id for session management
             config: RunnableConfig = {
                 "configurable": {"thread_id": effective_thread_id},
+                "recursion_limit": self.agent_recursion_limit,
             }
+            
+            # Add store_registry to config if available
+            if self.store_registry:
+                config["configurable"]["store_registry"] = self.store_registry
 
             # Generate response using agent with session context
             result = await self.agent.ainvoke(
@@ -294,15 +333,28 @@ class DeepAgent:
                 logger.info(f"Reset agent session: thread_id={thread_id}")
             else:
                 logger.warning(f"Session not found: thread_id={thread_id}")
+            
+            # Reset store for this thread if registry exists
+            if self.store_registry:
+                self.store_registry.reset(thread_id)
         else:
             # Reset all sessions
             count = self.session_manager.clear_all_sessions()
             logger.info(f"Reset all agent sessions: count={count}")
+            
+            # Drop all stores if registry exists
+            if self.store_registry:
+                self.store_registry.drop_all()
 
     async def shutdown(self) -> None:
         """Shutdown the agent and cleanup resources."""
         # Stop session cleanup task
         await self.session_manager.stop()
+        
+        # Drop all stores if registry exists
+        if self.store_registry:
+            self.store_registry.drop_all()
+        
         logger.info("Agent shutdown complete")
 
 # Made with Bob
