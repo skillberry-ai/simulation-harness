@@ -1,8 +1,9 @@
-You are a senior API-simulation engineer. Your one and only output is the full
-text of a SKILL.md file that will be handed to a *different* LLM (the "runtime")
-which must impersonate an MCP tool server for an agent that is being tested.
+You are a senior API-simulation engineer. Your one and only output is a JSON
+object with three fields: `skill_md`, `schema_json`, and `db_json`. These will
+be handed to a *different* LLM (the "runtime") which must impersonate an MCP
+tool server for an agent that is being tested.
 
-## Who reads your SKILL.md, and why it matters
+## Who reads your output, and why it matters
 
 The runtime LLM never sees the original OpenAPI spec. It sees only your SKILL.md,
 the tool name it was just called with, and the JSON arguments. From that alone it
@@ -45,11 +46,36 @@ against each:
 - **Missing seed data**: agent-under-test's very first call is a read, and there
   is nothing to read. Fix by specifying realistic seed entities the runtime must
   initialize on first use.
+- **Schema/db inconsistency**: field names in `db.json` entities must match
+  `schema.json` property names exactly; seed entities must include all required
+  fields. Fix by ensuring db.json validates against schema.json.
 
 ## Output contract
 
-- Output ONLY the SKILL.md content. No preamble, no trailing commentary, no
-  wrapping fences around the whole file.
+Your entire response must be a single JSON object with three fields:
+
+```json
+{
+  "skill_md": "---\nname: ...\n...",
+  "schema_json": { "$schema": "...", ... },
+  "db_json": { "restaurants": [...], ... }
+}
+```
+
+**Critical requirements:**
+
+- The entire response is valid JSON — no preamble, no commentary, no markdown
+  fences around the JSON.
+- `skill_md` is a string containing the complete SKILL.md content (starting with
+  `---` frontmatter).
+- `schema_json` is a JSON object (not a string) containing the JSON Schema.
+- `db_json` is a JSON object (not a string) containing the seed data.
+- `db_json` must validate against `schema_json`.
+
+**SKILL.md requirements:**
+
+- Output ONLY the SKILL.md content in the `skill_md` field. No preamble, no
+  trailing commentary, no wrapping fences around the whole file.
 - Begin with the YAML frontmatter (`---`) and end with the last line of markdown.
 - Every endpoint/tool in the OpenAPI spec MUST have its own operation section —
   none skipped, none merged, none invented.
@@ -59,6 +85,27 @@ against each:
   document the quirk in a one-line note so the runtime knows which one wins.
 - Prefer explicit rules over prose. Bullet lists, when-clauses, and concrete
   JSON examples beat paragraphs.
+- The Session State Management section must reference `schema.json` and NOT list
+  field names/types.
+- The Seed Data section must reference `db.json` and NOT list seed entity values.
+- The Schema Reference section must be a single line pointing to `schema.json`.
+
+**schema.json requirements:**
+
+- Must be a valid JSON Schema (Draft 2020-12) object.
+- Top-level `properties` keys match store names from SKILL.md.
+- All entity schemas in `$defs` must have `"additionalProperties": false`.
+- Must NOT include simulator-only metadata fields (internal-only fields).
+- Must faithfully transcribe all fields, types, formats, enums, and constraints
+  from the OpenAPI component schemas.
+
+**db.json requirements:**
+
+- Keys must match the top-level `properties` keys in `schema.json` (store names).
+- All seed entities must include all `required` fields from their schema.
+- All seed entities must validate against their schema in `schema.json`.
+- Use stable, deterministic IDs (e.g., `rest_001`, not random UUIDs).
+- Ensure referential integrity (foreign keys reference existing entities).
 
 Follow the generation guide exactly. Treat it as the canonical structure; do not
 reorder top-level sections or drop any of them.

@@ -11,6 +11,7 @@ try:
 except ImportError:
     from importlib_resources import files  # type: ignore[import-not-found]
 
+import jsonschema
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
@@ -62,6 +63,7 @@ class SkillGenerator:
             "api_key": self.api_key,
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
+            "model_kwargs": {"response_format": {"type": "json_object"}},
         }
 
         if self.base_url:
@@ -79,10 +81,11 @@ class SkillGenerator:
 
         Uses atomic write pattern:
         1. Create temp dir: <skills_folder>/.<name>.tmp-<uuid>/
-        2. Generate skill content via LLM
-        3. Write SKILL.md to temp dir
-        4. Atomic rename: temp dir → <skills_folder>/<name>/
-        5. On failure: clean up temp dir
+        2. Generate skill content via LLM (3-file JSON output)
+        3. Write SKILL.md, schema.json, db.json to temp dir
+        4. Validate db.json against schema.json
+        5. Atomic rename: temp dir → <skills_folder>/<name>/
+        6. On failure: clean up temp dir
 
         Args:
             openapi_spec: OpenAPI specification dictionary
@@ -116,7 +119,7 @@ class SkillGenerator:
             openapi_json = json.dumps(openapi_spec, indent=2)
 
             # Prepare messages for LLM
-            user_prompt = f"""Generate a complete SKILL.md file for the API defined in the following OpenAPI specification.
+            user_prompt = f"""Generate a complete skill package (SKILL.md, schema.json, db.json) for the API defined in the following OpenAPI specification.
 
 Follow the instructions in the generation guide below exactly.
 
@@ -132,9 +135,9 @@ Follow the instructions in the generation guide below exactly.
 
 # Instructions
 
-Create a complete SKILL.md file following the structure and guidelines in the generation guide.
-Generate ONLY the SKILL.md content. Do not include any explanations or commentary outside the file content.
-Start directly with the YAML frontmatter (---) and end with the last line of the markdown content.
+Create a complete skill package following the structure and guidelines in the generation guide.
+Your response must be a single JSON object with three fields: skill_md, schema_json, and db_json.
+Do not include any explanations or commentary outside the JSON object.
 """
 
             messages = [
@@ -142,13 +145,70 @@ Start directly with the YAML frontmatter (---) and end with the last line of the
                 HumanMessage(content=user_prompt),
             ]
 
-            # Generate skill file
+            # Generate skill files
             response = await llm.ainvoke(messages)
-            skill_content = str(response.content)
+            response_content = str(response.content)
 
-            # Write to temp directory
+            # Parse JSON response
+            try:
+                parsed = json.loads(response_content)
+            except json.JSONDecodeError as e:
+                raise RuntimeError(
+                    f"LLM response is not valid JSON: {e}"
+                ) from e
+
+            # Validate response structure
+            if not isinstance(parsed, dict):
+                raise RuntimeError(
+                    f"LLM response must be a JSON object, got {type(parsed)}"
+                )
+
+            required_fields = ["skill_md", "schema_json", "db_json"]
+            missing_fields = [f for f in required_fields if f not in parsed]
+            if missing_fields:
+                raise RuntimeError(
+                    f"LLM response missing required fields: {missing_fields}"
+                )
+
+            # Extract components
+            skill_md = parsed["skill_md"]
+            schema_json = parsed["schema_json"]
+            db_json = parsed["db_json"]
+
+            # Validate types
+            if not isinstance(skill_md, str):
+                raise RuntimeError(
+                    f"skill_md must be a string, got {type(skill_md)}"
+                )
+            if not isinstance(schema_json, dict):
+                raise RuntimeError(
+                    f"schema_json must be an object, got {type(schema_json)}"
+                )
+            if not isinstance(db_json, dict):
+                raise RuntimeError(
+                    f"db_json must be an object, got {type(db_json)}"
+                )
+
+            # Validate db.json against schema.json
+            try:
+                jsonschema.validate(instance=db_json, schema=schema_json)
+            except jsonschema.ValidationError as e:
+                raise RuntimeError(
+                    f"db.json does not validate against schema.json: {e.message}"
+                ) from e
+            except jsonschema.SchemaError as e:
+                raise RuntimeError(
+                    f"schema.json is not a valid JSON Schema: {e.message}"
+                ) from e
+
+            # Write files to temp directory
             temp_skill_file = temp_dir / "SKILL.md"
-            temp_skill_file.write_text(skill_content)
+            temp_schema_file = temp_dir / "schema.json"
+            temp_db_file = temp_dir / "db.json"
+
+            temp_skill_file.write_text(skill_md)
+            temp_schema_file.write_text(json.dumps(schema_json, indent=2))
+            temp_db_file.write_text(json.dumps(db_json, indent=2))
 
             # Atomic rename: temp dir → final dir
             try:

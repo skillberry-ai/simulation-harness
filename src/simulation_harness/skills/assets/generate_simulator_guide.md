@@ -1,9 +1,9 @@
-# Guide: Generating an MCP Simulator SKILL.md from an OpenAPI Spec
+# Guide: Generating an MCP Simulator Skill Package from an OpenAPI Spec
 
 This guide is read by the *generator* LLM. The generator reads an OpenAPI JSON
-spec and produces a single `SKILL.md` file. That `SKILL.md` is later loaded by a
-different *runtime* LLM which impersonates the MCP server for an agent that is
-being tested.
+spec and produces three files: `SKILL.md`, `schema.json`, and `db.json`. These
+files are later loaded by a different *runtime* LLM which impersonates the MCP
+server for an agent that is being tested.
 
 Two audiences, two different voices:
 
@@ -23,12 +23,31 @@ the agent-under-test. Be specific. Be literal. Prefer rules over suggestions.
 
 ## Output contract (strict)
 
-The generator must produce the SKILL.md file and nothing else:
+The generator must produce a JSON object with three fields:
 
-- No commentary before the `---` frontmatter.
-- No commentary after the final line of markdown.
-- No outer code fence wrapping the file.
-- YAML frontmatter first, in this exact form:
+```json
+{
+  "skill_md": "---\nname: ...\n...",
+  "schema_json": { "$schema": "...", ... },
+  "db_json": { "restaurants": [...], ... }
+}
+```
+
+- **`skill_md`**: A string containing the complete SKILL.md content
+- **`schema_json`**: A JSON object (not a string) containing the JSON Schema
+- **`db_json`**: A JSON object (not a string) containing the seed data
+
+**Critical requirements:**
+
+- The entire response must be valid JSON — no preamble, no commentary, no
+  markdown fences around the JSON
+- `skill_md` must start with `---` frontmatter and contain no outer code fence
+- `schema_json` must be a JSON Schema Draft 2020-12 object
+- `db_json` must validate against `schema_json`
+
+### SKILL.md frontmatter
+
+The `skill_md` string must begin with YAML frontmatter in this exact form:
 
 ```
 ---
@@ -80,45 +99,130 @@ operation section so the runtime can match either form.
 
 ---
 
-## Step 2 — Design session state
+## Step 2 — Design session state, schemas, and seed data
 
 The runtime's main job is to remember what it said earlier. Under-specified
 state is the #1 cause of simulator failure.
 
+This step produces content for three outputs: store metadata (SKILL.md),
+entity schemas (schema.json), and seed data (db.json).
+
+### 2a — Store metadata (for SKILL.md)
+
 For every entity the API can create, read, update, or delete, define:
 
-- **Store name** (e.g., "Reservation Database").
-- **Key(s)** it is indexed by (primary ID, plus any secondary lookup keys like
-  email or phone).
-- **All fields** from the schema the runtime must persist, plus any
-  *simulator-only* metadata the runtime needs to stay consistent (idempotency
-  fingerprints, soft-delete flags, cancellation timestamps, generated
-  availability profiles, etc.).
+- **Store name** (e.g., "Restaurant Catalog Store").
+- **Primary key** (e.g., `id`).
+- **Secondary indexes** (e.g., `city` (case-insensitive), `cuisine`).
+- **Simulator-only metadata** fields that the runtime needs but must never
+  appear in API responses (e.g., `distance_from_center_km`,
+  `availability_profile`, `seeded`).
 - **Write operations**: which operations add or modify entries.
 - **Read operations**: which operations read from this store.
+- **Internal-only fields**: explicit list of fields that must never appear in
+  responses.
 
 Also define cross-cutting state when relevant:
 
 - **Reference-data catalogs** (airport codes, phone types, country lists).
   These are fixed across the session and must not drift between calls.
-- **Seed data**: the minimum set of entities the runtime must pre-populate so
-  an agent-under-test whose first call is a read does not get an empty
-  response. Give concrete IDs, names, and enough linked data for common
-  read-then-write flows (e.g., the reservation API needs restaurants seeded
-  before any booking can happen; the booking API needs users and flights
-  seeded before any cancellation can happen). Be explicit about this data.
 - **Idempotency maps**: for each write operation the spec treats as
   idempotent, define the exact fingerprint fields (ordered list) and what the
   runtime returns on a duplicate.
 
-State must be described as structures, not prose. Use nested bullet lists with
-types so the runtime can parse them unambiguously.
+### 2b — Design schema.json
+
+Create a JSON Schema (Draft 2020-12) that describes the database shape.
+
+**Top-level structure:**
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "<API Name> Simulator State",
+  "type": "object",
+  "required": ["<store1>", "<store2>"],
+  "properties": {
+    "<store1>": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/<EntityType1>" }
+    }
+  },
+  "$defs": {
+    "<EntityType1>": {
+      "type": "object",
+      "required": ["id", "..."],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  }
+}
+```
+
+**Rules:**
+
+- Top-level `properties` keys match store names from step 2a
+- Each store property is an array of entities
+- Each entity type is defined in `$defs` with a `$ref` from the store
+- All entity schemas must have `"additionalProperties": false`
+- Include all fields from the OpenAPI component schemas
+- **Exclude simulator-only metadata fields** (these are internal-only and must
+  not appear in schema.json)
+- Faithfully transcribe enum values, ranges, formats, and patterns from the spec
+- Use nested object definitions for complex types (e.g., `Location`)
+
+### 2c — Design db.json
+
+Create seed data that validates against schema.json.
+
+**Structure:**
+
+```json
+{
+  "restaurants": [
+    {
+      "id": "rest_001",
+      "name": "The Italian Corner",
+      "cuisine": "Italian",
+      "price_tier": 2,
+      "rating": 4.5,
+      "location": {
+        "latitude": 42.3601,
+        "longitude": -71.0589,
+        "address": "123 Hanover St",
+        "city": "Boston",
+        "state": "MA",
+        "postal_code": "02108",
+        "country": "USA"
+      },
+      "phone": "+1-555-987-6543",
+      "description": "Authentic Italian cuisine in the heart of Boston",
+      "accepts_reservations": true
+    }
+  ],
+  "reservations": []
+}
+```
+
+**Rules:**
+
+- Keys match the top-level `properties` keys in schema.json (store names)
+- All seed entities must include all `required` fields from their schema
+- Use stable, deterministic IDs (e.g., `rest_001`, `reservation_seed_001`)
+- Provide enough linked data for common read-then-write flows (e.g., seed
+  restaurants before reservations can be made)
+- Use placeholder dates for temporal fields (e.g., `"2025-03-15T19:00:00"`)
+  with a note in SKILL.md that the runtime will normalize them
+- Ensure referential integrity (foreign keys must reference existing entities)
 
 ---
 
-## Step 3 — Write the SKILL.md
+## Step 3 — Write the three outputs
 
-### SKILL.md structure
+### 3a — SKILL.md structure
 
 Every generated file uses these top-level sections in this order:
 
@@ -165,27 +269,54 @@ strings — follow the spec examples").
 
 #### Session State Management
 
-One subsection per store. For each, list fields with types and mark primary
-keys. Include simulator-only metadata in a clearly labeled subsection so the
-runtime does not leak internal fields into responses. End with an explicit
-statement of which fields are *internal only* and must never appear in
-responses.
+One subsection per store. For each, list:
+
+- **Primary key:** `<field>`
+- **Secondary indexes:** `<field>` (case-insensitive), ...
+- **Simulator-only metadata:** `<field>`, `<field>`, ...
+- **Write operations:** `<operation>`, `<operation>`, ...
+- **Read operations:** `<operation>`, `<operation>`, ...
+- **Internal-only (never in responses):** `<field>`, `<field>`, ...
+
+**Add this line at the start of the section:**
+
+```markdown
+Entity field definitions: see [`schema.json`](schema.json).
+```
+
+**Do NOT list field names and types** — those are in schema.json. Only list
+the metadata above (keys, indexes, operations, internal-only flags).
 
 #### Seed Data and Data Generation
 
-State the minimum seeded dataset in concrete, reproducible form. Give specific
-IDs, names, and values — not "some users" but "at least these three users:
-`u_001` Jane Doe…". If the runtime will generate data on demand (e.g., "if
-this city has not been searched before, generate 6–12 restaurants for it"),
-state the generation rules, the value ranges, and the naming style. Anchor
-temporal values: "use dates consistent with the current session year."
+**Add this line at the start of the section:**
+
+```markdown
+Seed entities are defined in [`db.json`](db.json). Initialize all stores from
+db.json on first use of any operation. Shift `date_time` and `created_at`
+fields in seed reservations to be in the current session year while maintaining
+their relative ordering.
+```
+
+**Do NOT list seed entity values** — those are in db.json.
+
+Then provide dynamic generation rules:
+
+- **On-Demand Generation Rules**: when to generate new entities (e.g., "if city
+  not found, generate 6–12 restaurants")
+- **Availability Generation Rules**: how to generate time slots, profiles, etc.
+- **ID Generation Rules**: format for generated IDs (e.g., `rest_gen_<uuid>`)
+- **Naming patterns**: how to generate realistic names, descriptions, etc.
+
+Anchor temporal values: "use dates consistent with the current session year."
 
 #### Schema Reference
 
-Compact list of every named schema from `components.schemas`. For each, list
-required fields and optional fields with their types and formats. Enum values
-must be enumerated verbatim. This section exists so the runtime can verify
-shape without rereading operation sections.
+Replace the detailed schema listings with a single line:
+
+```markdown
+Entity schemas are defined in [`schema.json`](schema.json).
+```
 
 #### API Operation Simulation
 
@@ -278,28 +409,101 @@ A simple list confirming every OpenAPI path + method is covered, plus a list
 of every entity/relationship tracked. This section is for human review of the
 SKILL.md — keep it concise.
 
+### 3b — schema.json structure
+
+The schema.json output must be a valid JSON Schema (Draft 2020-12) object with:
+
+- `$schema`: `"https://json-schema.org/draft/2020-12/schema"`
+- `title`: `"<API Name> Simulator State"`
+- `type`: `"object"`
+- `required`: array of all store names
+- `properties`: one property per store, each an array of entity refs
+- `$defs`: one definition per entity type
+
+**Entity schema rules:**
+
+- All entity schemas must have `"additionalProperties": false`
+- Include all fields from OpenAPI component schemas
+- **Exclude simulator-only metadata fields** (internal-only fields)
+- Use correct JSON Schema types: `string`, `number`, `integer`, `boolean`,
+  `object`, `array`
+- Include `format` where applicable: `date-time`, `email`, `uri`, `uuid`
+- Include `enum` arrays for enumerated values
+- Include `minimum`, `maximum`, `minLength`, `maxLength`, `pattern` where
+  specified
+- Use nested object definitions for complex types
+
+### 3c — db.json structure
+
+The db.json output must be a JSON object with:
+
+- Keys matching the top-level `properties` keys in schema.json (store names)
+- Values are arrays of seed entities
+- All entities must validate against their schema in schema.json
+
+**Seed data rules:**
+
+- Use stable, deterministic IDs (e.g., `rest_001`, not random UUIDs)
+- Include all `required` fields from the schema
+- Provide enough linked data for common flows (e.g., seed restaurants before
+  reservations)
+- Use placeholder dates for temporal fields (e.g., `"2025-03-15T19:00:00"`)
+- Ensure referential integrity (foreign keys reference existing entities)
+- Provide realistic, domain-appropriate values
+
 ---
 
 ## Step 4 — Self-review before emitting
 
-Walk the generated SKILL.md against this checklist mentally. If any answer is
-"no," fix the file before returning it.
+Walk the generated outputs against this checklist mentally. If any answer is
+"no," fix before returning.
+
+**SKILL.md checks:**
 
 - Every path + method in the spec has its own operation section.
 - Every required request field is listed for its operation.
 - Every response schema has a matching JSON example, and the example is valid
   against the schema.
-- Every entity the API can create, read, update, or delete has a store, a key,
-  and an explicit list of read/write operations.
+- Every entity the API can create, read, update, or delete has a store with
+  metadata (keys, indexes, operations, internal-only flags).
 - Every "When …" error clause is paired with a "Do NOT …" negation.
 - Schema-vs-example conflicts in the source spec are called out in the
   affected operation section.
 - Empty-result contracts (`[]` vs error) are explicit per list endpoint.
 - Idempotency behavior is defined for each write the spec treats as
   idempotent, with a concrete fingerprint.
-- Seed data is sufficient for a read-first first call to succeed.
+- The Session State Management section references `schema.json` and does NOT
+  list field names/types.
+- The Seed Data section references `db.json` and does NOT list seed entity
+  values.
+- The Schema Reference section is a single line pointing to `schema.json`.
 - The file starts with `---` and ends with a markdown line, with no
   surrounding commentary.
+
+**schema.json checks:**
+
+- Every entity type referenced in SKILL.md has a `$defs` entry.
+- Every store property in the top-level `properties` matches a store name from
+  SKILL.md.
+- All entity schemas have `"additionalProperties": false`.
+- Simulator-only metadata fields are absent from all entity schemas.
+- All `required` fields from OpenAPI component schemas are marked as required.
+- Enum values, formats, and constraints are faithfully transcribed.
+
+**db.json checks:**
+
+- Every key matches a store property name from schema.json.
+- Every seed entity includes all `required` fields from its schema.
+- All seed entities validate against their schema (run mental validation).
+- Referential integrity is maintained (foreign keys reference existing
+  entities).
+- IDs are stable and deterministic (no random UUIDs).
+
+**Cross-file consistency:**
+
+- Store names are consistent across all three files.
+- Entity type names in SKILL.md match `$defs` keys in schema.json.
+- Seed data in db.json conforms to schemas in schema.json.
 
 ---
 
@@ -356,7 +560,7 @@ them forward.
 
 ---
 
-## Anti-patterns (do not produce these in SKILL.md)
+## Anti-patterns (do not produce these)
 
 - "The runtime should probably return an error here." → Ambiguous. Either a
   condition triggers the error or it does not. State the condition.
@@ -369,5 +573,11 @@ them forward.
 - Skipping an endpoint because it seems trivial (health checks, list-airports,
   ping). Every endpoint gets a section.
 - Adding endpoints or fields that are not in the spec. Stay faithful.
-- Wrapping the entire SKILL.md in a code fence, or adding a "Here is the
-  generated file:" preamble. The file is the entire output.
+- Wrapping the SKILL.md in a code fence, or adding a "Here is the generated
+  file:" preamble. The `skill_md` field is the entire content.
+- Including simulator-only metadata fields in schema.json. These are
+  internal-only and must never appear in the schema.
+- Listing field names/types in SKILL.md's Session State Management section.
+  Those belong in schema.json.
+- Listing seed entity values in SKILL.md's Seed Data section. Those belong in
+  db.json.

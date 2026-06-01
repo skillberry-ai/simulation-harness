@@ -60,14 +60,16 @@ async def test_ensure_skill_generates_new_skill(temp_skills_dir, mock_generator,
 
 @pytest.mark.asyncio
 async def test_ensure_skill_reuses_existing_skill(temp_skills_dir, mock_generator, sample_openapi_spec):
-    """Test that ensure_skill reuses existing skill."""
+    """Test that ensure_skill reuses existing skill when all 3 files exist."""
     registry = SkillRegistry(temp_skills_dir, mock_generator)
     
-    # Create existing skill
+    # Create existing skill with all 3 files
     skill_dir = temp_skills_dir / "test-sim"
     skill_dir.mkdir()
     skill_file = skill_dir / "SKILL.md"
     skill_file.write_text("# Existing skill")
+    (skill_dir / "schema.json").write_text('{"type": "object"}')
+    (skill_dir / "db.json").write_text('{}')
     
     result = await registry.ensure_skill("test-sim", sample_openapi_spec)
     
@@ -80,11 +82,13 @@ async def test_ensure_skill_regenerates_when_flag_set(temp_skills_dir, mock_gene
     """Test that ensure_skill regenerates when regenerate flag is set."""
     registry = SkillRegistry(temp_skills_dir, mock_generator)
     
-    # Create existing skill
+    # Create existing complete skill
     skill_dir = temp_skills_dir / "test-sim"
     skill_dir.mkdir()
     skill_file = skill_dir / "SKILL.md"
     skill_file.write_text("# Existing skill")
+    (skill_dir / "schema.json").write_text('{"type": "object"}')
+    (skill_dir / "db.json").write_text('{}')
     
     mock_generator.generate_skill.return_value = skill_file
     
@@ -102,11 +106,13 @@ async def test_ensure_skill_logs_warning_on_reuse(temp_skills_dir, mock_generato
     
     registry = SkillRegistry(temp_skills_dir, mock_generator)
     
-    # Create existing skill
+    # Create existing complete skill
     skill_dir = temp_skills_dir / "test-sim"
     skill_dir.mkdir()
     skill_file = skill_dir / "SKILL.md"
     skill_file.write_text("# Existing skill")
+    (skill_dir / "schema.json").write_text('{"type": "object"}')
+    (skill_dir / "db.json").write_text('{}')
     
     await registry.ensure_skill("test-sim", sample_openapi_spec)
     
@@ -133,17 +139,141 @@ async def test_ensure_skill_logs_warning_with_regeneration_reminder(temp_skills_
     
     registry = SkillRegistry(temp_skills_dir, mock_generator)
     
-    # Create existing skill
+    # Create existing complete skill
+    skill_dir = temp_skills_dir / "test-sim"
+    skill_dir.mkdir()
+    skill_file = skill_dir / "SKILL.md"
+    skill_file.write_text("# Existing skill")
+    (skill_dir / "schema.json").write_text('{"type": "object"}')
+    (skill_dir / "db.json").write_text('{}')
+    
+
+
+@pytest.mark.asyncio
+async def test_ensure_skill_regenerates_when_schema_missing(temp_skills_dir, mock_generator, sample_openapi_spec, caplog):
+    """Test that ensure_skill regenerates when schema.json is missing."""
+    import logging
+    caplog.set_level(logging.WARNING)
+    
+    registry = SkillRegistry(temp_skills_dir, mock_generator)
+    
+    # Create skill with only SKILL.md and db.json (schema.json missing)
+    skill_dir = temp_skills_dir / "test-sim"
+    skill_dir.mkdir()
+    skill_file = skill_dir / "SKILL.md"
+    skill_file.write_text("# Existing skill")
+    (skill_dir / "db.json").write_text('{}')
+    
+    mock_generator.generate_skill.return_value = skill_file
+    
+    result = await registry.ensure_skill("test-sim", sample_openapi_spec)
+    
+    assert result == skill_file
+    mock_generator.generate_skill.assert_called_once()
+    
+    # Check that warning was logged about missing files
+    warning_messages = [record.message for record in caplog.records if record.levelname == "WARNING"]
+    assert any("incomplete" in msg.lower() and "schema.json" in msg for msg in warning_messages)
+
+
+@pytest.mark.asyncio
+async def test_ensure_skill_regenerates_when_db_missing(temp_skills_dir, mock_generator, sample_openapi_spec, caplog):
+    """Test that ensure_skill regenerates when db.json is missing."""
+    import logging
+    caplog.set_level(logging.WARNING)
+    
+    registry = SkillRegistry(temp_skills_dir, mock_generator)
+    
+    # Create skill with only SKILL.md and schema.json (db.json missing)
+    skill_dir = temp_skills_dir / "test-sim"
+    skill_dir.mkdir()
+    skill_file = skill_dir / "SKILL.md"
+    skill_file.write_text("# Existing skill")
+    (skill_dir / "schema.json").write_text('{"type": "object"}')
+    
+    mock_generator.generate_skill.return_value = skill_file
+    
+    result = await registry.ensure_skill("test-sim", sample_openapi_spec)
+    
+    assert result == skill_file
+    mock_generator.generate_skill.assert_called_once()
+    
+    # Check that warning was logged about missing files
+    warning_messages = [record.message for record in caplog.records if record.levelname == "WARNING"]
+    assert any("incomplete" in msg.lower() and "db.json" in msg for msg in warning_messages)
+
+
+@pytest.mark.asyncio
+async def test_ensure_skill_regenerates_when_all_files_missing(temp_skills_dir, mock_generator, sample_openapi_spec):
+    """Test that ensure_skill regenerates when all files are missing."""
+    registry = SkillRegistry(temp_skills_dir, mock_generator)
+    
+    skill_file = temp_skills_dir / "test-sim" / "SKILL.md"
+    mock_generator.generate_skill.return_value = skill_file
+    
+    result = await registry.ensure_skill("test-sim", sample_openapi_spec)
+    
+    assert result == skill_file
+    mock_generator.generate_skill.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_ensure_skill_regenerates_when_multiple_files_missing(temp_skills_dir, mock_generator, sample_openapi_spec, caplog):
+    """Test that ensure_skill regenerates when multiple files are missing."""
+    import logging
+    caplog.set_level(logging.WARNING)
+    
+    registry = SkillRegistry(temp_skills_dir, mock_generator)
+    
+    # Create skill with only SKILL.md (schema.json and db.json missing)
     skill_dir = temp_skills_dir / "test-sim"
     skill_dir.mkdir()
     skill_file = skill_dir / "SKILL.md"
     skill_file.write_text("# Existing skill")
     
-    await registry.ensure_skill("test-sim", sample_openapi_spec)
+    mock_generator.generate_skill.return_value = skill_file
     
-    # Check that warning includes all required elements
+    result = await registry.ensure_skill("test-sim", sample_openapi_spec)
+    
+    assert result == skill_file
+    mock_generator.generate_skill.assert_called_once()
+    
+    # Check that warning was logged about missing files
+    warning_messages = [record.message for record in caplog.records if record.levelname == "WARNING"]
+    assert any("incomplete" in msg.lower() for msg in warning_messages)
+    # Should mention both missing files
+    incomplete_msg = [msg for msg in warning_messages if "incomplete" in msg.lower()][0]
+    assert "schema.json" in incomplete_msg
+    assert "db.json" in incomplete_msg
+
+
+@pytest.mark.asyncio
+async def test_ensure_skill_does_not_regenerate_complete_skill(temp_skills_dir, mock_generator, sample_openapi_spec, caplog):
+    """Test that ensure_skill does not regenerate when all 3 files exist."""
+    import logging
+    caplog.set_level(logging.WARNING)
+    
+    registry = SkillRegistry(temp_skills_dir, mock_generator)
+    
+    # Create complete skill with all 3 files
+    skill_dir = temp_skills_dir / "test-sim"
+    skill_dir.mkdir()
+    skill_file = skill_dir / "SKILL.md"
+    skill_file.write_text("# Existing skill")
+    (skill_dir / "schema.json").write_text('{"type": "object"}')
+    (skill_dir / "db.json").write_text('{}')
+    
+    result = await registry.ensure_skill("test-sim", sample_openapi_spec)
+    
+    assert result == skill_file
+    # Should NOT call generate_skill when all files exist
+    mock_generator.generate_skill.assert_not_called()
+    
+    # Should log reuse warning, not incomplete warning
     warning_messages = [record.message for record in caplog.records if record.levelname == "WARNING"]
     assert len(warning_messages) == 1
+    assert "Reusing existing skill" in warning_messages[0]
+    assert "incomplete" not in warning_messages[0].lower()
     assert "test-sim" in warning_messages[0]
     assert "SKILL.md modified:" in warning_messages[0]
     assert "regenerate=true" in warning_messages[0].lower() or "regenerate: true" in warning_messages[0].lower()

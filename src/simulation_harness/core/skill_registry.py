@@ -34,6 +34,11 @@ class SkillRegistry:
         If the skill already exists and regenerate is False, reuses it.
         Otherwise, generates a new skill.
 
+        A skill is considered complete only when all three files exist:
+        - SKILL.md
+        - schema.json
+        - db.json
+
         Args:
             simulation_name: Name of the simulation
             openapi_spec: OpenAPI specification
@@ -47,9 +52,17 @@ class SkillRegistry:
         """
         skill_dir = self.skills_folder / simulation_name
         skill_file = skill_dir / "SKILL.md"
+        schema_file = skill_dir / "schema.json"
+        db_file = skill_dir / "db.json"
 
-        # Check if skill exists
-        if skill_file.exists() and not regenerate:
+        # Check if skill is complete (all 3 files exist)
+        skill_complete = (
+            skill_file.exists()
+            and schema_file.exists()
+            and db_file.exists()
+        )
+
+        if skill_complete and not regenerate:
             # Log warning with human-readable mtime and regeneration reminder
             mtime = datetime.fromtimestamp(skill_file.stat().st_mtime)
             logger.warning(
@@ -58,6 +71,23 @@ class SkillRegistry:
                 f"If the OpenAPI spec has changed, pass regenerate=true to force regeneration."
             )
             return skill_file
+
+        # Log which files are missing if incomplete
+        if not regenerate and skill_dir.exists():
+            missing_files = []
+            if not skill_file.exists():
+                missing_files.append("SKILL.md")
+            if not schema_file.exists():
+                missing_files.append("schema.json")
+            if not db_file.exists():
+                missing_files.append("db.json")
+            
+            if missing_files:
+                logger.warning(
+                    f"Skill '{simulation_name}' is incomplete. "
+                    f"Missing files: {', '.join(missing_files)}. "
+                    f"Regenerating..."
+                )
 
         # Generate new skill
         logger.info(
