@@ -127,12 +127,12 @@ class TestSkillGeneration:
         }
 
     @pytest.mark.asyncio
-    async def test_generate_skill_creates_three_files(
+    async def test_generate_skill_creates_four_files(
         self,
         temp_skills_dir: Path,
         sample_openapi_spec: dict[str, Any],
     ) -> None:
-        """Test that generate_skill creates SKILL.md, schema.json, and db.json."""
+        """Test that generate_skill creates SKILL.md, schema.json, db.json, and api.json."""
         generator = SkillGenerator(api_key="test-key")
         
         # Mock the LLM response with 3-file JSON structure
@@ -180,12 +180,13 @@ class TestSkillGeneration:
                 skills_folder=temp_skills_dir,
             )
         
-        # Verify all three files were created
+        # Verify all four files were created
         skill_dir = temp_skills_dir / "test-simulation"
         assert result_path.exists()
         assert result_path.name == "SKILL.md"
         assert (skill_dir / "schema.json").exists()
         assert (skill_dir / "db.json").exists()
+        assert (skill_dir / "api.json").exists()
         
         # Verify SKILL.md content
         skill_content = result_path.read_text()
@@ -203,6 +204,10 @@ class TestSkillGeneration:
         assert "items" in db_content
         assert len(db_content["items"]) == 1
         assert db_content["items"][0]["id"] == "item_001"
+        
+        # Verify api.json content
+        api_content = json.loads((skill_dir / "api.json").read_text())
+        assert api_content == sample_openapi_spec
 
     @pytest.mark.asyncio
     async def test_atomic_write_no_temp_dirs_on_success(

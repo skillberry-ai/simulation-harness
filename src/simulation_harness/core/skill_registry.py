@@ -34,10 +34,11 @@ class SkillRegistry:
         If the skill already exists and regenerate is False, reuses it.
         Otherwise, generates a new skill.
 
-        A skill is considered complete only when all three files exist:
+        A skill is considered complete only when all four files exist:
         - SKILL.md
         - schema.json
         - db.json
+        - api.json
 
         Args:
             simulation_name: Name of the simulation
@@ -54,12 +55,14 @@ class SkillRegistry:
         skill_file = skill_dir / "SKILL.md"
         schema_file = skill_dir / "schema.json"
         db_file = skill_dir / "db.json"
+        api_file = skill_dir / "api.json"
 
-        # Check if skill is complete (all 3 files exist)
+        # Check if skill is complete (all 4 files exist)
         skill_complete = (
             skill_file.exists()
             and schema_file.exists()
             and db_file.exists()
+            and api_file.exists()
         )
 
         if skill_complete and not regenerate:
@@ -81,6 +84,8 @@ class SkillRegistry:
                 missing_files.append("schema.json")
             if not db_file.exists():
                 missing_files.append("db.json")
+            if not api_file.exists():
+                missing_files.append("api.json")
             
             if missing_files:
                 logger.warning(

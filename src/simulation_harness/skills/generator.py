@@ -82,7 +82,7 @@ class SkillGenerator:
         Uses atomic write pattern:
         1. Create temp dir: <skills_folder>/.<name>.tmp-<uuid>/
         2. Generate skill content via LLM (3-file JSON output)
-        3. Write SKILL.md, schema.json, db.json to temp dir
+        3. Write SKILL.md, schema.json, db.json, api.json to temp dir
         4. Validate db.json against schema.json
         5. Atomic rename: temp dir → <skills_folder>/<name>/
         6. On failure: clean up temp dir
@@ -205,10 +205,12 @@ Do not include any explanations or commentary outside the JSON object.
             temp_skill_file = temp_dir / "SKILL.md"
             temp_schema_file = temp_dir / "schema.json"
             temp_db_file = temp_dir / "db.json"
+            temp_api_file = temp_dir / "api.json"
 
             temp_skill_file.write_text(skill_md)
             temp_schema_file.write_text(json.dumps(schema_json, indent=2))
             temp_db_file.write_text(json.dumps(db_json, indent=2))
+            temp_api_file.write_text(json.dumps(openapi_spec, indent=2))
 
             # Atomic rename: temp dir → final dir
             try:
