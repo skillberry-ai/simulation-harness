@@ -40,7 +40,9 @@ def generate_tools_from_spec(spec: OpenAPISpec) -> list[dict[str, Any]]:
     return tools
 
 
-def generate_tool_from_operation(operation: OpenAPIOperation, spec: OpenAPISpec) -> dict[str, Any]:
+def generate_tool_from_operation(
+    operation: OpenAPIOperation, spec: OpenAPISpec
+) -> dict[str, Any]:
     """Generate tool from OpenAPI operation.
 
     Args:
@@ -91,7 +93,9 @@ def _build_tool_description(operation: OpenAPIOperation) -> str:
     return "\n\n".join(parts)
 
 
-def _build_input_schema(operation: OpenAPIOperation, spec: OpenAPISpec) -> dict[str, Any]:
+def _build_input_schema(
+    operation: OpenAPIOperation, spec: OpenAPISpec
+) -> dict[str, Any]:
     """Build JSON schema for tool input from operation parameters and request body.
 
     Args:
@@ -201,5 +205,6 @@ def get_optional_parameters(tool: dict[str, Any]) -> list[str]:
     all_params = list(schema.get("properties", {}).keys())
     required = schema.get("required", [])
     return [p for p in all_params if p not in required]
+
 
 # Made with Bob

@@ -51,7 +51,10 @@ def simple_openapi_spec() -> dict[str, Any]:
                             "description": "Success",
                             "content": {
                                 "application/json": {
-                                    "schema": {"type": "array", "items": {"type": "object"}}
+                                    "schema": {
+                                        "type": "array",
+                                        "items": {"type": "object"},
+                                    }
                                 }
                             },
                         }
@@ -97,7 +100,12 @@ def complex_openapi_spec() -> dict[str, Any]:
                     "operationId": "getUser",
                     "summary": "Get a user",
                     "parameters": [
-                        {"name": "id", "in": "path", "required": True, "schema": {"type": "string"}}
+                        {
+                            "name": "id",
+                            "in": "path",
+                            "required": True,
+                            "schema": {"type": "string"},
+                        }
                     ],
                     "responses": {"200": {"description": "Success"}},
                 }
@@ -106,7 +114,9 @@ def complex_openapi_spec() -> dict[str, Any]:
     }
 
 
-def test_generate_tools_from_simple_spec(temp_dir: Path, simple_openapi_spec: dict[str, Any]):
+def test_generate_tools_from_simple_spec(
+    temp_dir: Path, simple_openapi_spec: dict[str, Any]
+):
     """Test generating tools from simple specification."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -120,7 +130,9 @@ def test_generate_tools_from_simple_spec(temp_dir: Path, simple_openapi_spec: di
     assert "List all users" in tools[0]["description"]
 
 
-def test_generate_tools_from_complex_spec(temp_dir: Path, complex_openapi_spec: dict[str, Any]):
+def test_generate_tools_from_complex_spec(
+    temp_dir: Path, complex_openapi_spec: dict[str, Any]
+):
     """Test generating tools from complex specification."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -135,7 +147,9 @@ def test_generate_tools_from_complex_spec(temp_dir: Path, complex_openapi_spec: 
     assert "getUser" in tool_names
 
 
-def test_tool_input_schema_with_parameters(temp_dir: Path, simple_openapi_spec: dict[str, Any]):
+def test_tool_input_schema_with_parameters(
+    temp_dir: Path, simple_openapi_spec: dict[str, Any]
+):
     """Test tool input schema includes parameters."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -149,7 +163,9 @@ def test_tool_input_schema_with_parameters(temp_dir: Path, simple_openapi_spec: 
     assert tool["inputSchema"]["properties"]["limit"]["type"] == "integer"
 
 
-def test_tool_input_schema_with_request_body(temp_dir: Path, complex_openapi_spec: dict[str, Any]):
+def test_tool_input_schema_with_request_body(
+    temp_dir: Path, complex_openapi_spec: dict[str, Any]
+):
     """Test tool input schema includes request body properties."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -219,7 +235,9 @@ def test_get_tool_by_name(temp_dir: Path, complex_openapi_spec: dict[str, Any]):
     assert get_tool_by_name(tools, "nonexistent") is None
 
 
-def test_tool_description_includes_http_info(temp_dir: Path, simple_openapi_spec: dict[str, Any]):
+def test_tool_description_includes_http_info(
+    temp_dir: Path, simple_openapi_spec: dict[str, Any]
+):
     """Test that tool description includes HTTP method and path."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -232,7 +250,9 @@ def test_tool_description_includes_http_info(temp_dir: Path, simple_openapi_spec
     assert "GET /users" in tool["description"]
 
 
-def test_generate_tool_from_operation(temp_dir: Path, simple_openapi_spec: dict[str, Any]):
+def test_generate_tool_from_operation(
+    temp_dir: Path, simple_openapi_spec: dict[str, Any]
+):
     """Test generating single tool from operation."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -253,5 +273,6 @@ def test_tool_generation_error():
     # This is a simple test to ensure the exception exists
     with pytest.raises(ToolGenerationError):
         raise ToolGenerationError("Test error")
+
 
 # Made with Bob

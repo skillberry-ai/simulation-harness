@@ -18,41 +18,30 @@ class TestSessionExpiredError:
         """Test that SessionExpiredError can be raised."""
         with pytest.raises(SessionExpiredError) as exc_info:
             raise SessionExpiredError(
-                reason="max_messages_exceeded",
-                limit=100,
-                observed=101
+                reason="max_messages_exceeded", limit=100, observed=101
             )
-        
+
         assert "max_messages" in str(exc_info.value)
 
     def test_inherits_from_exception(self):
         """Test that SessionExpiredError inherits from Exception."""
-        error = SessionExpiredError(
-            reason="test_reason",
-            limit=10,
-            observed=11
-        )
+        error = SessionExpiredError(reason="test_reason", limit=10, observed=11)
         assert isinstance(error, Exception)
 
     def test_can_have_custom_message(self):
         """Test that SessionExpiredError can have a custom message."""
         message = "Session expired: idle timeout of 300 seconds exceeded"
         error = SessionExpiredError(
-            reason="idle_timeout_exceeded",
-            limit=300,
-            observed=350,
-            message=message
+            reason="idle_timeout_exceeded", limit=300, observed=350, message=message
         )
         assert str(error) == message
 
     def test_structured_fields_max_messages(self):
         """Test that SessionExpiredError has structured fields for max_messages."""
         error = SessionExpiredError(
-            reason="max_messages_exceeded",
-            limit=100,
-            observed=101
+            reason="max_messages_exceeded", limit=100, observed=101
         )
-        
+
         assert error.reason == "max_messages_exceeded"
         assert error.limit == 100
         assert error.observed == 101
@@ -63,11 +52,9 @@ class TestSessionExpiredError:
     def test_structured_fields_idle_timeout(self):
         """Test that SessionExpiredError has structured fields for idle_timeout."""
         error = SessionExpiredError(
-            reason="idle_timeout_exceeded",
-            limit=300,
-            observed=350
+            reason="idle_timeout_exceeded", limit=300, observed=350
         )
-        
+
         assert error.reason == "idle_timeout_exceeded"
         assert error.limit == 300
         assert error.observed == 350
@@ -77,12 +64,9 @@ class TestSessionExpiredError:
         """Test that SessionExpiredError can have custom message with structured fields."""
         custom_msg = "Custom expiry message"
         error = SessionExpiredError(
-            reason="max_messages_exceeded",
-            limit=50,
-            observed=51,
-            message=custom_msg
+            reason="max_messages_exceeded", limit=50, observed=51, message=custom_msg
         )
-        
+
         assert error.reason == "max_messages_exceeded"
         assert error.limit == 50
         assert error.observed == 51
@@ -96,7 +80,7 @@ class TestConcurrentQueueFullError:
         """Test that ConcurrentQueueFullError can be raised."""
         with pytest.raises(ConcurrentQueueFullError) as exc_info:
             raise ConcurrentQueueFullError("Queue is full")
-        
+
         assert "Queue is full" in str(exc_info.value)
 
     def test_inherits_from_exception(self):
@@ -118,7 +102,7 @@ class TestSimulationAlreadyExistsError:
         """Test that SimulationAlreadyExistsError can be raised."""
         with pytest.raises(SimulationAlreadyExistsError) as exc_info:
             raise SimulationAlreadyExistsError("Simulation already exists")
-        
+
         assert "already exists" in str(exc_info.value)
 
     def test_inherits_from_exception(self):
@@ -140,7 +124,7 @@ class TestSimulationNotFoundError:
         """Test that SimulationNotFoundError can be raised."""
         with pytest.raises(SimulationNotFoundError) as exc_info:
             raise SimulationNotFoundError("Simulation not found")
-        
+
         assert "not found" in str(exc_info.value)
 
     def test_inherits_from_exception(self):
@@ -162,7 +146,7 @@ class TestOpenAPIValidationError:
         """Test that OpenAPIValidationError can be raised."""
         with pytest.raises(OpenAPIValidationError) as exc_info:
             raise OpenAPIValidationError("Invalid OpenAPI spec")
-        
+
         assert "Invalid" in str(exc_info.value)
 
     def test_inherits_from_exception(self):
@@ -189,7 +173,7 @@ class TestExceptionHierarchy:
             SimulationNotFoundError("test"),
             OpenAPIValidationError("test"),
         ]
-        
+
         # Check that each exception is a different type
         types = [type(e) for e in exceptions]
         assert len(types) == len(set(types))
@@ -203,8 +187,9 @@ class TestExceptionHierarchy:
             SimulationNotFoundError,
             OpenAPIValidationError,
         ]
-        
+
         for exc_class in exceptions:
             assert issubclass(exc_class, Exception)
+
 
 # Made with Bob

@@ -10,11 +10,7 @@ from simulation_harness.openapi.parser import OpenAPISpec, OpenAPIOperation
 def mock_spec():
     """Create a mock OpenAPI spec."""
     spec = Mock(spec=OpenAPISpec)
-    spec.info = {
-        "title": "Test API",
-        "version": "1.0.0",
-        "description": "A test API"
-    }
+    spec.info = {"title": "Test API", "version": "1.0.0", "description": "A test API"}
     spec.servers = [{"url": "https://api.example.com"}]
     return spec
 
@@ -34,25 +30,24 @@ def mock_operation():
             "in": "path",
             "required": True,
             "description": "User ID",
-            "schema": {"type": "string"}
+            "schema": {"type": "string"},
         }
     ]
     op.request_body = None
     op.get_request_schema = Mock(return_value=None)
-    op.get_response_schema = Mock(return_value={
-        "type": "object",
-        "properties": {
-            "id": {"type": "string"},
-            "name": {"type": "string"}
+    op.get_response_schema = Mock(
+        return_value={
+            "type": "object",
+            "properties": {"id": {"type": "string"}, "name": {"type": "string"}},
         }
-    })
+    )
     return op
 
 
 def test_render_system_prompt_basic(mock_spec, mock_operation):
     """Test rendering system prompt with basic operation."""
     result = render_system_prompt(mock_spec, [mock_operation])
-    
+
     # Check that key elements are in the prompt
     assert "Test API" in result
     assert "1.0.0" in result
@@ -74,31 +69,22 @@ def test_render_system_prompt_multiple_operations(mock_spec, mock_operation):
         "description": "User data",
         "content": {
             "application/json": {
-                "schema": {
-                    "type": "object",
-                    "properties": {
-                        "name": {"type": "string"}
-                    }
-                }
+                "schema": {"type": "object", "properties": {"name": {"type": "string"}}}
             }
-        }
+        },
     }
-    op2.get_request_schema = Mock(return_value={
-        "type": "object",
-        "properties": {
-            "name": {"type": "string"}
+    op2.get_request_schema = Mock(
+        return_value={"type": "object", "properties": {"name": {"type": "string"}}}
+    )
+    op2.get_response_schema = Mock(
+        return_value={
+            "type": "object",
+            "properties": {"id": {"type": "string"}, "name": {"type": "string"}},
         }
-    })
-    op2.get_response_schema = Mock(return_value={
-        "type": "object",
-        "properties": {
-            "id": {"type": "string"},
-            "name": {"type": "string"}
-        }
-    })
-    
+    )
+
     result = render_system_prompt(mock_spec, [mock_operation, op2])
-    
+
     # Check both operations are in the prompt
     assert "GET /users/{id}" in result
     assert "POST /users" in result
@@ -109,7 +95,7 @@ def test_render_system_prompt_multiple_operations(mock_spec, mock_operation):
 def test_render_system_prompt_empty_operations(mock_spec):
     """Test rendering system prompt with no operations."""
     result = render_system_prompt(mock_spec, [])
-    
+
     # Should still have API info
     assert "Test API" in result
     assert "1.0.0" in result
@@ -118,10 +104,11 @@ def test_render_system_prompt_empty_operations(mock_spec):
 def test_render_system_prompt_includes_instructions(mock_spec, mock_operation):
     """Test that system prompt includes key instructions."""
     result = render_system_prompt(mock_spec, [mock_operation])
-    
+
     # Check for key instruction phrases
     assert "simulate" in result.lower() or "simulating" in result.lower()
     assert "json" in result.lower()
     assert "consistent" in result.lower() or "consistency" in result.lower()
+
 
 # Made with Bob

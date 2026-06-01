@@ -23,7 +23,7 @@ class TestSimulationResponse:
             queue_depth=2,
             max_queue_depth=10,
         )
-        
+
         response = SimulationResponse(
             name="test-simulation",
             status="running",
@@ -31,7 +31,7 @@ class TestSimulationResponse:
             mcp_endpoint="http://localhost:8000/mcp",
             created_at=now,
         )
-        
+
         assert response.name == "test-simulation"
         assert response.status == "running"
         assert response.session_state == session_state
@@ -42,7 +42,7 @@ class TestSimulationResponse:
         """Test that all fields are required."""
         with pytest.raises(ValidationError) as exc_info:
             SimulationResponse()
-        
+
         error_str = str(exc_info.value)
         assert "name" in error_str
         assert "status" in error_str
@@ -53,7 +53,7 @@ class TestSimulationResponse:
     def test_session_state_must_be_valid(self):
         """Test that session_state must be a valid SessionState object."""
         now = datetime.now(timezone.utc)
-        
+
         with pytest.raises(ValidationError) as exc_info:
             SimulationResponse(
                 name="test-simulation",
@@ -62,7 +62,7 @@ class TestSimulationResponse:
                 mcp_endpoint="http://localhost:8000/mcp",
                 created_at=now,
             )
-        
+
         assert "session_state" in str(exc_info.value)
 
     def test_created_at_must_be_datetime(self):
@@ -76,7 +76,7 @@ class TestSimulationResponse:
             queue_depth=0,
             max_queue_depth=10,
         )
-        
+
         with pytest.raises(ValidationError) as exc_info:
             SimulationResponse(
                 name="test-simulation",
@@ -85,7 +85,7 @@ class TestSimulationResponse:
                 mcp_endpoint="http://localhost:8000/mcp",
                 created_at="not a datetime",
             )
-        
+
         assert "created_at" in str(exc_info.value)
 
     def test_response_serialization(self):
@@ -99,7 +99,7 @@ class TestSimulationResponse:
             queue_depth=1,
             max_queue_depth=10,
         )
-        
+
         response = SimulationResponse(
             name="test-simulation",
             status="running",
@@ -107,13 +107,14 @@ class TestSimulationResponse:
             mcp_endpoint="http://localhost:8000/mcp",
             created_at=now,
         )
-        
+
         response_dict = response.model_dump()
-        
+
         assert response_dict["name"] == "test-simulation"
         assert response_dict["status"] == "running"
         assert response_dict["session_state"]["tool_call_count"] == 3
         assert response_dict["mcp_endpoint"] == "http://localhost:8000/mcp"
         assert isinstance(response_dict["created_at"], datetime)
+
 
 # Made with Bob

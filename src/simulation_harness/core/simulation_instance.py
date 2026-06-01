@@ -7,9 +7,16 @@ from pathlib import Path
 from typing import Any
 
 from simulation_harness.agent.deep_agent import DeepAgent
-from simulation_harness.models.domain import SimulationSpec, SessionState, ToolCallResult
+from simulation_harness.models.domain import (
+    SimulationSpec,
+    SessionState,
+    ToolCallResult,
+)
 from simulation_harness.openapi.parser import OpenAPISpec
-from simulation_harness.utils.errors import SessionExpiredError, ConcurrentQueueFullError
+from simulation_harness.utils.errors import (
+    SessionExpiredError,
+    ConcurrentQueueFullError,
+)
 from simulation_harness.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -49,7 +56,7 @@ class SimulationInstance:
         self._max_messages = max_messages
         self._idle_timeout_seconds = idle_timeout_seconds
         self._max_queue_depth = max_queue_depth
-        
+
         # Creation timestamp
         self.created_at = datetime.now(timezone.utc)
 
@@ -82,7 +89,9 @@ class SimulationInstance:
             f"max_queue_depth={max_queue_depth}"
         )
 
-    async def execute_tool(self, tool_name: str, arguments: dict[str, Any]) -> ToolCallResult:
+    async def execute_tool(
+        self, tool_name: str, arguments: dict[str, Any]
+    ) -> ToolCallResult:
         """Execute a tool call with expiry checking and auto-reset.
 
         Args:
@@ -107,17 +116,19 @@ class SimulationInstance:
             # Start idle timer on first call
             if self._last_activity is None:
                 self._last_activity = datetime.now(timezone.utc)
-            
+
             # Check session expiry BEFORE execution
             try:
                 self._check_session_expiry()
             except SessionExpiredError as e:
                 # Log the expiry
-                logger.warning(f"Session expired: {e.reason} (limit={e.limit}, observed={e.observed})")
-                
+                logger.warning(
+                    f"Session expired: {e.reason} (limit={e.limit}, observed={e.observed})"
+                )
+
                 # Reset session for next call
                 await self.reset_session()
-                
+
                 # Return error for THIS call
                 return ToolCallResult(
                     success=False,
@@ -207,20 +218,20 @@ class SimulationInstance:
 
     def get_state_snapshot(self, thread_id: str = "default") -> dict[str, Any]:
         """Get state snapshot for a thread.
-        
+
         Args:
             thread_id: The thread identifier (default: "default")
-            
+
         Returns:
             Dictionary mapping store names to lists of entities, or empty dict if no store
         """
-        if not hasattr(self, '_agent'):
+        if not hasattr(self, "_agent"):
             return {}
-        
+
         store_registry = self._agent.store_registry
         if store_registry is None:
             return {}
-        
+
         store = store_registry.for_thread(thread_id)
         return store.snapshot()
 
@@ -228,5 +239,6 @@ class SimulationInstance:
         """Shutdown the instance and cleanup resources."""
         await self._agent.shutdown()
         logger.info("SimulationInstance shutdown")
+
 
 # Made with Bob

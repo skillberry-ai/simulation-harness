@@ -153,9 +153,7 @@ Do not include any explanations or commentary outside the JSON object.
             try:
                 parsed = json.loads(response_content)
             except json.JSONDecodeError as e:
-                raise RuntimeError(
-                    f"LLM response is not valid JSON: {e}"
-                ) from e
+                raise RuntimeError(f"LLM response is not valid JSON: {e}") from e
 
             # Validate response structure
             if not isinstance(parsed, dict):
@@ -177,17 +175,13 @@ Do not include any explanations or commentary outside the JSON object.
 
             # Validate types
             if not isinstance(skill_md, str):
-                raise RuntimeError(
-                    f"skill_md must be a string, got {type(skill_md)}"
-                )
+                raise RuntimeError(f"skill_md must be a string, got {type(skill_md)}")
             if not isinstance(schema_json, dict):
                 raise RuntimeError(
                     f"schema_json must be an object, got {type(schema_json)}"
                 )
             if not isinstance(db_json, dict):
-                raise RuntimeError(
-                    f"db_json must be an object, got {type(db_json)}"
-                )
+                raise RuntimeError(f"db_json must be an object, got {type(db_json)}")
 
             # Validate db.json against schema.json
             try:
@@ -230,5 +224,6 @@ Do not include any explanations or commentary outside the JSON object.
             raise RuntimeError(
                 f"Skill generation failed for '{simulation_name}'"
             ) from e
+
 
 # Made with Bob

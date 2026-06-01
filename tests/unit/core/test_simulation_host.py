@@ -20,11 +20,14 @@ async def test_create_simulation_success():
     host = SimulationHost()
     spec = SimulationSpec(
         name="test-sim",
-        openapi_spec={"openapi": "3.0.0", "info": {"title": "Test", "version": "1.0.0"}},
+        openapi_spec={
+            "openapi": "3.0.0",
+            "info": {"title": "Test", "version": "1.0.0"},
+        },
     )
-    
+
     instance = await host.create_simulation(spec)
-    
+
     assert instance is not None
     assert await host.get_simulation() == instance
 
@@ -35,11 +38,14 @@ async def test_create_simulation_rejects_duplicate():
     host = SimulationHost()
     spec = SimulationSpec(
         name="test-sim",
-        openapi_spec={"openapi": "3.0.0", "info": {"title": "Test", "version": "1.0.0"}},
+        openapi_spec={
+            "openapi": "3.0.0",
+            "info": {"title": "Test", "version": "1.0.0"},
+        },
     )
-    
+
     await host.create_simulation(spec)
-    
+
     with pytest.raises(SimulationAlreadyExistsError):
         await host.create_simulation(spec)
 
@@ -48,9 +54,9 @@ async def test_create_simulation_rejects_duplicate():
 async def test_get_simulation_returns_none_when_empty():
     """Test getting simulation when none exists."""
     host = SimulationHost()
-    
+
     result = await host.get_simulation()
-    
+
     assert result is None
 
 
@@ -60,12 +66,15 @@ async def test_delete_simulation_success():
     host = SimulationHost()
     spec = SimulationSpec(
         name="test-sim",
-        openapi_spec={"openapi": "3.0.0", "info": {"title": "Test", "version": "1.0.0"}},
+        openapi_spec={
+            "openapi": "3.0.0",
+            "info": {"title": "Test", "version": "1.0.0"},
+        },
     )
-    
+
     await host.create_simulation(spec)
     await host.delete_simulation()
-    
+
     assert await host.get_simulation() is None
 
 
@@ -73,9 +82,9 @@ async def test_delete_simulation_success():
 async def test_delete_simulation_when_none_exists():
     """Test deleting when no simulation exists (should be idempotent)."""
     host = SimulationHost()
-    
+
     await host.delete_simulation()
-    
+
     assert await host.get_simulation() is None
 
 
@@ -83,32 +92,36 @@ async def test_delete_simulation_when_none_exists():
 async def test_lifecycle_lock_serializes_operations():
     """Test that lifecycle operations are serialized."""
     import asyncio
-    
+
     host = SimulationHost()
     spec = SimulationSpec(
         name="test-sim",
-        openapi_spec={"openapi": "3.0.0", "info": {"title": "Test", "version": "1.0.0"}},
+        openapi_spec={
+            "openapi": "3.0.0",
+            "info": {"title": "Test", "version": "1.0.0"},
+        },
     )
-    
+
     # Create simulation
     await host.create_simulation(spec)
-    
+
     # Try to create and delete concurrently - should be serialized
     async def try_create():
         try:
             await host.create_simulation(spec)
         except SimulationAlreadyExistsError:
             pass
-    
+
     async def try_delete():
         await host.delete_simulation()
-    
+
     # Run operations concurrently
     await asyncio.gather(try_create(), try_delete(), try_create())
-    
+
     # Should end in a consistent state (either exists or doesn't)
     result = await host.get_simulation()
     # Result can be None or an instance, but should be consistent
     assert result is None or result is not None
+
 
 # Made with Bob

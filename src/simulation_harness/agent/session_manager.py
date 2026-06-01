@@ -123,7 +123,8 @@ class SessionManager:
                     keys_to_remove = [
                         key
                         for key in self.checkpointer.storage
-                        if key[0] == thread_id  # thread_id is first element of tuple key
+                        if key[0]
+                        == thread_id  # thread_id is first element of tuple key
                     ]
                     for key in keys_to_remove:
                         del self.checkpointer.storage[key]
@@ -134,9 +135,7 @@ class SessionManager:
 
                 cleaned_count += 1
 
-                logger.debug(
-                    f"Cleaned up expired session: thread_id={thread_id}"
-                )
+                logger.debug(f"Cleaned up expired session: thread_id={thread_id}")
             except Exception as e:
                 logger.error(
                     f"Failed to cleanup session: thread_id={thread_id}, error={str(e)}"
@@ -189,9 +188,7 @@ class SessionManager:
 
                 evicted += 1
 
-                logger.debug(
-                    f"Evicted session due to max limit: thread_id={thread_id}"
-                )
+                logger.debug(f"Evicted session due to max limit: thread_id={thread_id}")
             except Exception as e:
                 logger.error(
                     f"Failed to evict session: thread_id={thread_id}, error={str(e)}"
@@ -279,7 +276,9 @@ class SessionManager:
 
             # Clear from checkpointer
             if self.checkpointer and hasattr(self.checkpointer, "storage"):
-                keys_to_remove = [key for key in self.checkpointer.storage if key[0] == thread_id]
+                keys_to_remove = [
+                    key for key in self.checkpointer.storage if key[0] == thread_id
+                ]
                 for key in keys_to_remove:
                     del self.checkpointer.storage[key]
 
@@ -316,5 +315,6 @@ class SessionManager:
 
         logger.info(f"All sessions cleared: count={count}")
         return count
+
 
 # Made with Bob

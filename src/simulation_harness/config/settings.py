@@ -21,10 +21,10 @@ class ConfigValidationError(Exception):
 
 def get_config() -> HarnessConfig:
     """Get the global configuration instance.
-    
+
     Returns:
         Global HarnessConfig instance
-        
+
     Raises:
         RuntimeError: If configuration not loaded yet
     """
@@ -49,7 +49,7 @@ def load_config(config_path: str) -> HarnessConfig:
         ConfigValidationError: If the config is invalid or fails validation
     """
     global _global_config
-    
+
     path = Path(config_path)
 
     if not path.exists():
@@ -70,7 +70,7 @@ def load_config(config_path: str) -> HarnessConfig:
         raise ConfigValidationError(f"Configuration validation failed: {e}") from e
 
     _validate_resolved_llm_config(config)
-    
+
     # Store as global config
     _global_config = config
 
@@ -98,5 +98,6 @@ def _validate_resolved_llm_config(config: HarnessConfig) -> None:
             )
         # Actually set the resolved value
         config.llm.api_base = resolved_api_base
+
 
 # Made with Bob

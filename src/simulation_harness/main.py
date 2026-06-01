@@ -15,7 +15,6 @@ from simulation_harness.api.dependencies import get_simulation_host, get_skill_r
 from simulation_harness.api.v1.simulations import router as simulations_router
 from simulation_harness.config.settings import ConfigValidationError, load_config
 from simulation_harness.mcp_integration.mcp_server import MCPServerWrapper
-from simulation_harness.mcp_integration.transport import mount_transport_from_config
 from simulation_harness.utils.errors import (
     ConcurrentQueueFullError,
     OpenAPIValidationError,
@@ -67,12 +66,12 @@ logger.info(f"Configuration loaded successfully: transport={config.mcp.transport
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Lifespan context manager for startup and shutdown.
-    
+
     Startup:
     - Validate config (already done at module level)
     - Create singletons (done via dependency injection)
     - Log startup info
-    
+
     Shutdown:
     - Cleanup simulation if exists
     - Shutdown agent
@@ -83,21 +82,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info(f"Config path: {config_path}")
     logger.info(f"Transport: {config.mcp.transport}")
     logger.info("=" * 80)
-    
+
     # Initialize singletons (they'll be created on first use via dependency injection)
     simulation_host = get_simulation_host()
     skill_registry = get_skill_registry()
-    
+
     logger.info("Singletons initialized")
     logger.info(f"Skills folder: {skill_registry.skills_folder}")
-    
+
     yield
-    
+
     # Shutdown
     logger.info("=" * 80)
     logger.info("Simulation Harness shutting down")
     logger.info("=" * 80)
-    
+
     # Cleanup simulation if exists
     try:
         instance = await simulation_host.get_simulation()
@@ -107,7 +106,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             logger.info("Simulation cleaned up successfully")
     except Exception as e:
         logger.error(f"Error during simulation cleanup: {e}", exc_info=True)
-    
+
     logger.info("Shutdown complete")
 
 
@@ -176,9 +175,9 @@ app.include_router(simulations_router, prefix="/api/v1", tags=["simulations"])
 try:
     from fastapi import Depends
     from simulation_harness.core.simulation_host import SimulationHost
-    
+
     logger.info(f"Mounting MCP transport: {config.mcp.transport}")
-    
+
     if config.mcp.transport.value == "sse":
         from mcp.server.sse import SseServerTransport
         from starlette.responses import Response
@@ -202,8 +201,7 @@ try:
             },
         )
         async def mcp_sse_endpoint(
-            request: Request,
-            host: SimulationHost = Depends(get_simulation_host)
+            request: Request, host: SimulationHost = Depends(get_simulation_host)
         ):
             """MCP SSE transport endpoint."""
             instance = await host.get_simulation()
@@ -219,6 +217,7 @@ try:
             mcp_server = MCPServerWrapper(instance)
 
             from starlette.responses import Response as StarletteResponse
+
             async with _sse_transport.connect_sse(
                 request.scope, request.receive, request._send
             ) as (read_stream, write_stream):
@@ -242,8 +241,7 @@ try:
             },
         )
         async def mcp_messages_endpoint(
-            request: Request,
-            host: SimulationHost = Depends(get_simulation_host)
+            request: Request, host: SimulationHost = Depends(get_simulation_host)
         ):
             """MCP messages endpoint for SSE transport."""
             instance = await host.get_simulation()
@@ -280,8 +278,9 @@ try:
             )
 
         logger.info("SSE transport endpoints mounted at /mcp/sse and /mcp/messages")
-    
+
     elif config.mcp.transport.value == "streamable_http":
+
         @app.post(
             "/mcp",
             tags=["mcp"],
@@ -296,8 +295,7 @@ try:
             },
         )
         async def mcp_streamable_endpoint(
-            request: Request,
-            host: SimulationHost = Depends(get_simulation_host)
+            request: Request, host: SimulationHost = Depends(get_simulation_host)
         ):
             """MCP Streamable HTTP transport endpoint."""
             instance = await host.get_simulation()
@@ -309,25 +307,26 @@ try:
                         "message": "Create a simulation via POST /api/v1/simulation first",
                     },
                 )
-            
+
             # Create MCP server wrapper and handle streamable HTTP
             from simulation_harness.mcp_integration.mcp_server import MCPServerWrapper
             from mcp.server.streamable_http import StreamableHTTPServerTransport
-            
+
             mcp_server = MCPServerWrapper(instance)
             http = StreamableHTTPServerTransport()
-            
-            async with http.connect(
-                request.scope, request.receive, request._send
-            ) as (read_stream, write_stream):
+
+            async with http.connect(request.scope, request.receive, request._send) as (
+                read_stream,
+                write_stream,
+            ):
                 await mcp_server.server.run(
                     read_stream,
                     write_stream,
                     mcp_server.server.create_initialization_options(),
                 )
-        
+
         logger.info("Streamable HTTP transport endpoint mounted at /mcp")
-    
+
 except Exception as e:
     logger.error(f"Failed to mount MCP transport: {e}", exc_info=True)
     raise

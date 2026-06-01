@@ -11,7 +11,9 @@ class SchemaValidationError(Exception):
     pass
 
 
-def validate_against_schema(data: Any, schema: dict[str, Any], strict: bool = False) -> list[str]:
+def validate_against_schema(
+    data: Any, schema: dict[str, Any], strict: bool = False
+) -> list[str]:
     """Validate data against a JSON schema.
 
     Args:
@@ -142,7 +144,9 @@ def is_array_schema(schema: dict[str, Any]) -> bool:
     return get_schema_type(schema) == "array"
 
 
-def get_property_schema(schema: dict[str, Any], property_name: str) -> dict[str, Any] | None:
+def get_property_schema(
+    schema: dict[str, Any], property_name: str
+) -> dict[str, Any] | None:
     """Get schema for a specific property.
 
     Args:
@@ -173,5 +177,6 @@ def get_array_item_schema(schema: dict[str, Any]) -> dict[str, Any] | None:
         return None
 
     return schema.get("items")
+
 
 # Made with Bob

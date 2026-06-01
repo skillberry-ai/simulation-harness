@@ -1,9 +1,8 @@
 """Tests for structured logging utilities."""
 
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import pytest
 
 from simulation_harness.models.domain import SessionState
 from simulation_harness.utils.logging import log_tool_call
@@ -24,7 +23,7 @@ class TestLogToolCall:
             queue_depth=1,
             max_queue_depth=10,
         )
-        
+
         log_tool_call(
             tool_name="get_user",
             arguments={"user_id": "123"},
@@ -33,11 +32,11 @@ class TestLogToolCall:
             session_state=session_state,
             success=True,
         )
-        
+
         # Verify logger.info was called
         assert mock_logger.info.called
         call_args = mock_logger.info.call_args
-        
+
         # Check that the log message contains key information
         log_message = str(call_args)
         assert "get_user" in log_message
@@ -56,7 +55,7 @@ class TestLogToolCall:
             queue_depth=0,
             max_queue_depth=10,
         )
-        
+
         log_tool_call(
             tool_name="delete_user",
             arguments={"user_id": "999"},
@@ -66,13 +65,19 @@ class TestLogToolCall:
             success=False,
             error="User not found",
         )
-        
+
         # Verify logger.error was called for failed tool call
-        assert mock_logger.error.called or mock_logger.warning.called or mock_logger.info.called
-        call_args = (mock_logger.error.call_args or 
-                    mock_logger.warning.call_args or 
-                    mock_logger.info.call_args)
-        
+        assert (
+            mock_logger.error.called
+            or mock_logger.warning.called
+            or mock_logger.info.called
+        )
+        call_args = (
+            mock_logger.error.call_args
+            or mock_logger.warning.call_args
+            or mock_logger.info.call_args
+        )
+
         # Check that the log message contains error information
         log_message = str(call_args)
         assert "delete_user" in log_message
@@ -90,7 +95,7 @@ class TestLogToolCall:
             queue_depth=2,
             max_queue_depth=10,
         )
-        
+
         log_tool_call(
             tool_name="list_items",
             arguments={"limit": 10},
@@ -99,13 +104,13 @@ class TestLogToolCall:
             session_state=session_state,
             success=True,
         )
-        
+
         # Verify logger was called
         assert mock_logger.info.called
-        
+
         # Get the actual call arguments
         call_args = mock_logger.info.call_args
-        
+
         # The log should contain structured data with all required fields
         # We check that the call was made with appropriate data
         assert call_args is not None
@@ -122,7 +127,7 @@ class TestLogToolCall:
             queue_depth=0,
             max_queue_depth=10,
         )
-        
+
         complex_args = {
             "filters": {
                 "status": ["active", "pending"],
@@ -133,7 +138,7 @@ class TestLogToolCall:
                 "per_page": 50,
             },
         }
-        
+
         log_tool_call(
             tool_name="search_records",
             arguments=complex_args,
@@ -142,7 +147,7 @@ class TestLogToolCall:
             session_state=session_state,
             success=True,
         )
-        
+
         # Verify logger was called
         assert mock_logger.info.called
 
@@ -158,7 +163,7 @@ class TestLogToolCall:
             queue_depth=1,
             max_queue_depth=10,
         )
-        
+
         log_tool_call(
             tool_name="update_status",
             arguments={"id": "abc", "status": "completed"},
@@ -167,10 +172,10 @@ class TestLogToolCall:
             session_state=session_state,
             success=True,
         )
-        
+
         # Verify logger was called
         assert mock_logger.info.called
-        
+
         # The logging framework will add timestamp automatically,
         # but we verify the function was called correctly
         call_args = mock_logger.info.call_args
@@ -188,7 +193,7 @@ class TestLogToolCall:
             queue_depth=3,
             max_queue_depth=10,
         )
-        
+
         log_tool_call(
             tool_name="process_batch",
             arguments={"batch_id": "batch-123"},
@@ -197,11 +202,11 @@ class TestLogToolCall:
             session_state=session_state,
             success=True,
         )
-        
+
         # Verify logger was called
         assert mock_logger.info.called
         call_args = mock_logger.info.call_args
-        
+
         # Check that session state information is included
         log_message = str(call_args)
         assert "15" in log_message  # tool_call_count
@@ -270,5 +275,6 @@ class TestLogToolCall:
 
         assert log_entry["token_usage"] is None
         assert log_entry["transport"] == "streamable_http"
+
 
 # Made with Bob

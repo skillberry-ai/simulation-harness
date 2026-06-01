@@ -24,10 +24,10 @@ OutcomeType = Literal[
 
 def get_logger(name: str) -> logging.Logger:
     """Get a logger instance for the given name.
-    
+
     Args:
         name: Logger name (typically __name__ of the calling module)
-        
+
     Returns:
         Logger instance
     """
@@ -45,7 +45,7 @@ def log_tool_call(
 ) -> Dict[str, Any]:
     """
     Log a tool call with all required fields per REQUIREMENTS.md §2.4.
-    
+
     Args:
         tool_name: Name of the tool that was called
         outcome: Outcome taxonomy value
@@ -54,7 +54,7 @@ def log_tool_call(
         queue_depth_at_admission: Queue depth when admitted
         token_usage: Token usage dict or None
         transport: Transport type used
-    
+
     Returns:
         Dict containing the log entry for testing
     """
@@ -68,7 +68,7 @@ def log_tool_call(
         "token_usage": token_usage,
         "transport": transport,
     }
-    
+
     logger.info(json.dumps(log_entry))
     return log_entry
 
@@ -84,9 +84,9 @@ def log_tool_call_legacy(
 ) -> None:
     """
     Legacy log_tool_call function for backward compatibility.
-    
+
     DEPRECATED: Use log_tool_call with new signature instead.
-    
+
     Args:
         tool_name: Name of the tool that was called
         arguments: Arguments passed to the tool
@@ -111,10 +111,10 @@ def log_tool_call_legacy(
             "max_queue_depth": session_state.max_queue_depth,
         },
     }
-    
+
     if error:
         log_data["error"] = error
-    
+
     # Log at appropriate level based on success
     if success:
         logger.info(
@@ -130,5 +130,6 @@ def log_tool_call_legacy(
             f"queue: {session_state.queue_depth}/{session_state.max_queue_depth})",
             extra={"structured_data": log_data},
         )
+
 
 # Made with Bob

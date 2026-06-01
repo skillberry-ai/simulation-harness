@@ -86,7 +86,7 @@ class SkillRegistry:
                 missing_files.append("db.json")
             if not api_file.exists():
                 missing_files.append("api.json")
-            
+
             if missing_files:
                 logger.warning(
                     f"Skill '{simulation_name}' is incomplete. "
@@ -96,8 +96,7 @@ class SkillRegistry:
 
         # Generate new skill
         logger.info(
-            f"Generating skill: simulation={simulation_name}, "
-            f"regenerate={regenerate}"
+            f"Generating skill: simulation={simulation_name}, regenerate={regenerate}"
         )
 
         try:
@@ -111,9 +110,9 @@ class SkillRegistry:
 
         except Exception as e:
             logger.error(
-                f"Skill generation failed: simulation={simulation_name}, "
-                f"error={str(e)}"
+                f"Skill generation failed: simulation={simulation_name}, error={str(e)}"
             )
             raise
+
 
 # Made with Bob

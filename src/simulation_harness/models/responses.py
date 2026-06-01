@@ -14,6 +14,9 @@ class SimulationResponse(BaseModel):
     status: str = Field(..., description="Current status of the simulation")
     session_state: SessionState = Field(..., description="Current session state")
     mcp_endpoint: str = Field(..., description="MCP endpoint URL")
-    created_at: datetime = Field(..., description="Timestamp when simulation was created")
+    created_at: datetime = Field(
+        ..., description="Timestamp when simulation was created"
+    )
+
 
 # Made with Bob

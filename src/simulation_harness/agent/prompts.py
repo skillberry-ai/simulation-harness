@@ -154,4 +154,5 @@ def render_system_prompt(
         )
         raise ValueError(f"Failed to render template: {e}") from e
 
+
 # Made with Bob

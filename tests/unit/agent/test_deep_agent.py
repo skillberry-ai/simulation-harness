@@ -1,9 +1,8 @@
 """Tests for DeepAgent."""
 
-import json
 from pathlib import Path
 import pytest
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
+from unittest.mock import Mock, AsyncMock, patch
 from langchain_core.messages import SystemMessage
 from simulation_harness.agent.deep_agent import DeepAgent
 from simulation_harness.openapi.parser import OpenAPISpec, OpenAPIOperation
@@ -30,7 +29,9 @@ def mock_operation():
     op.parameters = []
     op.request_body = None
     op.get_request_schema = Mock(return_value=None)
-    op.get_response_schema = Mock(return_value={"type": "object", "properties": {"id": {"type": "string"}}})
+    op.get_response_schema = Mock(
+        return_value={"type": "object", "properties": {"id": {"type": "string"}}}
+    )
     return op
 
 
@@ -46,7 +47,7 @@ def test_deep_agent_initialization(mock_spec, mock_operation):
         operations=[mock_operation],
         session_timeout_seconds=3600,
     )
-    
+
     assert agent.spec is mock_spec
     assert agent.operations == [mock_operation]
     assert agent.session_timeout_seconds == 3600
@@ -66,7 +67,7 @@ def test_deep_agent_initialization_with_base_url(mock_spec, mock_operation):
         spec=mock_spec,
         operations=[mock_operation],
     )
-    
+
     assert agent.llm is not None
 
 
@@ -82,20 +83,18 @@ async def test_generate_response_basic(mock_spec, mock_operation):
         spec=mock_spec,
         operations=[mock_operation],
     )
-    
+
     # Mock the agent's ainvoke method
     mock_message = Mock()
     mock_message.content = '{"id": "123", "name": "Test User"}'
-    
-    with patch.object(agent.agent, 'ainvoke', new_callable=AsyncMock) as mock_ainvoke:
+
+    with patch.object(agent.agent, "ainvoke", new_callable=AsyncMock) as mock_ainvoke:
         mock_ainvoke.return_value = {"messages": [mock_message]}
-        
+
         result = await agent.generate_response(
-            tool_name="getUser",
-            arguments={"id": "123"},
-            thread_id="test-thread"
+            tool_name="getUser", arguments={"id": "123"}, thread_id="test-thread"
         )
-        
+
         assert result == {"id": "123", "name": "Test User"}
         mock_ainvoke.assert_called_once()
 
@@ -112,18 +111,17 @@ async def test_generate_response_with_default_thread(mock_spec, mock_operation):
         spec=mock_spec,
         operations=[mock_operation],
     )
-    
+
     mock_message = Mock()
     mock_message.content = '{"result": "ok"}'
-    
-    with patch.object(agent.agent, 'ainvoke', new_callable=AsyncMock) as mock_ainvoke:
+
+    with patch.object(agent.agent, "ainvoke", new_callable=AsyncMock) as mock_ainvoke:
         mock_ainvoke.return_value = {"messages": [mock_message]}
-        
+
         result = await agent.generate_response(
-            tool_name="getUser",
-            arguments={"id": "123"}
+            tool_name="getUser", arguments={"id": "123"}
         )
-        
+
         assert result == {"result": "ok"}
 
 
@@ -139,18 +137,17 @@ async def test_generate_response_invalid_json(mock_spec, mock_operation):
         spec=mock_spec,
         operations=[mock_operation],
     )
-    
+
     mock_message = Mock()
-    mock_message.content = 'This is not JSON'
-    
-    with patch.object(agent.agent, 'ainvoke', new_callable=AsyncMock) as mock_ainvoke:
+    mock_message.content = "This is not JSON"
+
+    with patch.object(agent.agent, "ainvoke", new_callable=AsyncMock) as mock_ainvoke:
         mock_ainvoke.return_value = {"messages": [mock_message]}
-        
+
         result = await agent.generate_response(
-            tool_name="getUser",
-            arguments={"id": "123"}
+            tool_name="getUser", arguments={"id": "123"}
         )
-        
+
         assert "error" in result
         assert "Failed to generate valid JSON response" in result["error"]
 
@@ -167,12 +164,9 @@ async def test_generate_response_tool_not_found(mock_spec, mock_operation):
         spec=mock_spec,
         operations=[mock_operation],
     )
-    
+
     with pytest.raises(ValueError, match="Operation not found"):
-        await agent.generate_response(
-            tool_name="nonexistentTool",
-            arguments={}
-        )
+        await agent.generate_response(tool_name="nonexistentTool", arguments={})
 
 
 @pytest.mark.asyncio
@@ -187,14 +181,14 @@ async def test_reset_specific_thread(mock_spec, mock_operation):
         spec=mock_spec,
         operations=[mock_operation],
     )
-    
+
     # Record some activity
     agent.session_manager.record_activity("test-thread")
     assert agent.session_manager.get_active_session_count() == 1
-    
+
     # Reset the thread
     await agent.reset(thread_id="test-thread")
-    
+
     assert agent.session_manager.get_active_session_count() == 0
 
 
@@ -210,15 +204,15 @@ async def test_reset_all_threads(mock_spec, mock_operation):
         spec=mock_spec,
         operations=[mock_operation],
     )
-    
+
     # Record some activity
     agent.session_manager.record_activity("thread1")
     agent.session_manager.record_activity("thread2")
     assert agent.session_manager.get_active_session_count() == 2
-    
+
     # Reset all
     await agent.reset()
-    
+
     assert agent.session_manager.get_active_session_count() == 0
 
 
@@ -234,15 +228,16 @@ async def test_shutdown(mock_spec, mock_operation):
         spec=mock_spec,
         operations=[mock_operation],
     )
-    
+
     # Start session manager
     agent.start_session_cleanup()
     assert agent.session_manager._running is True
-    
+
     # Shutdown
     await agent.shutdown()
-    
+
     assert agent.session_manager._running is False
+
 
 def test_deep_agent_uses_prompt_for_stateful_react_agent(mock_spec, mock_operation):
     """Test stateful agent creation passes system prompt via supported prompt kwarg."""
@@ -251,8 +246,13 @@ def test_deep_agent_uses_prompt_for_stateful_react_agent(mock_spec, mock_operati
     with (
         patch("simulation_harness.agent.deep_agent.ChatOpenAI") as mock_chat_openai,
         patch("simulation_harness.agent.deep_agent.StoreRegistry"),
-        patch("simulation_harness.agent.deep_agent.create_state_tools", return_value=[]),
-        patch("simulation_harness.agent.deep_agent.create_react_agent", return_value=mock_react_agent) as mock_create_react_agent,
+        patch(
+            "simulation_harness.agent.deep_agent.create_state_tools", return_value=[]
+        ),
+        patch(
+            "simulation_harness.agent.deep_agent.create_react_agent",
+            return_value=mock_react_agent,
+        ) as mock_create_react_agent,
     ):
         mock_llm = Mock()
         mock_llm.bind_tools.return_value = mock_llm

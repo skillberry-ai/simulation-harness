@@ -85,7 +85,9 @@ def full_openapi_spec() -> dict[str, Any]:
                     "requestBody": {
                         "required": True,
                         "content": {
-                            "application/json": {"schema": {"$ref": "#/components/schemas/User"}}
+                            "application/json": {
+                                "schema": {"$ref": "#/components/schemas/User"}
+                            }
                         },
                     },
                     "responses": {
@@ -106,7 +108,12 @@ def full_openapi_spec() -> dict[str, Any]:
                     "summary": "Get a user",
                     "tags": ["users"],
                     "parameters": [
-                        {"name": "id", "in": "path", "required": True, "schema": {"type": "string"}}
+                        {
+                            "name": "id",
+                            "in": "path",
+                            "required": True,
+                            "schema": {"type": "string"},
+                        }
                     ],
                     "responses": {
                         "200": {
@@ -137,7 +144,9 @@ def full_openapi_spec() -> dict[str, Any]:
     }
 
 
-def test_load_minimal_openapi_30_spec(temp_dir: Path, minimal_openapi_30_spec: dict[str, Any]):
+def test_load_minimal_openapi_30_spec(
+    temp_dir: Path, minimal_openapi_30_spec: dict[str, Any]
+):
     """Test loading minimal OpenAPI 3.0 specification."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -151,7 +160,9 @@ def test_load_minimal_openapi_30_spec(temp_dir: Path, minimal_openapi_30_spec: d
     assert len(spec.operations) == 0
 
 
-def test_load_minimal_openapi_31_spec(temp_dir: Path, minimal_openapi_31_spec: dict[str, Any]):
+def test_load_minimal_openapi_31_spec(
+    temp_dir: Path, minimal_openapi_31_spec: dict[str, Any]
+):
     """Test loading minimal OpenAPI 3.1 specification."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -360,11 +371,17 @@ def test_skip_validation(temp_dir: Path):
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
         json.dump(
-            {"openapi": "3.0.0", "info": {"title": "Test", "version": "1.0.0"}, "paths": {}}, f
+            {
+                "openapi": "3.0.0",
+                "info": {"title": "Test", "version": "1.0.0"},
+                "paths": {},
+            },
+            f,
         )
 
     # Should not raise even if spec is incomplete
     spec = load_openapi_spec(spec_file, validate_spec=False)
     assert spec.title == "Test"
+
 
 # Made with Bob

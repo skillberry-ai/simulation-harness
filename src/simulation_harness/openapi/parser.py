@@ -264,16 +264,16 @@ class OpenAPISpec:
 
 def validate_openapi_dict(spec_dict: dict[str, Any]) -> None:
     """Validate an OpenAPI specification dictionary.
-    
+
     Args:
         spec_dict: OpenAPI specification as a dictionary
-        
+
     Raises:
         OpenAPIValidationError: If validation fails
     """
     if not isinstance(spec_dict, dict):
         raise OpenAPIValidationError("OpenAPI specification must be a dictionary")
-    
+
     try:
         validate(spec_dict)
     except (JSONSchemaValidationError, ValidatorDetectError) as e:
@@ -317,13 +317,19 @@ def load_openapi_spec(spec_path: Path, validate_spec: bool = True) -> OpenAPISpe
         return OpenAPISpec(spec_dict)
 
     except FileNotFoundError as e:
-        raise OpenAPIValidationError(f"OpenAPI specification file not found: {spec_path}") from e
+        raise OpenAPIValidationError(
+            f"OpenAPI specification file not found: {spec_path}"
+        ) from e
     except json.JSONDecodeError as e:
-        raise OpenAPIValidationError(f"Invalid JSON in OpenAPI specification: {e}") from e
+        raise OpenAPIValidationError(
+            f"Invalid JSON in OpenAPI specification: {e}"
+        ) from e
     except OpenAPIValidationError:
         raise
     except Exception as e:
-        raise OpenAPIValidationError(f"Failed to load OpenAPI specification: {e}") from e
+        raise OpenAPIValidationError(
+            f"Failed to load OpenAPI specification: {e}"
+        ) from e
 
 
 def validate_openapi_spec(spec_path: Path) -> bool:
@@ -343,5 +349,6 @@ def validate_openapi_spec(spec_path: Path) -> bool:
         return True
     except OpenAPIValidationError:
         raise
+
 
 # Made with Bob

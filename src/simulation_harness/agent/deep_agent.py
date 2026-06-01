@@ -115,7 +115,7 @@ class DeepAgent:
 
     def start_session_cleanup(self) -> None:
         """Start the session cleanup background task.
-        
+
         This should be called after the agent is initialized and
         an event loop is running.
         """
@@ -131,7 +131,7 @@ class DeepAgent:
         if self.store_registry:
             tools = create_state_tools()
             model_with_tools = self.llm.bind_tools(tools)
-            
+
             # Create ReAct agent with tools
             agent = create_react_agent(
                 model=model_with_tools,
@@ -139,22 +139,22 @@ class DeepAgent:
                 checkpointer=self.checkpointer,
                 prompt=SystemMessage(content=self.system_prompt),
             )
-            
+
             logger.info(f"Created ReAct agent with {len(tools)} state tools")
             return agent
-        
+
         # Otherwise, use simple stateless agent (legacy mode)
         def agent_node(state: MessagesState) -> MessagesState:
             """Process messages and generate response."""
             messages = state["messages"]
-            
+
             # Add system message if not present
             if not messages or not isinstance(messages[0], SystemMessage):
                 messages = [SystemMessage(content=self.system_prompt)] + list(messages)
-            
+
             # Invoke LLM
             response = self.llm.invoke(messages)
-            
+
             return {"messages": messages + [response]}
 
         # Build graph
@@ -217,7 +217,7 @@ class DeepAgent:
                 "configurable": {"thread_id": effective_thread_id},
                 "recursion_limit": self.agent_recursion_limit,
             }
-            
+
             # Add store_registry to config if available
             if self.store_registry:
                 config["configurable"]["store_registry"] = self.store_registry
@@ -235,7 +235,9 @@ class DeepAgent:
 
             last_message = messages[-1]
             response_text = (
-                last_message.content if hasattr(last_message, "content") else str(last_message)
+                last_message.content
+                if hasattr(last_message, "content")
+                else str(last_message)
             )
 
             logger.debug(
@@ -333,7 +335,7 @@ class DeepAgent:
                 logger.info(f"Reset agent session: thread_id={thread_id}")
             else:
                 logger.warning(f"Session not found: thread_id={thread_id}")
-            
+
             # Reset store for this thread if registry exists
             if self.store_registry:
                 self.store_registry.reset(thread_id)
@@ -341,7 +343,7 @@ class DeepAgent:
             # Reset all sessions
             count = self.session_manager.clear_all_sessions()
             logger.info(f"Reset all agent sessions: count={count}")
-            
+
             # Drop all stores if registry exists
             if self.store_registry:
                 self.store_registry.drop_all()
@@ -350,11 +352,12 @@ class DeepAgent:
         """Shutdown the agent and cleanup resources."""
         # Stop session cleanup task
         await self.session_manager.stop()
-        
+
         # Drop all stores if registry exists
         if self.store_registry:
             self.store_registry.drop_all()
-        
+
         logger.info("Agent shutdown complete")
+
 
 # Made with Bob

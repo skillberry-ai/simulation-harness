@@ -19,7 +19,7 @@ _skill_registry: SkillRegistry | None = None
 
 def get_simulation_host() -> SimulationHost:
     """Get or create the global SimulationHost instance.
-    
+
     Returns:
         SimulationHost instance
     """
@@ -31,14 +31,14 @@ def get_simulation_host() -> SimulationHost:
 
 def get_skill_registry() -> SkillRegistry:
     """Get or create the global SkillRegistry instance.
-    
+
     Uses configuration from the loaded config file. If config is not loaded,
     falls back to environment variables for backward compatibility:
     - SKILLS_FOLDER
     - OPENAI_API_KEY
     - SKILL_GENERATOR_MODEL
     - OPENAI_API_BASE
-    
+
     Returns:
         SkillRegistry instance
     """
@@ -57,7 +57,7 @@ def get_skill_registry() -> SkillRegistry:
             api_key = os.getenv("OPENAI_API_KEY", "dummy-key")
             model = os.getenv("SKILL_GENERATOR_MODEL", "gpt-4")
             base_url = os.getenv("OPENAI_API_BASE")
-        
+
         generator = SkillGenerator(
             api_key=api_key,
             model=model,

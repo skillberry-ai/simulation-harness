@@ -19,9 +19,12 @@ class TestSimulationSpec:
         """Test creating SimulationSpec with minimal required fields."""
         spec = SimulationSpec(
             name="test-simulation",
-            openapi_spec={"openapi": "3.0.0", "info": {"title": "Test", "version": "1.0.0"}},
+            openapi_spec={
+                "openapi": "3.0.0",
+                "info": {"title": "Test", "version": "1.0.0"},
+            },
         )
-        
+
         assert spec.name == "test-simulation"
         assert spec.openapi_spec["openapi"] == "3.0.0"
         assert spec.regenerate_skill is False  # default value
@@ -30,10 +33,13 @@ class TestSimulationSpec:
         """Test creating SimulationSpec with regenerate_skill flag."""
         spec = SimulationSpec(
             name="test-simulation",
-            openapi_spec={"openapi": "3.0.0", "info": {"title": "Test", "version": "1.0.0"}},
+            openapi_spec={
+                "openapi": "3.0.0",
+                "info": {"title": "Test", "version": "1.0.0"},
+            },
             regenerate_skill=True,
         )
-        
+
         assert spec.regenerate_skill is True
 
     def test_openapi_spec_must_be_dict(self):
@@ -43,16 +49,19 @@ class TestSimulationSpec:
                 name="test-simulation",
                 openapi_spec="not a dict",
             )
-        
+
         assert "openapi_spec" in str(exc_info.value)
 
     def test_name_required(self):
         """Test that name is required."""
         with pytest.raises(ValidationError) as exc_info:
             SimulationSpec(
-                openapi_spec={"openapi": "3.0.0", "info": {"title": "Test", "version": "1.0.0"}},
+                openapi_spec={
+                    "openapi": "3.0.0",
+                    "info": {"title": "Test", "version": "1.0.0"},
+                },
             )
-        
+
         assert "name" in str(exc_info.value)
 
 
@@ -70,7 +79,7 @@ class TestSessionState:
             queue_depth=2,
             max_queue_depth=10,
         )
-        
+
         assert state.tool_call_count == 5
         assert state.max_messages == 100
         assert state.idle_timeout_seconds == 300
@@ -88,7 +97,7 @@ class TestSessionState:
             queue_depth=0,
             max_queue_depth=10,
         )
-        
+
         assert state.tool_call_count == 0
         assert state.queue_depth == 0
 
@@ -96,7 +105,7 @@ class TestSessionState:
         """Test that all fields are required."""
         with pytest.raises(ValidationError) as exc_info:
             SessionState()
-        
+
         error_str = str(exc_info.value)
         assert "tool_call_count" in error_str
         assert "max_messages" in error_str
@@ -108,7 +117,7 @@ class TestSessionState:
     def test_negative_counts_invalid(self):
         """Test that negative counts are invalid."""
         now = datetime.now(timezone.utc)
-        
+
         with pytest.raises(ValidationError):
             SessionState(
                 tool_call_count=-1,
@@ -122,9 +131,9 @@ class TestSessionState:
     def test_session_state_seconds_since_last_call(self):
         """Test that SessionState includes seconds_since_last_call."""
         from datetime import timedelta
-        
+
         last_activity = datetime.now(timezone.utc) - timedelta(seconds=45)
-        
+
         state = SessionState(
             tool_call_count=5,
             max_messages=100,
@@ -133,7 +142,7 @@ class TestSessionState:
             queue_depth=2,
             max_queue_depth=8,
         )
-        
+
         # Should compute seconds since last call
         assert hasattr(state, "seconds_since_last_call")
         assert 44 <= state.seconds_since_last_call <= 46  # Allow 1s tolerance
@@ -148,7 +157,7 @@ class TestSessionState:
             queue_depth=0,
             max_queue_depth=8,
         )
-        
+
         assert state.seconds_since_last_call is None
 
 
@@ -161,7 +170,7 @@ class TestToolCallResult:
             success=True,
             content="Operation completed successfully",
         )
-        
+
         assert result.success is True
         assert result.content == "Operation completed successfully"
         assert result.error is None
@@ -173,7 +182,7 @@ class TestToolCallResult:
             content="",
             error="Something went wrong",
         )
-        
+
         assert result.success is False
         assert result.content == ""
         assert result.error == "Something went wrong"
@@ -182,14 +191,14 @@ class TestToolCallResult:
         """Test that success field is required."""
         with pytest.raises(ValidationError) as exc_info:
             ToolCallResult(content="test")
-        
+
         assert "success" in str(exc_info.value)
 
     def test_content_required(self):
         """Test that content field is required."""
         with pytest.raises(ValidationError) as exc_info:
             ToolCallResult(success=True)
-        
+
         assert "content" in str(exc_info.value)
 
     def test_error_optional(self):
@@ -198,7 +207,8 @@ class TestToolCallResult:
             success=True,
             content="test",
         )
-        
+
         assert result.error is None
+
 
 # Made with Bob

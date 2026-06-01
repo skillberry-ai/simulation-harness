@@ -12,7 +12,7 @@ def main() -> None:
     config_path = os.getenv("HARNESS_CONFIG_PATH", "config/harness.yaml")
     load_config(config_path)
     config = get_config()
-    
+
     uvicorn.run(
         "simulation_harness.main:app",
         host=config.server.host,

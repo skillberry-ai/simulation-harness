@@ -1,7 +1,5 @@
 """Tests for skill generator."""
 
-import shutil
-import uuid
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -40,8 +38,7 @@ class TestSkillGeneratorInitialization:
         """Test that generator uses default values when not provided."""
         api_key = "test-api-key"
 
-        generator = SkillGenerator(api_key=api_key)
-
+        SkillGenerator(api_key=api_key)
 
     def test_llm_initialization_with_all_parameters(self) -> None:
         """Test that LLM is initialized with correct parameters."""
@@ -134,7 +131,7 @@ class TestSkillGeneration:
     ) -> None:
         """Test that generate_skill creates SKILL.md, schema.json, db.json, and api.json."""
         generator = SkillGenerator(api_key="test-key")
-        
+
         # Mock the LLM response with 3-file JSON structure
         mock_response = MagicMock()
         mock_response.content = """{
@@ -168,18 +165,18 @@ class TestSkillGeneration:
     ]
   }
 }"""
-        
+
         with patch("simulation_harness.skills.generator.ChatOpenAI") as mock_llm_class:
             mock_llm = AsyncMock()
             mock_llm.ainvoke = AsyncMock(return_value=mock_response)
             mock_llm_class.return_value = mock_llm
-            
+
             result_path = await generator.generate_skill(
                 openapi_spec=sample_openapi_spec,
                 simulation_name="test-simulation",
                 skills_folder=temp_skills_dir,
             )
-        
+
         # Verify all four files were created
         skill_dir = temp_skills_dir / "test-simulation"
         assert result_path.exists()
@@ -187,24 +184,27 @@ class TestSkillGeneration:
         assert (skill_dir / "schema.json").exists()
         assert (skill_dir / "db.json").exists()
         assert (skill_dir / "api.json").exists()
-        
+
         # Verify SKILL.md content
         skill_content = result_path.read_text()
         assert "name: test-simulation" in skill_content
         assert "Test Simulation" in skill_content
-        
+
         # Verify schema.json content
         import json
+
         schema_content = json.loads((skill_dir / "schema.json").read_text())
-        assert schema_content["$schema"] == "https://json-schema.org/draft/2020-12/schema"
+        assert (
+            schema_content["$schema"] == "https://json-schema.org/draft/2020-12/schema"
+        )
         assert "items" in schema_content["properties"]
-        
+
         # Verify db.json content
         db_content = json.loads((skill_dir / "db.json").read_text())
         assert "items" in db_content
         assert len(db_content["items"]) == 1
         assert db_content["items"][0]["id"] == "item_001"
-        
+
         # Verify api.json content
         api_content = json.loads((skill_dir / "api.json").read_text())
         assert api_content == sample_openapi_spec
@@ -217,21 +217,21 @@ class TestSkillGeneration:
     ) -> None:
         """Test that atomic write leaves no temp directories on success."""
         generator = SkillGenerator(api_key="test-key")
-        
+
         mock_response = MagicMock()
         mock_response.content = '{"skill_md": "---\\nname: test\\n---\\n# Test", "schema_json": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "properties": {"items": {"type": "array", "items": {"type": "object"}}}}, "db_json": {"items": []}}'
-        
+
         with patch("simulation_harness.skills.generator.ChatOpenAI") as mock_llm_class:
             mock_llm = AsyncMock()
             mock_llm.ainvoke = AsyncMock(return_value=mock_response)
             mock_llm_class.return_value = mock_llm
-            
+
             await generator.generate_skill(
                 openapi_spec=sample_openapi_spec,
                 simulation_name="test-simulation",
                 skills_folder=temp_skills_dir,
             )
-        
+
         # Check for temp directories (should be none)
         temp_dirs = [d for d in temp_skills_dir.iterdir() if d.name.startswith(".")]
         assert len(temp_dirs) == 0, f"Found temp directories: {temp_dirs}"
@@ -244,19 +244,21 @@ class TestSkillGeneration:
     ) -> None:
         """Test that atomic write cleans up temp directories on failure."""
         generator = SkillGenerator(api_key="test-key")
-        
+
         with patch("simulation_harness.skills.generator.ChatOpenAI") as mock_llm_class:
             mock_llm = AsyncMock()
             mock_llm.ainvoke = AsyncMock(side_effect=Exception("LLM error"))
             mock_llm_class.return_value = mock_llm
-            
-            with pytest.raises(RuntimeError, match="Skill generation failed for 'test-simulation'"):
+
+            with pytest.raises(
+                RuntimeError, match="Skill generation failed for 'test-simulation'"
+            ):
                 await generator.generate_skill(
                     openapi_spec=sample_openapi_spec,
                     simulation_name="test-simulation",
                     skills_folder=temp_skills_dir,
                 )
-        
+
         # Check that temp directories were cleaned up
         temp_dirs = [d for d in temp_skills_dir.iterdir() if d.name.startswith(".")]
         assert len(temp_dirs) == 0, f"Temp directories not cleaned up: {temp_dirs}"
@@ -269,19 +271,20 @@ class TestSkillGeneration:
     ) -> None:
         """Test that no partial SKILL.md files are left on failure."""
         generator = SkillGenerator(api_key="test-key")
-        
+
         with patch("simulation_harness.skills.generator.ChatOpenAI") as mock_llm_class:
             mock_llm = AsyncMock()
             # Simulate failure during LLM call
             mock_llm.ainvoke = AsyncMock(side_effect=Exception("Write error"))
             mock_llm_class.return_value = mock_llm
-            
+
             with pytest.raises(RuntimeError):
                 await generator.generate_skill(
                     openapi_spec=sample_openapi_spec,
                     simulation_name="test-simulation",
                     skills_folder=temp_skills_dir,
                 )
+
 
 class TestThreeFileGeneration:
     """Test 3-file generation (SKILL.md, schema.json, db.json)."""
@@ -317,25 +320,27 @@ class TestThreeFileGeneration:
     ) -> None:
         """Test that LLM is configured to return JSON."""
         generator = SkillGenerator(api_key="test-key")
-        
+
         mock_response = MagicMock()
         mock_response.content = '{"skill_md": "---\\nname: test\\n---\\n# Test", "schema_json": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "properties": {"items": {"type": "array", "items": {"type": "object"}}}}, "db_json": {"items": []}}'
-        
+
         with patch("simulation_harness.skills.generator.ChatOpenAI") as mock_llm_class:
             mock_llm = AsyncMock()
             mock_llm.ainvoke = AsyncMock(return_value=mock_response)
             mock_llm_class.return_value = mock_llm
-            
+
             await generator.generate_skill(
                 openapi_spec=sample_openapi_spec,
                 simulation_name="test-simulation",
                 skills_folder=temp_skills_dir,
             )
-            
+
             # Verify LLM was initialized with JSON response format
             call_kwargs = mock_llm_class.call_args[1]
             assert "model_kwargs" in call_kwargs
-            assert call_kwargs["model_kwargs"]["response_format"]["type"] == "json_object"
+            assert (
+                call_kwargs["model_kwargs"]["response_format"]["type"] == "json_object"
+            )
 
     @pytest.mark.asyncio
     async def test_invalid_json_response_raises_error(
@@ -345,15 +350,15 @@ class TestThreeFileGeneration:
     ) -> None:
         """Test that invalid JSON response raises RuntimeError."""
         generator = SkillGenerator(api_key="test-key")
-        
+
         mock_response = MagicMock()
         mock_response.content = "This is not valid JSON"
-        
+
         with patch("simulation_harness.skills.generator.ChatOpenAI") as mock_llm_class:
             mock_llm = AsyncMock()
             mock_llm.ainvoke = AsyncMock(return_value=mock_response)
             mock_llm_class.return_value = mock_llm
-            
+
             with pytest.raises(RuntimeError, match="Skill generation failed"):
                 await generator.generate_skill(
                     openapi_spec=sample_openapi_spec,
@@ -369,16 +374,16 @@ class TestThreeFileGeneration:
     ) -> None:
         """Test that missing required fields raises RuntimeError."""
         generator = SkillGenerator(api_key="test-key")
-        
+
         # Missing db_json field
         mock_response = MagicMock()
         mock_response.content = '{"skill_md": "test", "schema_json": {}}'
-        
+
         with patch("simulation_harness.skills.generator.ChatOpenAI") as mock_llm_class:
             mock_llm = AsyncMock()
             mock_llm.ainvoke = AsyncMock(return_value=mock_response)
             mock_llm_class.return_value = mock_llm
-            
+
             with pytest.raises(RuntimeError, match="Skill generation failed"):
                 await generator.generate_skill(
                     openapi_spec=sample_openapi_spec,
@@ -394,16 +399,16 @@ class TestThreeFileGeneration:
     ) -> None:
         """Test that wrong field types raise RuntimeError."""
         generator = SkillGenerator(api_key="test-key")
-        
+
         # skill_md should be string, not object
         mock_response = MagicMock()
         mock_response.content = '{"skill_md": {}, "schema_json": {}, "db_json": {}}'
-        
+
         with patch("simulation_harness.skills.generator.ChatOpenAI") as mock_llm_class:
             mock_llm = AsyncMock()
             mock_llm.ainvoke = AsyncMock(return_value=mock_response)
             mock_llm_class.return_value = mock_llm
-            
+
             with pytest.raises(RuntimeError, match="Skill generation failed"):
                 await generator.generate_skill(
                     openapi_spec=sample_openapi_spec,
@@ -439,7 +444,7 @@ class TestSchemaValidation:
     ) -> None:
         """Test that db.json is validated against schema.json."""
         generator = SkillGenerator(api_key="test-key")
-        
+
         # Valid schema and db
         mock_response = MagicMock()
         mock_response.content = """{
@@ -474,19 +479,19 @@ class TestSchemaValidation:
     ]
   }
 }"""
-        
+
         with patch("simulation_harness.skills.generator.ChatOpenAI") as mock_llm_class:
             mock_llm = AsyncMock()
             mock_llm.ainvoke = AsyncMock(return_value=mock_response)
             mock_llm_class.return_value = mock_llm
-            
+
             # Should succeed - db validates against schema
             result_path = await generator.generate_skill(
                 openapi_spec=sample_openapi_spec,
                 simulation_name="test-simulation",
                 skills_folder=temp_skills_dir,
             )
-            
+
             assert result_path.exists()
 
     @pytest.mark.asyncio
@@ -497,7 +502,7 @@ class TestSchemaValidation:
     ) -> None:
         """Test that invalid db.json raises RuntimeError."""
         generator = SkillGenerator(api_key="test-key")
-        
+
         # db.json missing required field "name"
         mock_response = MagicMock()
         mock_response.content = """{
@@ -532,12 +537,12 @@ class TestSchemaValidation:
     ]
   }
 }"""
-        
+
         with patch("simulation_harness.skills.generator.ChatOpenAI") as mock_llm_class:
             mock_llm = AsyncMock()
             mock_llm.ainvoke = AsyncMock(return_value=mock_response)
             mock_llm_class.return_value = mock_llm
-            
+
             with pytest.raises(RuntimeError, match="Skill generation failed"):
                 await generator.generate_skill(
                     openapi_spec=sample_openapi_spec,
@@ -553,7 +558,7 @@ class TestSchemaValidation:
     ) -> None:
         """Test that invalid schema.json raises RuntimeError."""
         generator = SkillGenerator(api_key="test-key")
-        
+
         # Invalid schema (type should be string, not array)
         mock_response = MagicMock()
         mock_response.content = """{
@@ -564,12 +569,12 @@ class TestSchemaValidation:
   },
   "db_json": {}
 }"""
-        
+
         with patch("simulation_harness.skills.generator.ChatOpenAI") as mock_llm_class:
             mock_llm = AsyncMock()
             mock_llm.ainvoke = AsyncMock(return_value=mock_response)
             mock_llm_class.return_value = mock_llm
-            
+
             # Note: This schema is actually valid (type can be an array in JSON Schema)
             # So this test should succeed, not raise an error
             result = await generator.generate_skill(
@@ -587,7 +592,7 @@ class TestSchemaValidation:
     ) -> None:
         """Test that temp dir is cleaned up on validation failure."""
         generator = SkillGenerator(api_key="test-key")
-        
+
         # Invalid db.json
         mock_response = MagicMock()
         mock_response.content = """{
@@ -604,27 +609,27 @@ class TestSchemaValidation:
     "items": [123]
   }
 }"""
-        
+
         with patch("simulation_harness.skills.generator.ChatOpenAI") as mock_llm_class:
             mock_llm = AsyncMock()
             mock_llm.ainvoke = AsyncMock(return_value=mock_response)
             mock_llm_class.return_value = mock_llm
-            
+
             with pytest.raises(RuntimeError):
                 await generator.generate_skill(
                     openapi_spec=sample_openapi_spec,
                     simulation_name="test-simulation",
                     skills_folder=temp_skills_dir,
                 )
-        
+
         # Verify temp dirs were cleaned up
         temp_dirs = list(temp_skills_dir.glob(".test-simulation.tmp-*"))
         assert len(temp_dirs) == 0, f"Temp directories not cleaned up: {temp_dirs}"
-        
+
         # No SKILL.md should exist in target directory
         skill_file = temp_skills_dir / "test-simulation" / "SKILL.md"
         assert not skill_file.exists(), "Partial SKILL.md file was left behind"
-        
+
         # Target directory should not exist at all
         target_dir = temp_skills_dir / "test-simulation"
         assert not target_dir.exists(), "Target directory was created despite failure"
@@ -637,15 +642,15 @@ class TestSchemaValidation:
     ) -> None:
         """Test that temp dir is cleaned up even if write fails after LLM call."""
         generator = SkillGenerator(api_key="test-key")
-        
+
         mock_response = MagicMock()
         mock_response.content = "---\nname: test\n---\n# Test"
-        
+
         with patch("simulation_harness.skills.generator.ChatOpenAI") as mock_llm_class:
             mock_llm = AsyncMock()
             mock_llm.ainvoke = AsyncMock(return_value=mock_response)
             mock_llm_class.return_value = mock_llm
-            
+
             # Mock Path.write_text to fail
             with patch("pathlib.Path.write_text", side_effect=OSError("Disk full")):
                 with pytest.raises(RuntimeError):
@@ -654,10 +659,12 @@ class TestSchemaValidation:
                         simulation_name="test-simulation",
                         skills_folder=temp_skills_dir,
                     )
-        
+
         # Temp dirs should be cleaned up (no .test-simulation.tmp-* directories)
         temp_dirs = list(temp_skills_dir.glob(".test-simulation.tmp-*"))
-        assert len(temp_dirs) == 0, f"Found temp dirs that weren't cleaned up: {temp_dirs}"
+        assert len(temp_dirs) == 0, (
+            f"Found temp dirs that weren't cleaned up: {temp_dirs}"
+        )
 
 
 class TestAssetLoading:
@@ -665,13 +672,16 @@ class TestAssetLoading:
 
     def test_assets_load_from_package(self) -> None:
         """Test that assets can be loaded from the package."""
-        from simulation_harness.skills.generator import _load_generation_guide, _load_system_prompt
-        
+        from simulation_harness.skills.generator import (
+            _load_generation_guide,
+            _load_system_prompt,
+        )
+
         # These should not raise exceptions
         guide = _load_generation_guide()
         assert len(guide) > 0
         assert "Guide: Generating" in guide or "guide" in guide.lower()
-        
+
         prompt = _load_system_prompt()
         assert len(prompt) > 0
         assert "simulation" in prompt.lower() or "skill" in prompt.lower()
@@ -682,15 +692,22 @@ class TestBaseURLWiring:
 
     def test_skill_generator_receives_base_url_from_config(self) -> None:
         """Test that SkillGenerator is initialized with base_url from config.
-        
+
         This test verifies the fix for the bug where get_skill_registry() was
         reading from environment variables instead of using the loaded config,
         and not passing base_url to SkillGenerator at all.
         """
         from unittest.mock import patch
         import simulation_harness.api.dependencies as deps
-        from simulation_harness.config.models import HarnessConfig, LLMConfig, SkillsConfig, SessionsConfig, MCPConfig, TransportType
-        
+        from simulation_harness.config.models import (
+            HarnessConfig,
+            LLMConfig,
+            SkillsConfig,
+            SessionsConfig,
+            MCPConfig,
+            TransportType,
+        )
+
         # Create a real config with api_base set
         config = HarnessConfig(
             llm=LLMConfig(
@@ -708,15 +725,17 @@ class TestBaseURLWiring:
             ),
             mcp=MCPConfig(transport=TransportType.SSE),
         )
-        
+
         # Patch get_config where it's imported in dependencies module
-        with patch("simulation_harness.api.dependencies.get_config", return_value=config):
+        with patch(
+            "simulation_harness.api.dependencies.get_config", return_value=config
+        ):
             # Reset the global registry to force recreation
             deps._skill_registry = None
-            
+
             # Get the registry (which should create SkillGenerator with base_url)
             registry = deps.get_skill_registry()
-            
+
             # Verify the generator was created with the correct base_url
             assert registry.generator.base_url == "https://custom.api.com/v1"
             assert registry.generator.api_key == "test-key"
@@ -726,8 +745,15 @@ class TestBaseURLWiring:
         """Test that SkillGenerator base_url is None when not configured."""
         from unittest.mock import patch
         import simulation_harness.api.dependencies as deps
-        from simulation_harness.config.models import HarnessConfig, LLMConfig, SkillsConfig, SessionsConfig, MCPConfig, TransportType
-        
+        from simulation_harness.config.models import (
+            HarnessConfig,
+            LLMConfig,
+            SkillsConfig,
+            SessionsConfig,
+            MCPConfig,
+            TransportType,
+        )
+
         # Create a real config without api_base
         config = HarnessConfig(
             llm=LLMConfig(
@@ -745,38 +771,48 @@ class TestBaseURLWiring:
             ),
             mcp=MCPConfig(transport=TransportType.SSE),
         )
-        
+
         # Patch get_config where it's imported in dependencies module
-        with patch("simulation_harness.api.dependencies.get_config", return_value=config):
+        with patch(
+            "simulation_harness.api.dependencies.get_config", return_value=config
+        ):
             # Reset the global registry
             deps._skill_registry = None
-            
+
             # Get the registry
             registry = deps.get_skill_registry()
-            
+
             # Verify base_url is None (will use OpenAI default)
             assert registry.generator.base_url is None
 
-    def test_skill_generator_falls_back_to_env_vars_when_config_not_loaded(self) -> None:
+    def test_skill_generator_falls_back_to_env_vars_when_config_not_loaded(
+        self,
+    ) -> None:
         """Test that SkillGenerator falls back to environment variables when config not loaded."""
         from unittest.mock import patch
         import simulation_harness.api.dependencies as deps
-        
+
         # Mock get_config to raise RuntimeError (config not loaded)
-        with patch("simulation_harness.api.dependencies.get_config", side_effect=RuntimeError("Configuration not loaded")):
+        with patch(
+            "simulation_harness.api.dependencies.get_config",
+            side_effect=RuntimeError("Configuration not loaded"),
+        ):
             # Mock environment variables
-            with patch.dict("os.environ", {
-                "SKILLS_FOLDER": "/tmp/test-skills",
-                "OPENAI_API_KEY": "env-api-key",
-                "SKILL_GENERATOR_MODEL": "gpt-3.5-turbo",
-                "OPENAI_API_BASE": "https://env.api.com/v1",
-            }):
+            with patch.dict(
+                "os.environ",
+                {
+                    "SKILLS_FOLDER": "/tmp/test-skills",
+                    "OPENAI_API_KEY": "env-api-key",
+                    "SKILL_GENERATOR_MODEL": "gpt-3.5-turbo",
+                    "OPENAI_API_BASE": "https://env.api.com/v1",
+                },
+            ):
                 # Reset the global registry
                 deps._skill_registry = None
-                
+
                 # Get the registry (should fall back to env vars)
                 registry = deps.get_skill_registry()
-                
+
                 # Verify the generator was created with env var values
                 assert registry.generator.base_url == "https://env.api.com/v1"
                 assert registry.generator.api_key == "env-api-key"

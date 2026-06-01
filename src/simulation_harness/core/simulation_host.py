@@ -43,7 +43,7 @@ class SimulationHost:
 
             # Get configuration
             config = get_config()
-            
+
             # Create instance with configuration parameters
             self._instance = SimulationInstance(
                 spec=spec,
@@ -55,7 +55,9 @@ class SimulationHost:
                 temperature=config.llm.temperature,
                 max_tokens=config.llm.max_tokens,
                 skill_dir=skill_dir,
-                agent_recursion_limit=getattr(config.sessions, "agent_recursion_limit", 10),
+                agent_recursion_limit=getattr(
+                    config.sessions, "agent_recursion_limit", 10
+                ),
             )
             return self._instance
 
@@ -77,5 +79,6 @@ class SimulationHost:
             if self._instance is not None:
                 await self._instance.shutdown()
                 self._instance = None
+
 
 # Made with Bob

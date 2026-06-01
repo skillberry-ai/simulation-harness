@@ -48,7 +48,9 @@ class TestConfigModels:
 
     def test_server_config_requires_api_key_or_env(self):
         """Test ServerConfig requires either api_key or api_key_env."""
-        with pytest.raises(ValueError, match="Either api_key or api_key_env must be provided"):
+        with pytest.raises(
+            ValueError, match="Either api_key or api_key_env must be provided"
+        ):
             ServerConfig(
                 command="npx",
                 args=["-y", "@modelcontextprotocol/server-everything"],
@@ -57,7 +59,9 @@ class TestConfigModels:
 
     def test_server_config_rejects_both_api_keys(self):
         """Test ServerConfig rejects both api_key and api_key_env."""
-        with pytest.raises(ValueError, match="Cannot provide both api_key and api_key_env"):
+        with pytest.raises(
+            ValueError, match="Cannot provide both api_key and api_key_env"
+        ):
             ServerConfig(
                 command="npx",
                 args=["-y", "@modelcontextprotocol/server-everything"],
@@ -79,7 +83,7 @@ class TestConfigModels:
     def test_server_settings_with_defaults(self):
         """Test ServerSettings with default host and port."""
         from simulation_harness.config.models import ServerSettings
-        
+
         config = ServerSettings()
         assert config.host == "localhost"
         assert config.port == 8000
@@ -87,7 +91,7 @@ class TestConfigModels:
     def test_server_settings_with_custom_values(self):
         """Test ServerSettings with custom host and port."""
         from simulation_harness.config.models import ServerSettings
-        
+
         config = ServerSettings(host="0.0.0.0", port=9000)
         assert config.host == "0.0.0.0"
         assert config.port == 9000
@@ -95,17 +99,17 @@ class TestConfigModels:
     def test_server_settings_validates_port_range(self):
         """Test ServerSettings validates port is in valid range."""
         from simulation_harness.config.models import ServerSettings
-        
+
         with pytest.raises(ValueError):
             ServerSettings(port=0)
-        
+
         with pytest.raises(ValueError):
             ServerSettings(port=65536)
-        
+
         # Valid ports should work
         config = ServerSettings(port=1)
         assert config.port == 1
-        
+
         config = ServerSettings(port=65535)
         assert config.port == 65535
 
@@ -161,6 +165,7 @@ class TestConfigModels:
         assert config.llm.skill_generation_model == "gpt-4"
         assert config.llm.simulation_model == "gpt-4"
         assert config.llm.temperature == 0
+
     def test_llm_config_requires_api_key_or_env(self):
         """Test LLMConfig requires either api_key or api_key_env."""
         config_data = {
@@ -177,7 +182,9 @@ class TestConfigModels:
             },
             "mcp": {"transport": "sse"},
         }
-        with pytest.raises(ValueError, match="Either api_key or api_key_env must be provided"):
+        with pytest.raises(
+            ValueError, match="Either api_key or api_key_env must be provided"
+        ):
             HarnessConfig(**config_data)
 
     def test_llm_config_with_api_key(self):
@@ -267,11 +274,10 @@ class TestConfigModels:
         assert config.llm.api_base is None
         assert config.llm.api_base_env == "OPENAI_API_BASE"
 
-
     def test_logging_config_with_defaults(self):
         """Test LoggingConfig with default values."""
         from simulation_harness.config.models import LoggingConfig
-        
+
         config = LoggingConfig()
         assert config.level == "INFO"
         assert config.destination_folder == "./logs"
@@ -279,7 +285,7 @@ class TestConfigModels:
     def test_logging_config_with_custom_values(self):
         """Test LoggingConfig with custom level and destination."""
         from simulation_harness.config.models import LoggingConfig
-        
+
         config = LoggingConfig(level="DEBUG", destination_folder="/var/log/harness")
         assert config.level == "DEBUG"
         assert config.destination_folder == "/var/log/harness"
@@ -287,16 +293,16 @@ class TestConfigModels:
     def test_logging_config_validates_level(self):
         """Test LoggingConfig validates log level is valid."""
         from simulation_harness.config.models import LoggingConfig
-        
+
         # Valid levels should work
         for level in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
             config = LoggingConfig(level=level)
             assert config.level == level
-        
+
         # Invalid level should raise ValueError
         with pytest.raises(ValueError, match="Invalid log level"):
             LoggingConfig(level="INVALID")
-        
+
         with pytest.raises(ValueError, match="Invalid log level"):
             LoggingConfig(level="debug")  # lowercase should fail
 
@@ -518,7 +524,9 @@ class TestConfigLoader:
         }
         config_file.write_text(yaml.dump(config_data))
 
-        with pytest.raises(ConfigValidationError, match="Configuration validation failed"):
+        with pytest.raises(
+            ConfigValidationError, match="Configuration validation failed"
+        ):
             load_config(str(config_file))
 
     def test_load_config_invalid_transport_value(self, tmp_path):
@@ -542,7 +550,9 @@ class TestConfigLoader:
         }
         config_file.write_text(yaml.dump(config_data))
 
-        with pytest.raises(ConfigValidationError, match="Configuration validation failed"):
+        with pytest.raises(
+            ConfigValidationError, match="Configuration validation failed"
+        ):
             load_config(str(config_file))
 
     def test_load_config_with_both_api_keys_provided(self, tmp_path):
@@ -589,7 +599,7 @@ sessions:
 mcp:
   transport: sse
 """)
-        
+
         os.environ["TEST_OPENAI_KEY"] = "sk-test-key-123"
         try:
             config = load_config(str(config_file))
@@ -616,8 +626,10 @@ sessions:
 mcp:
   transport: sse
 """)
-        
-        with pytest.raises(ConfigValidationError, match="api_key_env 'MISSING_KEY' is not set"):
+
+        with pytest.raises(
+            ConfigValidationError, match="api_key_env 'MISSING_KEY' is not set"
+        ):
             load_config(str(config_file))
 
     def test_api_base_resolution_from_env(self, tmp_path):
@@ -639,7 +651,7 @@ sessions:
 mcp:
   transport: sse
 """)
-        
+
         os.environ["TEST_API_BASE"] = "https://custom.api.com/v1"
         try:
             config = load_config(str(config_file))
@@ -647,5 +659,6 @@ mcp:
             assert config.llm.api_base_env == "TEST_API_BASE"
         finally:
             del os.environ["TEST_API_BASE"]
+
 
 # Made with Bob

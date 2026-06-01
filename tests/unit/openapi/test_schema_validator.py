@@ -57,7 +57,11 @@ def test_validate_against_schema_wrong_type():
 
 def test_validate_against_schema_strict_mode():
     """Test strict mode raises exception on validation errors."""
-    schema = {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}}
+    schema = {
+        "type": "object",
+        "required": ["name"],
+        "properties": {"name": {"type": "string"}},
+    }
 
     data = {}  # Missing required field
 
@@ -176,5 +180,6 @@ def test_get_array_item_schema_non_array():
     """Test getting array item schema from non-array schema."""
     schema = {"type": "object"}
     assert get_array_item_schema(schema) is None
+
 
 # Made with Bob

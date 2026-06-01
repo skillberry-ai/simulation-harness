@@ -2,9 +2,7 @@
 
 import logging
 from pathlib import Path
-from unittest.mock import Mock, patch, call, MagicMock
-
-import pytest
+from unittest.mock import Mock, patch, call
 
 
 class TestMainModule:
@@ -12,7 +10,9 @@ class TestMainModule:
 
     @patch("simulation_harness.__main__.uvicorn.run")
     @patch("simulation_harness.__main__.get_config")
-    def test_main_uses_configured_host_and_port(self, mock_get_config, mock_uvicorn_run):
+    def test_main_uses_configured_host_and_port(
+        self, mock_get_config, mock_uvicorn_run
+    ):
         """Test that main() uses host and port from configuration."""
         # Setup mock config
         mock_config = Mock()
@@ -22,6 +22,7 @@ class TestMainModule:
 
         # Import and run main
         from simulation_harness.__main__ import main
+
         main()
 
         # Verify uvicorn.run was called with correct parameters
@@ -42,6 +43,7 @@ class TestMainModule:
 
         # Import and run main
         from simulation_harness.__main__ import main
+
         main()
 
         # Verify uvicorn.run was called with default parameters
@@ -62,6 +64,7 @@ class TestMainModule:
 
         # Import and run main
         from simulation_harness.__main__ import main
+
         main()
 
         # Verify uvicorn.run was called with app string
@@ -101,9 +104,15 @@ class TestMainModule:
             ),
         ]
         actual_calls = [
-            call.load_config(*mock_load_config.call_args[0], **mock_load_config.call_args[1]),
-            call.get_config(*mock_get_config.call_args[0], **mock_get_config.call_args[1]),
-            call.uvicorn.run(*mock_uvicorn_run.call_args[0], **mock_uvicorn_run.call_args[1]),
+            call.load_config(
+                *mock_load_config.call_args[0], **mock_load_config.call_args[1]
+            ),
+            call.get_config(
+                *mock_get_config.call_args[0], **mock_get_config.call_args[1]
+            ),
+            call.uvicorn.run(
+                *mock_uvicorn_run.call_args[0], **mock_uvicorn_run.call_args[1]
+            ),
         ]
         assert actual_calls == ordered_calls
 
@@ -116,7 +125,7 @@ class TestLoggingConfiguration:
         # Create a temporary config file with custom log directory
         import yaml
         from simulation_harness.config.settings import load_config
-        
+
         log_dir = tmp_path / "custom_logs"
         config_file = tmp_path / "test_config.yaml"
         config_data = {
@@ -140,15 +149,14 @@ class TestLoggingConfiguration:
             },
         }
         config_file.write_text(yaml.dump(config_data))
-        
+
         # Load config and verify log directory is created
         config = load_config(str(config_file))
-        
+
         # Simulate what main.py does
-        from pathlib import Path
         log_path = Path(config.logging.destination_folder)
         log_path.mkdir(parents=True, exist_ok=True)
-        
+
         # Verify directory was created
         assert log_dir.exists()
         assert log_dir.is_dir()
@@ -156,9 +164,9 @@ class TestLoggingConfiguration:
     def test_logging_uses_configured_level(self):
         """Test that logging configuration respects the configured level."""
         from simulation_harness.config.settings import load_config
-        
+
         config = load_config("config/harness.yaml")
-        
+
         # Verify the level is accessible and valid
         assert config.logging.level in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
         assert hasattr(logging, config.logging.level)
@@ -166,11 +174,11 @@ class TestLoggingConfiguration:
     def test_logging_filename_format(self):
         """Test that log filename follows the required format."""
         from datetime import datetime
-        
+
         # Simulate filename generation
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         log_filename = f"{timestamp}_simulation-harness.log"
-        
+
         # Verify format: YYYY-MM-DD_HH-MM-SS_simulation-harness.log
         parts = log_filename.split("_")
         assert len(parts) == 3  # date, time, simulation-harness.log
@@ -181,9 +189,9 @@ class TestLoggingConfiguration:
     def test_logging_uses_configured_destination_folder(self):
         """Test that logging uses the destination folder from config."""
         from simulation_harness.config.settings import load_config
-        
+
         config = load_config("config/harness.yaml")
-        
+
         # Verify destination folder is configured
         assert config.logging.destination_folder == "./logs"
 
