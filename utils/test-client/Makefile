@@ -48,7 +48,7 @@ run:
 		exit 1; \
 	fi
 	@echo "Starting test client..."
-	@. .venv/bin/activate && streamlit run app.py
+	@.venv/bin/streamlit run app.py
 
 # Remove virtual environment
 clean:
