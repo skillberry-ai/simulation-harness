@@ -310,6 +310,7 @@ simulation-harness/
 │       ├── DESIGN.md       # Architecture details
 │       └── ALPHA_USE_CASE.md  # Skillberry integration
 ├── utils/                  # Development utilities
+│   ├── simulate.py         # CLI for creating simulations
 │   └── test-client/        # Interactive test client
 └── skills/                 # Generated skill definitions
 ```
@@ -347,6 +348,41 @@ kubectl get pods -l app=simulation-harness
 - Phase 1 is single-tenant per instance; deploy more instances for concurrent users
 
 See [`docs/design/DESIGN.md`](docs/design/DESIGN.md) for detailed deployment configurations.
+
+## Simulate CLI
+
+`utils/simulate.py` is a command-line utility for creating simulations directly from an OpenAPI JSON file:
+
+```bash
+python utils/simulate.py path/to/openapi.json
+```
+
+**Arguments:**
+
+| Argument | Description |
+|---|---|
+| `openapi_file` | Path to the OpenAPI JSON spec file (required) |
+| `--name NAME` | Override the simulation name (default: uses `info.title` from the spec) |
+| `--regenerate-skill` | Force skill regeneration even if one already exists |
+| `--config PATH` | Path to `harness.yaml` (default: `config/harness.yaml`) |
+
+**Examples:**
+
+```bash
+# Create a simulation from a spec
+python utils/simulate.py specs/my-api.json
+
+# Override the simulation name
+python utils/simulate.py specs/my-api.json --name staging-api
+
+# Force skill regeneration
+python utils/simulate.py specs/my-api.json --regenerate-skill
+
+# Use a custom config path
+python utils/simulate.py specs/my-api.json --config /path/to/harness.yaml
+```
+
+The utility reads the server host and port from `harness.yaml` and POSTs the spec to `POST /api/v1/simulation`. On success it prints the response JSON; on failure it exits with a non-zero status and writes the error to stderr.
 
 ## Test Client
 
