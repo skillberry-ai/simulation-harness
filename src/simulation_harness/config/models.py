@@ -3,7 +3,7 @@
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
 
 class TransportType(str, Enum):
@@ -16,11 +16,10 @@ class TransportType(str, Enum):
 class LLMConfig(BaseModel):
     """LLM provider configuration."""
 
+    model_config = ConfigDict(extra="forbid")
+
     provider: str = Field(..., description="LLM provider (e.g., 'openai')")
-    api_key: Optional[str] = Field(None, description="Literal API key")
-    api_key_env: Optional[str] = Field(
-        None, description="Environment variable name for API key"
-    )
+    api_key_env: str = Field(..., description="Environment variable name for API key")
     api_base: Optional[str] = Field(None, description="Optional API base URL override")
     api_base_env: Optional[str] = Field(
         None, description="Environment variable for API base URL"
@@ -32,16 +31,7 @@ class LLMConfig(BaseModel):
         None, gt=0, description="Maximum tokens per request"
     )
 
-    @model_validator(mode="after")
-    def validate_api_key_config(self) -> "LLMConfig":
-        """Validate that at least one of api_key or api_key_env is provided."""
-        has_api_key = self.api_key is not None
-        has_api_key_env = self.api_key_env is not None
-
-        if not has_api_key and not has_api_key_env:
-            raise ValueError("Either api_key or api_key_env must be provided")
-
-        return self
+    _resolved_api_key: str = PrivateAttr(default="")
 
 
 class SkillsConfig(BaseModel):

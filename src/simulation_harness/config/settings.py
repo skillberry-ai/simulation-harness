@@ -11,6 +11,7 @@ from .models import HarnessConfig
 
 # Global configuration instance
 _global_config: Optional[HarnessConfig] = None
+_dotenv_loaded: bool = False
 
 
 class ConfigValidationError(Exception):
@@ -48,7 +49,12 @@ def load_config(config_path: str) -> HarnessConfig:
         FileNotFoundError: If the config file doesn't exist
         ConfigValidationError: If the config is invalid or fails validation
     """
-    global _global_config
+    global _global_config, _dotenv_loaded
+
+    if not _dotenv_loaded:
+        from dotenv import load_dotenv
+        load_dotenv(override=False)
+        _dotenv_loaded = True
 
     path = Path(config_path)
 
@@ -78,25 +84,20 @@ def load_config(config_path: str) -> HarnessConfig:
 
 
 def _validate_resolved_llm_config(config: HarnessConfig) -> None:
-    """Validate and resolve environment-backed LLM settings at startup."""
-    # Resolve API key from environment if needed
-    if config.llm.api_key is None and config.llm.api_key_env is not None:
-        resolved_api_key = os.getenv(config.llm.api_key_env)
-        if not resolved_api_key:
-            raise ConfigValidationError(
-                f"Configuration validation failed: api_key_env '{config.llm.api_key_env}' is not set or empty"
-            )
-        # Actually set the resolved value
-        config.llm.api_key = resolved_api_key
+    """Resolve environment-backed LLM settings at startup."""
+    resolved_api_key = os.getenv(config.llm.api_key_env)
+    if not resolved_api_key:
+        raise ConfigValidationError(
+            f"Configuration validation failed: api_key_env '{config.llm.api_key_env}' is not set or empty"
+        )
+    config.llm._resolved_api_key = resolved_api_key
 
-    # Resolve API base from environment if needed
     if config.llm.api_base is None and config.llm.api_base_env is not None:
         resolved_api_base = os.getenv(config.llm.api_base_env)
         if not resolved_api_base:
             raise ConfigValidationError(
                 f"Configuration validation failed: api_base_env '{config.llm.api_base_env}' is not set or empty"
             )
-        # Actually set the resolved value
         config.llm.api_base = resolved_api_base
 
 

@@ -3,7 +3,7 @@
 
 llm:
   provider: openai
-  api_key_env: OPENAI_API_KEY  # or use api_key: "sk-..." for literal
+  api_key_env: OPENAI_API_KEY  # env var name containing the API key (see .env.example)
   api_base_env: OPENAI_API_BASE  # Optional env-backed custom endpoint
   skill_generation_model: azure/gpt-5.4
   simulation_model: azure/gpt-5.4

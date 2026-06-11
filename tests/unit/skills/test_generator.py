@@ -712,7 +712,7 @@ class TestBaseURLWiring:
         config = HarnessConfig(
             llm=LLMConfig(
                 provider="openai",
-                api_key="test-key",
+                api_key_env="TEST_API_KEY",
                 api_base="https://custom.api.com/v1",
                 skill_generation_model="gpt-4",
                 simulation_model="gpt-4",
@@ -725,6 +725,7 @@ class TestBaseURLWiring:
             ),
             mcp=MCPConfig(transport=TransportType.SSE),
         )
+        config.llm._resolved_api_key = "test-key"
 
         # Patch get_config where it's imported in dependencies module
         with patch(
@@ -758,7 +759,7 @@ class TestBaseURLWiring:
         config = HarnessConfig(
             llm=LLMConfig(
                 provider="openai",
-                api_key="test-key",
+                api_key_env="TEST_API_KEY",
                 api_base=None,
                 skill_generation_model="gpt-4",
                 simulation_model="gpt-4",
@@ -771,6 +772,7 @@ class TestBaseURLWiring:
             ),
             mcp=MCPConfig(transport=TransportType.SSE),
         )
+        config.llm._resolved_api_key = "test-key"
 
         # Patch get_config where it's imported in dependencies module
         with patch(
@@ -785,36 +787,3 @@ class TestBaseURLWiring:
             # Verify base_url is None (will use OpenAI default)
             assert registry.generator.base_url is None
 
-    def test_skill_generator_falls_back_to_env_vars_when_config_not_loaded(
-        self,
-    ) -> None:
-        """Test that SkillGenerator falls back to environment variables when config not loaded."""
-        from unittest.mock import patch
-        import simulation_harness.api.dependencies as deps
-
-        # Mock get_config to raise RuntimeError (config not loaded)
-        with patch(
-            "simulation_harness.api.dependencies.get_config",
-            side_effect=RuntimeError("Configuration not loaded"),
-        ):
-            # Mock environment variables
-            with patch.dict(
-                "os.environ",
-                {
-                    "SKILLS_FOLDER": "/tmp/test-skills",
-                    "OPENAI_API_KEY": "env-api-key",
-                    "SKILL_GENERATOR_MODEL": "gpt-3.5-turbo",
-                    "OPENAI_API_BASE": "https://env.api.com/v1",
-                },
-            ):
-                # Reset the global registry
-                deps._skill_registry = None
-
-                # Get the registry (should fall back to env vars)
-                registry = deps.get_skill_registry()
-
-                # Verify the generator was created with env var values
-                assert registry.generator.base_url == "https://env.api.com/v1"
-                assert registry.generator.api_key == "env-api-key"
-                assert registry.generator.model == "gpt-3.5-turbo"
-                assert str(registry.skills_folder) == "/tmp/test-skills"

@@ -1,6 +1,5 @@
 """FastAPI dependency injection for simulation management."""
 
-import os
 from pathlib import Path
 from typing import Annotated
 
@@ -32,39 +31,18 @@ def get_simulation_host() -> SimulationHost:
 def get_skill_registry() -> SkillRegistry:
     """Get or create the global SkillRegistry instance.
 
-    Uses configuration from the loaded config file. If config is not loaded,
-    falls back to environment variables for backward compatibility:
-    - SKILLS_FOLDER
-    - OPENAI_API_KEY
-    - SKILL_GENERATOR_MODEL
-    - OPENAI_API_BASE
-
-    Returns:
-        SkillRegistry instance
+    Requires configuration to be loaded via load_config() before first call.
     """
     global _skill_registry
     if _skill_registry is None:
-        # Try to get configuration from loaded config
-        try:
-            config = get_config()
-            skills_folder = Path(config.skills.folder)
-            api_key = config.llm.api_key or "dummy-key"
-            model = config.llm.skill_generation_model
-            base_url = config.llm.api_base
-        except RuntimeError:
-            # Fallback to environment variables if config not loaded
-            skills_folder = Path(os.getenv("SKILLS_FOLDER", "./skills"))
-            api_key = os.getenv("OPENAI_API_KEY", "dummy-key")
-            model = os.getenv("SKILL_GENERATOR_MODEL", "gpt-4")
-            base_url = os.getenv("OPENAI_API_BASE")
-
+        config = get_config()
         generator = SkillGenerator(
-            api_key=api_key,
-            model=model,
-            base_url=base_url,
+            api_key=config.llm._resolved_api_key,
+            model=config.llm.skill_generation_model,
+            base_url=config.llm.api_base,
         )
         _skill_registry = SkillRegistry(
-            skills_folder=skills_folder,
+            skills_folder=Path(config.skills.folder),
             generator=generator,
         )
     return _skill_registry

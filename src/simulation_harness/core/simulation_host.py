@@ -50,7 +50,7 @@ class SimulationHost:
                 max_messages=config.sessions.max_messages,
                 idle_timeout_seconds=config.sessions.idle_timeout_seconds,
                 max_queue_depth=config.sessions.max_concurrent_queue_depth,
-                api_key=config.llm.api_key,
+                api_key=config.llm._resolved_api_key,
                 model=config.llm.simulation_model,
                 temperature=config.llm.temperature,
                 max_tokens=config.llm.max_tokens,
