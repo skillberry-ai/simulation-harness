@@ -17,13 +17,13 @@ WORKDIR /build
 # Cache deps before copying the rest of the project.
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-dev --frozen --no-install-project
+    uv sync --no-dev --frozen --no-install-project --no-editable
 
 COPY src ./src
 COPY README.md ./
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-dev --frozen
+    uv sync --no-dev --frozen --no-editable
 
 # ---------- runtime ----------
 FROM python:3.12-slim-bookworm AS runtime
