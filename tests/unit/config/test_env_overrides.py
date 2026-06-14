@@ -83,5 +83,17 @@ class TestApplyEnvOverrides:
         with pytest.raises(ValueError):
             apply_env_overrides(_base())
 
+    def test_overrides_update_global_config_singleton(self, monkeypatch):
+        """get_config() must return the overridden config, not the pre-override one.
+
+        Otherwise the skill registry, dependency injection, and any other consumer
+        of get_config() will silently ignore HARNESS_* env vars.
+        """
+        from simulation_harness.config.settings import get_config
+
+        monkeypatch.setenv("HARNESS_SKILLS_FOLDER", "/data/skills-store-override")
+        apply_env_overrides(_base())
+        assert get_config().skills.folder == "/data/skills-store-override"
+
 
 # Made with Bob

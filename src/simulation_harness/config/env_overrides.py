@@ -69,7 +69,14 @@ def apply_env_overrides(config: HarnessConfig) -> HarnessConfig:
     if queue_depth is not None:
         data["sessions"]["max_concurrent_queue_depth"] = queue_depth
 
-    return HarnessConfig(**data)
+    overridden = HarnessConfig(**data)
+
+    # Replace the cached singleton so get_config() returns the overridden values
+    # everywhere (skill registry, dependency injection, etc.).
+    from . import settings as _settings
+    _settings._global_config = overridden
+
+    return overridden
 
 
 # Made with Bob
