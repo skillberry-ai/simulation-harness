@@ -47,4 +47,10 @@ class OpenAPIValidationError(Exception):
     pass
 
 
+class PortInUseError(Exception):
+    """Raised when the requested MCP port is already in use."""
+
+    pass
+
+
 # Made with Bob

@@ -5,6 +5,7 @@ import pytest
 from simulation_harness.utils.errors import (
     ConcurrentQueueFullError,
     OpenAPIValidationError,
+    PortInUseError,
     SessionExpiredError,
     SimulationAlreadyExistsError,
     SimulationNotFoundError,
@@ -190,6 +191,18 @@ class TestExceptionHierarchy:
 
         for exc_class in exceptions:
             assert issubclass(exc_class, Exception)
+
+
+class TestPortInUseError:
+    """Tests for PortInUseError."""
+
+    def test_port_in_use_error_is_exception(self):
+        err = PortInUseError("Port 9000 is already in use")
+        assert isinstance(err, Exception)
+
+    def test_port_in_use_error_message(self):
+        err = PortInUseError("Port 9000 is already in use")
+        assert "9000" in str(err)
 
 
 # Made with Bob
