@@ -278,4 +278,116 @@ async def get_simulation_state(
     return record.instance.get_state_snapshot(thread_id)
 
 
+@router.get(
+    "/simulation/database",
+    status_code=status.HTTP_200_OK,
+    summary="Get on-disk database (db.json) for the active skill",
+    description=(
+        "Return the contents of the active skill's `db.json` file from disk. "
+        "This is distinct from `/simulation/state`, which returns the in-memory "
+        "store snapshot for a thread. Use this to inspect the seed."
+    ),
+    responses={
+        404: {"description": "No simulation exists"},
+        500: {"description": "Skill bundle is incomplete (db.json missing)"},
+        503: {"description": "Simulation exists but is not ready yet"},
+    },
+)
+async def get_simulation_database(
+    simulation_host: SimulationHostDep,
+    skill_registry: SkillRegistryDep,
+) -> dict[str, Any]:
+    record = await simulation_host.get_record()
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No simulation found",
+        )
+    if record.status != SimulationStatus.READY or record.instance is None:
+        raise SimulationNotReadyError(name=record.name, status=record.status.value)
+    try:
+        return skill_registry.read_db(record.name)
+    except FileNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Skill bundle is incomplete: {e}",
+        )
+
+
+@router.get(
+    "/simulation/schema",
+    status_code=status.HTTP_200_OK,
+    summary="Get JSON Schema for the active skill's database",
+    description=(
+        "Return the contents of the active skill's `schema.json`. Read-only. "
+        "Clients producing payloads for `PUT /simulation/database` should fetch "
+        "this first to learn the expected shape."
+    ),
+    responses={
+        404: {"description": "No simulation exists"},
+        500: {"description": "Skill bundle is incomplete (schema.json missing)"},
+        503: {"description": "Simulation exists but is not ready yet"},
+    },
+)
+async def get_simulation_schema(
+    simulation_host: SimulationHostDep,
+    skill_registry: SkillRegistryDep,
+) -> dict[str, Any]:
+    record = await simulation_host.get_record()
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No simulation found",
+        )
+    if record.status != SimulationStatus.READY or record.instance is None:
+        raise SimulationNotReadyError(name=record.name, status=record.status.value)
+    try:
+        return skill_registry.read_schema(record.name)
+    except FileNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Skill bundle is incomplete: {e}",
+        )
+
+
+@router.put(
+    "/simulation/database",
+    status_code=status.HTTP_200_OK,
+    summary="Replace on-disk database (db.json) and reset the simulation",
+    description=(
+        "Atomically overwrite the active skill's `db.json` with the request body. "
+        "The body is validated against the skill's `schema.json` before the write; "
+        "validation failures return 422 and the file on disk is unchanged. "
+        "On success, the running simulation is reset (agent thread and in-memory "
+        "stores are cleared) so the next `tools/call` reloads from the new seed.\n\n"
+        "Refuses with 409 while tool calls are in flight."
+    ),
+    responses={
+        200: {"description": "Database replaced; simulation reset"},
+        404: {"description": "No simulation exists"},
+        409: {"description": "Tool calls are in flight; retry"},
+        422: {"description": "Body does not validate against schema.json"},
+        503: {"description": "Simulation exists but is not ready yet"},
+    },
+)
+async def put_simulation_database(
+    body: dict[str, Any],
+    simulation_host: SimulationHostDep,
+    skill_registry: SkillRegistryDep,
+) -> dict[str, str]:
+    record = await simulation_host.get_record()
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No simulation found",
+        )
+    if record.status != SimulationStatus.READY or record.instance is None:
+        raise SimulationNotReadyError(name=record.name, status=record.status.value)
+
+    await simulation_host.replace_database(
+        new_db=body, skill_registry=skill_registry
+    )
+    return {"message": "Database replaced; simulation reset"}
+
+
 # Made with Bob

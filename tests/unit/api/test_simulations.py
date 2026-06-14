@@ -97,7 +97,12 @@ def app(mock_simulation_host, mock_skill_registry):
     app.dependency_overrides[get_simulation_host] = lambda: mock_simulation_host
     app.dependency_overrides[get_skill_registry] = lambda: mock_skill_registry
 
-    # Add SimulationNotReadyError handler (mirrors main.py Task 8)
+    from simulation_harness.utils.errors import (
+        DatabaseValidationError,
+        SimulationBusyError,
+    )
+
+    # Add domain error handlers (mirrors main.py)
     @app.exception_handler(SimulationNotReadyError)
     async def not_ready_handler(request, exc: SimulationNotReadyError):
         return JSONResponse(
@@ -108,6 +113,20 @@ def app(mock_simulation_host, mock_skill_registry):
                 "status": exc.status,
             },
             headers={"Retry-After": str(exc.retry_after_seconds)},
+        )
+
+    @app.exception_handler(DatabaseValidationError)
+    async def db_validation_handler(request, exc: DatabaseValidationError):
+        return JSONResponse(
+            status_code=422,
+            content={"detail": str(exc), "json_path": exc.json_path},
+        )
+
+    @app.exception_handler(SimulationBusyError)
+    async def busy_handler(request, exc: SimulationBusyError):
+        return JSONResponse(
+            status_code=409,
+            content={"detail": str(exc), "queue_depth": exc.queue_depth},
         )
 
     return app
@@ -690,6 +709,169 @@ class TestSimulationResponseShape:
         )
         assert resp.error is not None
         assert resp.error.code == "creation_timeout"
+
+
+class TestGetSimulationDatabase:
+    """Tests for GET /api/v1/simulation/database endpoint."""
+
+    async def test_returns_db_for_active_skill(
+        self, client, mock_simulation_host, mock_skill_registry, mock_simulation_instance
+    ):
+        record = SimulationRecord.declare(name="demo-api")
+        record.transition(SimulationStatus.INITIALIZING, phase="agent_init")
+        record.mark_ready(mock_simulation_instance)
+        mock_simulation_host.get_record = AsyncMock(return_value=record)
+
+        mock_skill_registry.read_db = MagicMock(
+            return_value={"items": [{"id": "1", "name": "alpha"}]}
+        )
+
+        resp = client.get("/api/v1/simulation/database")
+        assert resp.status_code == 200
+        assert resp.json() == {"items": [{"id": "1", "name": "alpha"}]}
+        mock_skill_registry.read_db.assert_called_once_with("demo-api")
+
+    async def test_no_simulation_returns_404(
+        self, client, mock_simulation_host
+    ):
+        mock_simulation_host.get_record = AsyncMock(return_value=None)
+        resp = client.get("/api/v1/simulation/database")
+        assert resp.status_code == 404
+
+    async def test_pending_returns_503(
+        self, client, mock_simulation_host
+    ):
+        record = SimulationRecord.declare(name="demo-api")
+        record.transition(SimulationStatus.GENERATING_SKILL, phase="skill_generation")
+        mock_simulation_host.get_record = AsyncMock(return_value=record)
+        resp = client.get("/api/v1/simulation/database")
+        assert resp.status_code == 503
+
+    async def test_missing_db_file_returns_500(
+        self, client, mock_simulation_host, mock_skill_registry, mock_simulation_instance
+    ):
+        record = SimulationRecord.declare(name="demo-api")
+        record.transition(SimulationStatus.INITIALIZING, phase="agent_init")
+        record.mark_ready(mock_simulation_instance)
+        mock_simulation_host.get_record = AsyncMock(return_value=record)
+        mock_skill_registry.read_db = MagicMock(side_effect=FileNotFoundError("missing"))
+
+        resp = client.get("/api/v1/simulation/database")
+        assert resp.status_code == 500
+        assert "db.json" in resp.json()["detail"].lower() or "skill bundle" in resp.json()["detail"].lower()
+
+
+class TestGetSimulationSchema:
+    """Tests for GET /api/v1/simulation/schema endpoint."""
+
+    async def test_returns_schema_for_active_skill(
+        self, client, mock_simulation_host, mock_skill_registry, mock_simulation_instance
+    ):
+        record = SimulationRecord.declare(name="demo-api")
+        record.transition(SimulationStatus.INITIALIZING, phase="agent_init")
+        record.mark_ready(mock_simulation_instance)
+        mock_simulation_host.get_record = AsyncMock(return_value=record)
+
+        mock_skill_registry.read_schema = MagicMock(
+            return_value={"type": "object", "properties": {"items": {"type": "array"}}}
+        )
+
+        resp = client.get("/api/v1/simulation/schema")
+        assert resp.status_code == 200
+        assert resp.json()["type"] == "object"
+        mock_skill_registry.read_schema.assert_called_once_with("demo-api")
+
+    async def test_no_simulation_returns_404(self, client, mock_simulation_host):
+        mock_simulation_host.get_record = AsyncMock(return_value=None)
+        resp = client.get("/api/v1/simulation/schema")
+        assert resp.status_code == 404
+
+    async def test_pending_returns_503(self, client, mock_simulation_host):
+        record = SimulationRecord.declare(name="demo-api")
+        record.transition(SimulationStatus.GENERATING_SKILL, phase="skill_generation")
+        mock_simulation_host.get_record = AsyncMock(return_value=record)
+        resp = client.get("/api/v1/simulation/schema")
+        assert resp.status_code == 503
+
+
+class TestPutSimulationDatabase:
+    """Tests for PUT /api/v1/simulation/database endpoint."""
+
+    async def test_valid_put_writes_and_resets(
+        self, client, mock_simulation_host, mock_skill_registry, mock_simulation_instance
+    ):
+        record = SimulationRecord.declare(name="demo-api")
+        record.transition(SimulationStatus.INITIALIZING, phase="agent_init")
+        record.mark_ready(mock_simulation_instance)
+        mock_simulation_host.get_record = AsyncMock(return_value=record)
+        mock_simulation_host.replace_database = AsyncMock()
+
+        new_db = {"items": [{"id": "9", "name": "z"}]}
+        resp = client.put("/api/v1/simulation/database", json=new_db)
+
+        assert resp.status_code == 200
+        assert resp.json() == {"message": "Database replaced; simulation reset"}
+        mock_simulation_host.replace_database.assert_awaited_once()
+        kwargs = mock_simulation_host.replace_database.await_args.kwargs
+        assert kwargs["new_db"] == new_db
+        assert kwargs["skill_registry"] is mock_skill_registry
+
+    async def test_no_simulation_returns_404(self, client, mock_simulation_host):
+        mock_simulation_host.get_record = AsyncMock(return_value=None)
+        resp = client.put("/api/v1/simulation/database", json={"items": []})
+        assert resp.status_code == 404
+
+    async def test_validation_error_returns_422(
+        self, client, mock_simulation_host, mock_simulation_instance
+    ):
+        from simulation_harness.utils.errors import DatabaseValidationError
+
+        record = SimulationRecord.declare(name="demo-api")
+        record.transition(SimulationStatus.INITIALIZING, phase="agent_init")
+        record.mark_ready(mock_simulation_instance)
+        mock_simulation_host.get_record = AsyncMock(return_value=record)
+        mock_simulation_host.replace_database = AsyncMock(
+            side_effect=DatabaseValidationError(
+                message="'name' is a required property",
+                json_path="items.0",
+            )
+        )
+
+        resp = client.put("/api/v1/simulation/database", json={"items": [{"id": "9"}]})
+        assert resp.status_code == 422
+        body = resp.json()
+        assert body["json_path"] == "items.0"
+
+    async def test_busy_returns_409(
+        self, client, mock_simulation_host, mock_simulation_instance
+    ):
+        from simulation_harness.utils.errors import SimulationBusyError
+
+        record = SimulationRecord.declare(name="demo-api")
+        record.transition(SimulationStatus.INITIALIZING, phase="agent_init")
+        record.mark_ready(mock_simulation_instance)
+        mock_simulation_host.get_record = AsyncMock(return_value=record)
+        mock_simulation_host.replace_database = AsyncMock(
+            side_effect=SimulationBusyError(queue_depth=3)
+        )
+
+        resp = client.put("/api/v1/simulation/database", json={"items": []})
+        assert resp.status_code == 409
+        assert resp.json()["queue_depth"] == 3
+
+    async def test_pending_returns_503(self, client, mock_simulation_host):
+        record = SimulationRecord.declare(name="demo-api")
+        record.transition(SimulationStatus.GENERATING_SKILL, phase="skill_generation")
+        mock_simulation_host.get_record = AsyncMock(return_value=record)
+        resp = client.put("/api/v1/simulation/database", json={"items": []})
+        assert resp.status_code == 503
+
+    async def test_body_must_be_object(self, client, mock_simulation_host):
+        record = SimulationRecord.declare(name="demo-api")
+        record.transition(SimulationStatus.INITIALIZING, phase="agent_init")
+        mock_simulation_host.get_record = AsyncMock(return_value=record)
+        resp = client.put("/api/v1/simulation/database", json=[1, 2, 3])
+        assert resp.status_code in (400, 422)
 
 
 # Made with Bob
