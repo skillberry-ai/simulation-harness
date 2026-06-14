@@ -23,10 +23,12 @@ from simulation_harness.mcp_integration.mcp_server import MCPServerWrapper
 from simulation_harness.core.simulation_record import SimulationStatus
 from simulation_harness.utils.errors import (
     ConcurrentQueueFullError,
+    DatabaseValidationError,
     OpenAPIValidationError,
     PortInUseError,
     SessionExpiredError,
     SimulationAlreadyExistsError,
+    SimulationBusyError,
     SimulationNotFoundError,
     SimulationNotReadyError,
 )
@@ -474,6 +476,26 @@ async def concurrent_queue_full_error_handler(
     return JSONResponse(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         content={"detail": str(exc)},
+    )
+
+
+@app.exception_handler(DatabaseValidationError)
+async def database_validation_exception_handler(
+    request: Request, exc: DatabaseValidationError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": str(exc), "json_path": exc.json_path},
+    )
+
+
+@app.exception_handler(SimulationBusyError)
+async def simulation_busy_exception_handler(
+    request: Request, exc: SimulationBusyError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content={"detail": str(exc), "queue_depth": exc.queue_depth},
     )
 
 
