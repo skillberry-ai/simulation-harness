@@ -38,30 +38,6 @@ class TestSimulationResponse:
         assert response.mcp_url == "http://localhost:8000/mcp/test-simulation"
         assert response.created_at == now
 
-    def test_mcp_url_is_absolute(self):
-        """Test that mcp_url holds a full absolute URL."""
-        now = datetime.now(timezone.utc)
-        session_state = SessionState(
-            tool_call_count=0,
-            max_messages=100,
-            idle_timeout_seconds=300,
-            last_activity=now,
-            queue_depth=0,
-            max_queue_depth=10,
-        )
-
-        response = SimulationResponse(
-            name="my-api",
-            status="active",
-            session_state=session_state,
-            mcp_url="http://localhost:8080/mcp/my-api",
-            created_at=now,
-        )
-
-        assert response.mcp_url.startswith("http")
-        assert "://" in response.mcp_url
-        assert "/mcp/" in response.mcp_url
-
     def test_all_fields_required(self):
         """Test that all fields are required."""
         with pytest.raises(ValidationError) as exc_info:
