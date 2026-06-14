@@ -63,6 +63,14 @@ class SimulationNotReadyError(Exception):
         retry_after_seconds: int = 2,
         message: str | None = None,
     ):
+        """Initialize SimulationNotReadyError with structured fields.
+
+        Args:
+            name: Name of the simulation.
+            status: Current status of the simulation (e.g. "generating_skill", "initializing").
+            retry_after_seconds: How many seconds the caller should wait before retrying.
+            message: Optional override for the default message.
+        """
         self.name = name
         self.status = status
         self.retry_after_seconds = retry_after_seconds
@@ -76,6 +84,12 @@ class CreationTimeoutError(Exception):
     """Raised when simulation creation exceeds the configured wall-clock budget."""
 
     def __init__(self, limit_seconds: int, message: str | None = None):
+        """Initialize CreationTimeoutError with structured fields.
+
+        Args:
+            limit_seconds: The wall-clock budget that was exceeded.
+            message: Optional override for the default message.
+        """
         self.limit_seconds = limit_seconds
         super().__init__(
             message or f"Simulation creation exceeded {limit_seconds}s budget."
