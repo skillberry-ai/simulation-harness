@@ -1,10 +1,15 @@
 """SkillRegistry - manages skill generation and reuse."""
 
+import json
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import jsonschema
+
 from simulation_harness.skills.generator import SkillGenerator
+from simulation_harness.utils.errors import DatabaseValidationError
 from simulation_harness.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -113,6 +118,50 @@ class SkillRegistry:
                 f"Skill generation failed: simulation={simulation_name}, error={str(e)}"
             )
             raise
+
+
+    def _skill_path(self, simulation_name: str, filename: str) -> Path:
+        return self.skills_folder / simulation_name / filename
+
+    def read_schema(self, simulation_name: str) -> dict[str, Any]:
+        """Read schema.json for a skill. Raises FileNotFoundError if missing."""
+        path = self._skill_path(simulation_name, "schema.json")
+        if not path.exists():
+            raise FileNotFoundError(f"schema.json not found for skill '{simulation_name}'")
+        return json.loads(path.read_text())
+
+    def read_db(self, simulation_name: str) -> dict[str, Any]:
+        """Read db.json for a skill. Raises FileNotFoundError if missing."""
+        path = self._skill_path(simulation_name, "db.json")
+        if not path.exists():
+            raise FileNotFoundError(f"db.json not found for skill '{simulation_name}'")
+        return json.loads(path.read_text())
+
+    def write_db(self, simulation_name: str, db: dict[str, Any]) -> None:
+        """Validate db against the skill's schema.json, then atomically replace db.json.
+
+        Raises:
+            FileNotFoundError: if schema.json is missing for this skill.
+            DatabaseValidationError: if db does not validate against the schema.
+        """
+        schema = self.read_schema(simulation_name)  # raises FileNotFoundError
+
+        try:
+            jsonschema.validate(instance=db, schema=schema)
+        except jsonschema.ValidationError as e:
+            json_path = ".".join(str(p) for p in e.absolute_path) or "<root>"
+            raise DatabaseValidationError(
+                message=e.message, json_path=json_path
+            ) from e
+        except jsonschema.SchemaError as e:
+            raise DatabaseValidationError(
+                message=f"schema is not a valid JSON Schema: {e.message}"
+            ) from e
+
+        target = self._skill_path(simulation_name, "db.json")
+        tmp = target.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(db, indent=2))
+        os.replace(tmp, target)
 
 
 # Made with Bob

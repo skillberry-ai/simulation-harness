@@ -392,4 +392,71 @@ async def test_ensure_skill_reuses_when_all_four_files_exist(
     mock_generator.generate_skill.assert_not_called()
 
 
+import json
+
+
+@pytest.fixture
+def populated_registry(tmp_path):
+    """Write a minimal complete skill bundle and return (registry, simulation_name)."""
+    name = "demo-api"
+    skill_dir = tmp_path / name
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text("# demo")
+    (skill_dir / "api.json").write_text("{}")
+    (skill_dir / "schema.json").write_text(
+        json.dumps(
+            {
+                "type": "object",
+                "properties": {
+                    "items": {
+                        "type": "array",
+                        "items": {"$ref": "#/$defs/Item"},
+                    }
+                },
+                "$defs": {
+                    "Item": {
+                        "type": "object",
+                        "required": ["id", "name"],
+                        "properties": {
+                            "id": {"type": "string"},
+                            "name": {"type": "string"},
+                        },
+                        "x-primary-key": "id",
+                    }
+                },
+            }
+        )
+    )
+    (skill_dir / "db.json").write_text(
+        json.dumps({"items": [{"id": "1", "name": "alpha"}]})
+    )
+
+    registry = SkillRegistry(skills_folder=tmp_path, generator=None)
+    return registry, name
+
+
+class TestReadSchema:
+    def test_returns_parsed_schema(self, populated_registry):
+        registry, name = populated_registry
+        schema = registry.read_schema(name)
+        assert schema["properties"]["items"]["items"]["$ref"] == "#/$defs/Item"
+
+    def test_missing_skill_raises_file_not_found(self, tmp_path):
+        registry = SkillRegistry(skills_folder=tmp_path, generator=None)
+        with pytest.raises(FileNotFoundError):
+            registry.read_schema("nope")
+
+
+class TestReadDb:
+    def test_returns_parsed_db(self, populated_registry):
+        registry, name = populated_registry
+        db = registry.read_db(name)
+        assert db == {"items": [{"id": "1", "name": "alpha"}]}
+
+    def test_missing_skill_raises_file_not_found(self, tmp_path):
+        registry = SkillRegistry(skills_folder=tmp_path, generator=None)
+        with pytest.raises(FileNotFoundError):
+            registry.read_db("nope")
+
+
 # Made with Bob
