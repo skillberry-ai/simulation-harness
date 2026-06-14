@@ -32,8 +32,7 @@ install:
 	uv sync --no-dev
 
 dev-install:
-	uv sync
-	uv pip install ruff
+	uv sync --extra dev
 
 # Running targets
 start:

@@ -10,7 +10,7 @@ This project uses **uv** for environment and dependency management. Always prefi
 - Run a single test: `uv run pytest tests/integration/test_app.py::test_health_check`
 - Run a script: `uv run python utils/simulate.py specs/my-api.json`
 - Run the server module: `uv run python -m simulation_harness`
-- Install dev deps: `make dev-install` (wraps `uv sync` + ruff)
+- Install dev deps: `make dev-install` (wraps `uv sync --extra dev`)
 
 ## Common commands
 
