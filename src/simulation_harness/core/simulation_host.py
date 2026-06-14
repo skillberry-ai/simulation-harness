@@ -13,7 +13,12 @@ from simulation_harness.core.simulation_record import (
 )
 from simulation_harness.core.skill_registry import SkillRegistry
 from simulation_harness.mcp_integration.sidecar_server import SidecarMCPServer
-from simulation_harness.utils.errors import SimulationAlreadyExistsError
+from simulation_harness.utils.errors import (
+    SimulationAlreadyExistsError,
+    SimulationBusyError,
+    SimulationNotFoundError,
+    SimulationNotReadyError,
+)
 from simulation_harness.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -186,6 +191,38 @@ class SimulationHost:
                 await record.instance.shutdown()
             except Exception:
                 logger.exception("Instance shutdown failed during delete")
+
+
+    async def replace_database(
+        self,
+        *,
+        new_db: dict[str, Any],
+        skill_registry: SkillRegistry,
+    ) -> None:
+        """Atomically replace the active skill's db.json and reset the simulation.
+
+        Raises:
+            SimulationNotFoundError: no simulation declared
+            SimulationNotReadyError: simulation not yet READY
+            SimulationBusyError: tool calls are in flight (queue_depth > 0)
+            DatabaseValidationError: new_db does not validate against schema.json
+        """
+        async with self._lifecycle_lock:
+            record = self._record
+            if record is None:
+                raise SimulationNotFoundError("No simulation found")
+            if record.status != SimulationStatus.READY or record.instance is None:
+                raise SimulationNotReadyError(
+                    name=record.name, status=record.status.value
+                )
+
+            session_state = record.instance.get_session_state()
+            if session_state.queue_depth > 0:
+                raise SimulationBusyError(queue_depth=session_state.queue_depth)
+
+            skill_registry.write_db(record.name, new_db)
+
+            await record.instance.reset_session()
 
 
 # Made with Bob

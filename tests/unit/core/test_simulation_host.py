@@ -474,4 +474,123 @@ async def test_create_simulation_cleans_up_instance_on_port_in_use(fake_skill_re
     assert record.error.code == "sidecar_start_failed"
 
 
+class TestReplaceDatabase:
+    async def test_replace_database_writes_and_resets(self):
+        from unittest.mock import AsyncMock, MagicMock
+
+        from simulation_harness.core.simulation_record import (
+            SimulationRecord,
+            SimulationStatus,
+        )
+        from simulation_harness.models.domain import SessionState
+
+        host = SimulationHost()
+        instance = MagicMock()
+        instance.get_session_state.return_value = SessionState(
+            tool_call_count=0,
+            max_messages=100,
+            idle_timeout_seconds=3600,
+            last_activity=None,
+            queue_depth=0,
+            max_queue_depth=8,
+        )
+        instance.reset_session = AsyncMock()
+
+        record = SimulationRecord.declare(name="demo")
+        record.transition(SimulationStatus.INITIALIZING, phase="agent_init")
+        record.mark_ready(instance)
+        host._record = record
+
+        skill_registry = MagicMock()
+        new_db = {"items": []}
+
+        await host.replace_database(new_db=new_db, skill_registry=skill_registry)
+
+        skill_registry.write_db.assert_called_once_with("demo", new_db)
+        instance.reset_session.assert_awaited_once()
+
+    async def test_replace_database_no_simulation_raises(self):
+        from simulation_harness.utils.errors import SimulationNotFoundError
+
+        host = SimulationHost()
+        with pytest.raises(SimulationNotFoundError):
+            await host.replace_database(new_db={}, skill_registry=MagicMock())
+
+    async def test_replace_database_not_ready_raises(self):
+        from simulation_harness.core.simulation_record import SimulationRecord
+        from simulation_harness.utils.errors import SimulationNotReadyError
+
+        host = SimulationHost()
+        host._record = SimulationRecord.declare(name="demo")
+
+        with pytest.raises(SimulationNotReadyError):
+            await host.replace_database(new_db={}, skill_registry=MagicMock())
+
+    async def test_replace_database_busy_raises(self):
+        from unittest.mock import MagicMock
+
+        from simulation_harness.core.simulation_record import (
+            SimulationRecord,
+            SimulationStatus,
+        )
+        from simulation_harness.models.domain import SessionState
+        from simulation_harness.utils.errors import SimulationBusyError
+
+        host = SimulationHost()
+        instance = MagicMock()
+        instance.get_session_state.return_value = SessionState(
+            tool_call_count=0,
+            max_messages=100,
+            idle_timeout_seconds=3600,
+            last_activity=None,
+            queue_depth=2,
+            max_queue_depth=8,
+        )
+
+        record = SimulationRecord.declare(name="demo")
+        record.transition(SimulationStatus.INITIALIZING, phase="agent_init")
+        record.mark_ready(instance)
+        host._record = record
+
+        skill_registry = MagicMock()
+        with pytest.raises(SimulationBusyError) as exc:
+            await host.replace_database(new_db={}, skill_registry=skill_registry)
+        assert exc.value.queue_depth == 2
+        skill_registry.write_db.assert_not_called()
+
+    async def test_replace_database_does_not_reset_when_write_fails(self):
+        from unittest.mock import AsyncMock, MagicMock
+
+        from simulation_harness.core.simulation_record import (
+            SimulationRecord,
+            SimulationStatus,
+        )
+        from simulation_harness.models.domain import SessionState
+        from simulation_harness.utils.errors import DatabaseValidationError
+
+        host = SimulationHost()
+        instance = MagicMock()
+        instance.get_session_state.return_value = SessionState(
+            tool_call_count=0,
+            max_messages=100,
+            idle_timeout_seconds=3600,
+            last_activity=None,
+            queue_depth=0,
+            max_queue_depth=8,
+        )
+        instance.reset_session = AsyncMock()
+
+        record = SimulationRecord.declare(name="demo")
+        record.transition(SimulationStatus.INITIALIZING, phase="agent_init")
+        record.mark_ready(instance)
+        host._record = record
+
+        skill_registry = MagicMock()
+        skill_registry.write_db.side_effect = DatabaseValidationError(message="bad")
+
+        with pytest.raises(DatabaseValidationError):
+            await host.replace_database(new_db={}, skill_registry=skill_registry)
+        instance.reset_session.assert_not_awaited()
+
+
 # Made with Bob
