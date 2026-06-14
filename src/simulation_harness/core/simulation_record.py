@@ -93,8 +93,8 @@ class SimulationRecord:
             self.progress.phase = phase
 
     def mark_ready(self, instance: "SimulationInstance") -> None:
-        self.transition(SimulationStatus.READY, phase=None)
-        self.progress.phase = None
+        self.transition(SimulationStatus.READY)
+        self.progress.phase = None  # clear phase on completion
         self.instance = instance
 
     def fail(
@@ -103,16 +103,8 @@ class SimulationRecord:
         message: str,
         details: dict[str, Any] | None = None,
     ) -> None:
-        # fail is callable from any non-terminal state
-        if self.status in _TERMINAL:
-            raise ValueError(
-                f"Cannot fail from terminal status {self.status.value}"
-            )
-        self.status = SimulationStatus.FAILED
-        self.progress.updated_at = datetime.now(timezone.utc)
-        self.error = SimulationError(
-            code=code, message=message, details=dict(details or {})
-        )
+        self.transition(SimulationStatus.FAILED)  # raises ValueError on terminal state
+        self.error = SimulationError(code=code, message=message, details=dict(details or {}))
 
 
 # Made with Bob

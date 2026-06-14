@@ -24,7 +24,7 @@ def test_record_starts_pending_with_progress_timestamps():
     assert record.instance is None
 
 
-def test_record_transitions_advance_updated_at(monkeypatch):
+def test_record_transitions_advance_updated_at():
     record = SimulationRecord.declare(name="test-api")
     started = record.progress.started_at
 
@@ -60,3 +60,14 @@ def test_terminal_status_cannot_transition():
     record.fail(code="x", message="y")
     with pytest.raises(ValueError):
         record.transition(SimulationStatus.READY)
+
+
+def test_mark_ready_sets_instance_and_clears_phase():
+    from unittest.mock import MagicMock
+    record = SimulationRecord.declare(name="test-api")
+    record.transition(SimulationStatus.INITIALIZING, phase="agent_init")
+    instance = MagicMock()
+    record.mark_ready(instance)
+    assert record.status == SimulationStatus.READY
+    assert record.instance is instance
+    assert record.progress.phase is None
