@@ -1,6 +1,5 @@
 """Unit tests for /healthz and /readyz probe endpoints."""
 
-import os
 import tempfile
 
 import pytest
