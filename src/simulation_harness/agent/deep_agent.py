@@ -32,7 +32,7 @@ class DeepAgent:
 
     def __init__(
         self,
-        api_key: str,
+        api_key: SecretStr,
         model: str,
         temperature: float,
         max_tokens: int,
@@ -46,7 +46,7 @@ class DeepAgent:
         """Initialize Deep Agent.
 
         Args:
-            api_key: OpenAI API key
+            api_key: LLM API key (wrapped in SecretStr)
             model: Model name (e.g., "gpt-4")
             temperature: Temperature for generation
             max_tokens: Maximum tokens to generate
@@ -68,9 +68,9 @@ class DeepAgent:
             "model": model,
             "temperature": temperature,
             "max_completion_tokens": max_tokens,
-            "api_key": SecretStr(api_key),
+            "api_key": api_key,
         }
-        if base_url:
+        if base_url is not None:
             llm_kwargs["base_url"] = base_url
 
         self.llm = ChatOpenAI(**llm_kwargs)

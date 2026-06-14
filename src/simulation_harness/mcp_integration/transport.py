@@ -7,7 +7,7 @@ from mcp.server.sse import SseServerTransport
 from mcp.server.streamable_http import StreamableHTTPServerTransport
 
 from simulation_harness.mcp_integration.mcp_server import MCPServerWrapper
-from simulation_harness.config.models import ServerConfig, TransportType
+from simulation_harness.config.models import MCPConfig, TransportType
 from simulation_harness.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -73,7 +73,7 @@ def mount_streamable_http_transport(app: FastAPI, wrapper: MCPServerWrapper) -> 
         )
 
     # Create Streamable HTTP transport
-    http = StreamableHTTPServerTransport()
+    http = StreamableHTTPServerTransport(mcp_session_id=None)
 
     # Mount HTTP endpoint using the transport's handle method
     @app.post("/mcp")
@@ -95,14 +95,14 @@ def mount_streamable_http_transport(app: FastAPI, wrapper: MCPServerWrapper) -> 
 def mount_transport_from_config(
     app: FastAPI,
     wrapper: MCPServerWrapper,
-    config: ServerConfig,
+    config: MCPConfig,
 ) -> None:
-    """Mount transport based on configuration.
+    """Mount transport based on MCP configuration.
 
     Args:
         app: FastAPI application
         wrapper: MCP server wrapper
-        config: Server configuration
+        config: MCP transport configuration
 
     Raises:
         ValueError: If transport type is not supported or already mounted

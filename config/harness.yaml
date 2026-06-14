@@ -1,10 +1,12 @@
 # Simulation Harness Configuration
 # See docs/design/REQUIREMENTS.md §1.6 for field descriptions
+#
+# Secrets are NOT configured here. Set the LLM_API_KEY env var
+# (and optional LLM_API_BASE) in .env for local dev or via a
+# Kubernetes Secret in cluster. See .env.example.
 
 llm:
   provider: openai
-  api_key_env: OPENAI_API_KEY  # env var name containing the API key (see .env.example)
-  api_base_env: OPENAI_API_BASE  # Optional env-backed custom endpoint
   skill_generation_model: azure/gpt-5.4
   simulation_model: azure/gpt-5.4
   temperature: 0

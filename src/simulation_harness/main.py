@@ -13,7 +13,11 @@ from fastapi.responses import JSONResponse
 
 from simulation_harness.api.dependencies import get_simulation_host, get_skill_registry
 from simulation_harness.api.v1.simulations import router as simulations_router
-from simulation_harness.config.settings import ConfigValidationError, load_config
+from simulation_harness.config.settings import (
+    ConfigValidationError,
+    load_config,
+    load_secrets,
+)
 from simulation_harness.mcp_integration.mcp_server import MCPServerWrapper
 from simulation_harness.utils.errors import (
     ConcurrentQueueFullError,
@@ -24,13 +28,19 @@ from simulation_harness.utils.errors import (
 )
 from simulation_harness.utils.logging import get_logger
 
-# Load configuration at module level
-config_path = os.getenv("HARNESS_CONFIG_PATH", "config/harness.yaml")
+# Read HARNESS_CONFIG_PATH from .env if not already in the process env.
+# Use dotenv_values (no side-effects) rather than load_dotenv (mutates os.environ).
+from dotenv import dotenv_values as _dotenv_values
+_dotenv_file_vars = _dotenv_values(".env")
+config_path = os.getenv(
+    "HARNESS_CONFIG_PATH",
+    _dotenv_file_vars.get("HARNESS_CONFIG_PATH", "config/harness.yaml"),
+)
+del _dotenv_values, _dotenv_file_vars
 
 try:
     config = load_config(config_path)
 except (FileNotFoundError, ConfigValidationError) as e:
-    # Can't use logger yet since logging not configured
     print(f"ERROR: Failed to load configuration: {e}")
     raise
 
@@ -68,6 +78,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Lifespan context manager for startup and shutdown.
 
     Startup:
+    - Load secrets (so the module is importable without LLM_API_KEY)
     - Validate config (already done at module level)
     - Create singletons (done via dependency injection)
     - Log startup info
@@ -77,6 +88,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     - Shutdown agent
     """
     # Startup
+    try:
+        load_secrets()
+    except Exception as e:
+        logger.error(
+            f"Failed to load secrets: {e}\n"
+            "LLM_API_KEY is required (set it in .env for local dev or via "
+            "Kubernetes Secret in cluster). See .env.example."
+        )
+        raise RuntimeError("Missing required secrets — see logs above") from e
+
     logger.info("=" * 80)
     logger.info("Simulation Harness starting up")
     logger.info(f"Config path: {config_path}")

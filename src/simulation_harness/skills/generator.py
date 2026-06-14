@@ -14,6 +14,7 @@ except ImportError:
 import jsonschema
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
+from pydantic import SecretStr
 
 
 def _load_generation_guide() -> str:
@@ -35,7 +36,7 @@ class SkillGenerator:
 
     def __init__(
         self,
-        api_key: str,
+        api_key: SecretStr,
         model: str = "gpt-4",
         temperature: float = 0.0,
         max_tokens: int = 20000,
@@ -44,11 +45,11 @@ class SkillGenerator:
         """Initialize the skill generator.
 
         Args:
-            api_key: OpenAI API key
-            model: Model to use for generation
-            temperature: Temperature for response generation
-            max_tokens: Maximum tokens in response
-            base_url: Optional base URL for API
+            api_key: LLM API key (wrapped in SecretStr).
+            model: Model to use for generation.
+            temperature: Temperature for response generation.
+            max_tokens: Maximum tokens in response.
+            base_url: Optional base URL for API.
         """
         self.api_key = api_key
         self.model = model

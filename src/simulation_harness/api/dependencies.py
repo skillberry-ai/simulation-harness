@@ -5,7 +5,7 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from simulation_harness.config.settings import get_config
+from simulation_harness.config.settings import get_config, get_secrets
 from simulation_harness.core.simulation_host import SimulationHost
 from simulation_harness.core.skill_registry import SkillRegistry
 from simulation_harness.skills.generator import SkillGenerator
@@ -31,21 +31,29 @@ def get_simulation_host() -> SimulationHost:
 def get_skill_registry() -> SkillRegistry:
     """Get or create the global SkillRegistry instance.
 
-    Requires configuration to be loaded via load_config() before first call.
+    Requires configuration and secrets to be loaded via load_config() and
+    load_secrets() before first call.
     """
     global _skill_registry
     if _skill_registry is None:
         config = get_config()
+        secrets = get_secrets()
         generator = SkillGenerator(
-            api_key=config.llm._resolved_api_key,
+            api_key=secrets.llm_api_key,
             model=config.llm.skill_generation_model,
-            base_url=config.llm.api_base,
+            base_url=secrets.llm_api_base,
         )
         _skill_registry = SkillRegistry(
             skills_folder=Path(config.skills.folder),
             generator=generator,
         )
     return _skill_registry
+
+
+def reset_skill_registry() -> None:
+    """Clear the cached SkillRegistry so the next call rebuilds it with current credentials."""
+    global _skill_registry
+    _skill_registry = None
 
 
 # Type aliases for dependency injection

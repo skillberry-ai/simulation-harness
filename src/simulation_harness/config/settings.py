@@ -1,17 +1,18 @@
 """Configuration loading and validation."""
 
-import os
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import yaml
 from pydantic import ValidationError
 
 from .models import HarnessConfig
 
-# Global configuration instance
+if TYPE_CHECKING:
+    from .secrets import Secrets
+
 _global_config: Optional[HarnessConfig] = None
-_dotenv_loaded: bool = False
+_global_secrets: Optional["Secrets"] = None
 
 
 class ConfigValidationError(Exception):
@@ -21,13 +22,10 @@ class ConfigValidationError(Exception):
 
 
 def get_config() -> HarnessConfig:
-    """Get the global configuration instance.
-
-    Returns:
-        Global HarnessConfig instance
+    """Get the global non-secret configuration instance.
 
     Raises:
-        RuntimeError: If configuration not loaded yet
+        RuntimeError: If configuration not loaded yet.
     """
     global _global_config
     if _global_config is None:
@@ -35,26 +33,32 @@ def get_config() -> HarnessConfig:
     return _global_config
 
 
-def load_config(config_path: str) -> HarnessConfig:
-    """
-    Load and validate configuration from a YAML file.
-
-    Args:
-        config_path: Path to the YAML configuration file
-
-    Returns:
-        Validated HarnessConfig instance
+def get_secrets() -> "Secrets":
+    """Get the global Secrets instance.
 
     Raises:
-        FileNotFoundError: If the config file doesn't exist
-        ConfigValidationError: If the config is invalid or fails validation
+        RuntimeError: If secrets not loaded yet.
     """
-    global _global_config, _dotenv_loaded
+    global _global_secrets
+    if _global_secrets is None:
+        raise RuntimeError("Secrets not loaded. Call load_secrets() first.")
+    return _global_secrets
 
-    if not _dotenv_loaded:
-        from dotenv import load_dotenv
-        load_dotenv(override=False)
-        _dotenv_loaded = True
+
+def load_config(config_path: str) -> HarnessConfig:
+    """Load and validate non-secret configuration from a YAML file.
+
+    Args:
+        config_path: Path to the YAML configuration file.
+
+    Returns:
+        Validated HarnessConfig instance (also stored as global).
+
+    Raises:
+        FileNotFoundError: If the config file doesn't exist.
+        ConfigValidationError: If the config is invalid or fails validation.
+    """
+    global _global_config
 
     path = Path(config_path)
 
@@ -75,30 +79,41 @@ def load_config(config_path: str) -> HarnessConfig:
     except ValidationError as e:
         raise ConfigValidationError(f"Configuration validation failed: {e}") from e
 
-    _validate_resolved_llm_config(config)
-
-    # Store as global config
     _global_config = config
-
     return config
 
 
-def _validate_resolved_llm_config(config: HarnessConfig) -> None:
-    """Resolve environment-backed LLM settings at startup."""
-    resolved_api_key = os.getenv(config.llm.api_key_env)
-    if not resolved_api_key:
-        raise ConfigValidationError(
-            f"Configuration validation failed: api_key_env '{config.llm.api_key_env}' is not set or empty"
-        )
-    config.llm._resolved_api_key = resolved_api_key
+def load_secrets(env_file: str | None = ".env") -> "Secrets":
+    """Load and validate application secrets from environment.
 
-    if config.llm.api_base is None and config.llm.api_base_env is not None:
-        resolved_api_base = os.getenv(config.llm.api_base_env)
-        if not resolved_api_base:
-            raise ConfigValidationError(
-                f"Configuration validation failed: api_base_env '{config.llm.api_base_env}' is not set or empty"
-            )
-        config.llm.api_base = resolved_api_base
+    Clears the cached skill registry so the next get_skill_registry() call
+    rebuilds it with the new credentials.
+
+    Args:
+        env_file: Path to a dotenv file to read in addition to process env.
+            Pass None to disable .env loading entirely (useful for tests).
+
+    Returns:
+        Validated Secrets instance (also stored as global).
+
+    Raises:
+        pydantic.ValidationError: If required secrets are missing or invalid.
+    """
+    global _global_secrets
+    from .secrets import Secrets
+
+    secrets = Secrets(_env_file=env_file)  # type: ignore[arg-type]
+    _global_secrets = secrets
+
+    # Invalidate the cached skill registry — it holds a SkillGenerator built
+    # with the old key and will be rebuilt on next get_skill_registry() call.
+    try:
+        from simulation_harness.api.dependencies import reset_skill_registry as _reset
+        _reset()
+    except ImportError:
+        pass  # dependencies module not yet imported — nothing to invalidate
+
+    return secrets
 
 
 # Made with Bob

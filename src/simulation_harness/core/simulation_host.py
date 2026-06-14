@@ -4,7 +4,7 @@ import asyncio
 from pathlib import Path
 from typing import Optional
 
-from simulation_harness.config.settings import get_config
+from simulation_harness.config.settings import get_config, get_secrets
 from simulation_harness.core.simulation_instance import SimulationInstance
 from simulation_harness.models.domain import SimulationSpec
 from simulation_harness.utils.errors import SimulationAlreadyExistsError
@@ -41,8 +41,9 @@ class SimulationHost:
                     "A simulation already exists. Delete it before creating a new one."
                 )
 
-            # Get configuration
+            # Get configuration and secrets
             config = get_config()
+            secrets = get_secrets()
 
             # Create instance with configuration parameters
             self._instance = SimulationInstance(
@@ -50,10 +51,11 @@ class SimulationHost:
                 max_messages=config.sessions.max_messages,
                 idle_timeout_seconds=config.sessions.idle_timeout_seconds,
                 max_queue_depth=config.sessions.max_concurrent_queue_depth,
-                api_key=config.llm._resolved_api_key,
+                api_key=secrets.llm_api_key,
                 model=config.llm.simulation_model,
                 temperature=config.llm.temperature,
                 max_tokens=config.llm.max_tokens,
+                base_url=secrets.llm_api_base,
                 skill_dir=skill_dir,
                 agent_recursion_limit=getattr(
                     config.sessions, "agent_recursion_limit", 10

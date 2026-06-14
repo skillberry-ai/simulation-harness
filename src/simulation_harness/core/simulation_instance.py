@@ -6,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from pydantic import SecretStr
+
 from simulation_harness.agent.deep_agent import DeepAgent
 from simulation_harness.models.domain import (
     SimulationSpec,
@@ -31,10 +33,11 @@ class SimulationInstance:
         max_messages: int,
         idle_timeout_seconds: int,
         max_queue_depth: int,
-        api_key: str,
+        api_key: SecretStr,
         model: str,
         temperature: float,
         max_tokens: int,
+        base_url: str | None = None,
         skill_dir: Path | None = None,
         agent_recursion_limit: int = 10,
     ) -> None:
@@ -45,10 +48,11 @@ class SimulationInstance:
             max_messages: Maximum number of tool calls before session expires
             idle_timeout_seconds: Idle timeout in seconds
             max_queue_depth: Maximum concurrent queue depth
-            api_key: LLM API key
+            api_key: LLM API key (wrapped in SecretStr)
             model: Model name
             temperature: Temperature for generation
             max_tokens: Maximum tokens to generate
+            base_url: Optional custom LLM API base URL (e.g. for LLM_API_BASE)
             skill_dir: Optional path to skill directory for state store
             agent_recursion_limit: Maximum recursion depth for agent
         """
@@ -75,7 +79,7 @@ class SimulationInstance:
             model=model,
             temperature=temperature,
             max_tokens=max_tokens,
-            base_url=None,
+            base_url=base_url,
             spec=parsed_spec,
             operations=operations,
             session_timeout_seconds=idle_timeout_seconds,
