@@ -6,6 +6,7 @@ from typing import Optional
 
 from simulation_harness.config.settings import get_config, get_secrets
 from simulation_harness.core.simulation_instance import SimulationInstance
+from simulation_harness.mcp_integration.sidecar_server import SidecarMCPServer
 from simulation_harness.models.domain import SimulationSpec
 from simulation_harness.utils.errors import SimulationAlreadyExistsError
 
@@ -22,18 +23,21 @@ class SimulationHost:
         self,
         spec: SimulationSpec,
         skill_dir: Path | None = None,
+        mcp_port: int | None = None,
     ) -> SimulationInstance:
         """Create a new simulation instance.
 
         Args:
             spec: Simulation specification
             skill_dir: Optional path to skill directory for state store
+            mcp_port: Optional port to expose simulation as an MCP server
 
         Returns:
             Created simulation instance
 
         Raises:
             SimulationAlreadyExistsError: If a simulation already exists
+            PortInUseError: If mcp_port is already bound by another process
         """
         async with self._lifecycle_lock:
             if self._instance is not None:
@@ -46,7 +50,7 @@ class SimulationHost:
             secrets = get_secrets()
 
             # Create instance with configuration parameters
-            self._instance = SimulationInstance(
+            instance = SimulationInstance(
                 spec=spec,
                 max_messages=config.sessions.max_messages,
                 idle_timeout_seconds=config.sessions.idle_timeout_seconds,
@@ -60,7 +64,19 @@ class SimulationHost:
                 agent_recursion_limit=getattr(
                     config.sessions, "agent_recursion_limit", 10
                 ),
+                mcp_port=mcp_port,
             )
+
+            if mcp_port is not None:
+                sidecar = SidecarMCPServer(instance, mcp_port, config.mcp)
+                try:
+                    await sidecar.start()
+                except Exception:
+                    await instance.shutdown()
+                    raise
+                instance._sidecar = sidecar
+
+            self._instance = instance
             return self._instance
 
     async def get_simulation(self) -> Optional[SimulationInstance]:

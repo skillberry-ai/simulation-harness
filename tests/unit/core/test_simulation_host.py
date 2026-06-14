@@ -148,4 +148,96 @@ async def test_lifecycle_lock_serializes_operations():
     assert result is None or result is not None
 
 
+@pytest.mark.asyncio
+async def test_create_simulation_passes_mcp_port_to_instance():
+    """create_simulation forwards mcp_port to SimulationInstance."""
+    from unittest.mock import patch, MagicMock
+
+    mock_inst = MagicMock()
+    mock_inst.mcp_port = 9000
+    mock_inst._sidecar = None
+
+    with patch("simulation_harness.core.simulation_host.SimulationInstance", return_value=mock_inst) as MockInstance, \
+         patch("simulation_harness.core.simulation_host.get_config") as mock_cfg, \
+         patch("simulation_harness.core.simulation_host.get_secrets"):
+        mock_cfg.return_value.sessions.max_messages = 100
+        mock_cfg.return_value.sessions.idle_timeout_seconds = 3600
+        mock_cfg.return_value.sessions.max_concurrent_queue_depth = 8
+        mock_cfg.return_value.llm.simulation_model = "gpt-4"
+        mock_cfg.return_value.llm.temperature = 0.0
+        mock_cfg.return_value.llm.max_tokens = 1000
+        mock_cfg.return_value.mcp = MagicMock()
+
+        host = SimulationHost()
+        spec = SimulationSpec(name="test", openapi_spec={"openapi": "3.0.0", "info": {"title": "T", "version": "1"}})
+        await host.create_simulation(spec, skill_dir=None, mcp_port=9000)
+
+    _, kwargs = MockInstance.call_args
+    assert kwargs.get("mcp_port") == 9000
+
+
+@pytest.mark.asyncio
+async def test_create_simulation_starts_sidecar_when_mcp_port_provided():
+    """When mcp_port is set, create_simulation starts a SidecarMCPServer."""
+    from unittest.mock import patch, AsyncMock, MagicMock
+
+    mock_sidecar = MagicMock()
+    mock_sidecar.start = AsyncMock()
+    mock_inst = MagicMock()
+    mock_inst.mcp_port = 9000
+    mock_inst._sidecar = None
+
+    with patch("simulation_harness.core.simulation_host.SimulationInstance", return_value=mock_inst), \
+         patch("simulation_harness.core.simulation_host.SidecarMCPServer", return_value=mock_sidecar) as MockSidecar, \
+         patch("simulation_harness.core.simulation_host.get_config") as mock_cfg, \
+         patch("simulation_harness.core.simulation_host.get_secrets"):
+        mock_cfg.return_value.sessions.max_messages = 100
+        mock_cfg.return_value.sessions.idle_timeout_seconds = 3600
+        mock_cfg.return_value.sessions.max_concurrent_queue_depth = 8
+        mock_cfg.return_value.llm.simulation_model = "gpt-4"
+        mock_cfg.return_value.llm.temperature = 0.0
+        mock_cfg.return_value.llm.max_tokens = 1000
+        mock_cfg.return_value.mcp = MagicMock()
+
+        host = SimulationHost()
+        spec = SimulationSpec(name="test", openapi_spec={"openapi": "3.0.0", "info": {"title": "T", "version": "1"}})
+        await host.create_simulation(spec, skill_dir=None, mcp_port=9000)
+
+    mock_sidecar.start.assert_called_once()
+    assert mock_inst._sidecar is mock_sidecar
+
+
+@pytest.mark.asyncio
+async def test_create_simulation_cleans_up_instance_on_port_in_use():
+    """When sidecar.start() raises PortInUseError, instance is shut down and error re-raised."""
+    from unittest.mock import patch, AsyncMock, MagicMock
+    from simulation_harness.utils.errors import PortInUseError
+
+    mock_sidecar = MagicMock()
+    mock_sidecar.start = AsyncMock(side_effect=PortInUseError("Port 9000 in use"))
+    mock_inst = MagicMock()
+    mock_inst.mcp_port = 9000
+    mock_inst.shutdown = AsyncMock()
+
+    with patch("simulation_harness.core.simulation_host.SimulationInstance", return_value=mock_inst), \
+         patch("simulation_harness.core.simulation_host.SidecarMCPServer", return_value=mock_sidecar), \
+         patch("simulation_harness.core.simulation_host.get_config") as mock_cfg, \
+         patch("simulation_harness.core.simulation_host.get_secrets"):
+        mock_cfg.return_value.sessions.max_messages = 100
+        mock_cfg.return_value.sessions.idle_timeout_seconds = 3600
+        mock_cfg.return_value.sessions.max_concurrent_queue_depth = 8
+        mock_cfg.return_value.llm.simulation_model = "gpt-4"
+        mock_cfg.return_value.llm.temperature = 0.0
+        mock_cfg.return_value.llm.max_tokens = 1000
+        mock_cfg.return_value.mcp = MagicMock()
+
+        host = SimulationHost()
+        spec = SimulationSpec(name="test", openapi_spec={"openapi": "3.0.0", "info": {"title": "T", "version": "1"}})
+        with pytest.raises(PortInUseError):
+            await host.create_simulation(spec, skill_dir=None, mcp_port=9000)
+
+    mock_inst.shutdown.assert_called_once()
+    assert host._instance is None
+
+
 # Made with Bob
