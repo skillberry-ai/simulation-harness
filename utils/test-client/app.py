@@ -358,13 +358,10 @@ with tab3:
                                 duration_ms=10000
                             )
                     
-                    st.write("DEBUG: About to run asyncio.run()")
                     response = asyncio.run(list_tools_with_timeout())
-                    st.write(f"DEBUG: asyncio.run() completed, response={response}")
-                    
+
                     # Store in session state for persistence
                     st.session_state.last_list_tools_response = response
-                    st.write("DEBUG: Stored in session state")
                 except Exception as e:
                     st.error(f"Exception during list_tools: {e}")
                     import traceback
@@ -381,12 +378,6 @@ with tab3:
         # Display response if it exists in session state
         if hasattr(st.session_state, 'last_list_tools_response'):
             response = st.session_state.last_list_tools_response
-            
-            # Debug output
-            st.write(f"DEBUG: Response success={response.success}")
-            st.write(f"DEBUG: Response data={response.data}")
-            st.write(f"DEBUG: Response error={response.error}")
-            st.write(f"DEBUG: Response duration={response.duration_ms}ms")
             
             render_response_metrics(
                 200 if response.success else 500,
