@@ -459,4 +459,45 @@ class TestReadDb:
             registry.read_db("nope")
 
 
+class TestWriteDb:
+    def test_writes_valid_db(self, populated_registry):
+        registry, name = populated_registry
+        new_db = {"items": [{"id": "2", "name": "beta"}]}
+        registry.write_db(name, new_db)
+
+        path = registry.skills_folder / name / "db.json"
+        assert json.loads(path.read_text()) == new_db
+
+    def test_invalid_db_raises_validation_error_and_does_not_write(
+        self, populated_registry
+    ):
+        from simulation_harness.utils.errors import DatabaseValidationError
+
+        registry, name = populated_registry
+        path = registry.skills_folder / name / "db.json"
+        original = path.read_text()
+
+        bad_db = {"items": [{"id": "x"}]}
+        with pytest.raises(DatabaseValidationError):
+            registry.write_db(name, bad_db)
+
+        assert path.read_text() == original
+
+    def test_write_is_atomic_no_tmp_left_behind_on_success(self, populated_registry):
+        registry, name = populated_registry
+        registry.write_db(name, {"items": []})
+        skill_dir = registry.skills_folder / name
+        leftover = list(skill_dir.glob("db.json.tmp*"))
+        assert leftover == []
+
+    def test_missing_schema_raises_file_not_found(self, tmp_path):
+        name = "incomplete"
+        d = tmp_path / name
+        d.mkdir()
+        (d / "db.json").write_text("{}")
+        registry = SkillRegistry(skills_folder=tmp_path, generator=None)
+        with pytest.raises(FileNotFoundError):
+            registry.write_db(name, {"anything": []})
+
+
 # Made with Bob
