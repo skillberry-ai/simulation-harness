@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 
 from simulation_harness.api.dependencies import get_simulation_host, get_skill_registry
 from simulation_harness.api.v1.simulations import router as simulations_router
+from simulation_harness.config.env_overrides import apply_env_overrides
 from simulation_harness.config.settings import (
     ConfigValidationError,
     load_config,
@@ -41,7 +42,8 @@ del _dotenv_values, _dotenv_file_vars
 
 try:
     config = load_config(config_path)
-except (FileNotFoundError, ConfigValidationError) as e:
+    config = apply_env_overrides(config)
+except (FileNotFoundError, ConfigValidationError, ValueError) as e:
     print(f"ERROR: Failed to load configuration: {e}")
     raise
 

@@ -14,7 +14,9 @@ def test_uvicorn_respects_logging_config():
     our file handler, causing API request logs to not be written to the log file.
     """
     with patch("simulation_harness.__main__.uvicorn.run") as mock_run:
-        with patch("simulation_harness.__main__.load_config") as mock_load:
+        with patch("simulation_harness.__main__.load_config") as mock_load, patch(
+            "simulation_harness.__main__.apply_env_overrides", side_effect=lambda c: c
+        ):
             mock_config = MagicMock()
             mock_config.server.host = "0.0.0.0"
             mock_config.server.port = 8000
