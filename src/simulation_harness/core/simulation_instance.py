@@ -40,6 +40,7 @@ class SimulationInstance:
         base_url: str | None = None,
         skill_dir: Path | None = None,
         agent_recursion_limit: int = 10,
+        mcp_port: int | None = None,
     ) -> None:
         """Initialize simulation instance.
 
@@ -55,8 +56,11 @@ class SimulationInstance:
             base_url: Optional custom LLM API base URL (e.g. for LLM_API_BASE)
             skill_dir: Optional path to skill directory for state store
             agent_recursion_limit: Maximum recursion depth for agent
+            mcp_port: Optional port for a sidecar MCP server on a separate port.
         """
         self.spec = spec
+        self.mcp_port: int | None = mcp_port
+        self._sidecar = None  # Set by SimulationHost after start
         self._max_messages = max_messages
         self._idle_timeout_seconds = idle_timeout_seconds
         self._max_queue_depth = max_queue_depth
@@ -241,6 +245,8 @@ class SimulationInstance:
 
     async def shutdown(self) -> None:
         """Shutdown the instance and cleanup resources."""
+        if self._sidecar is not None:
+            await self._sidecar.stop()
         await self._agent.shutdown()
         logger.info("SimulationInstance shutdown")
 

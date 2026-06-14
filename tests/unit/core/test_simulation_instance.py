@@ -585,4 +585,40 @@ def test_create_instance_base_url_defaults_to_none(mock_spec):
         assert kwargs["base_url"] is None
 
 
+def test_mcp_port_stored_when_provided(mock_spec):
+    """SimulationInstance stores mcp_port when provided."""
+    with patch(
+        "simulation_harness.core.simulation_instance.DeepAgent"
+    ) as mock_agent_cls:
+        mock_agent_cls.return_value = MagicMock()
+        instance = create_instance(mock_spec, mcp_port=9000)
+        assert instance.mcp_port == 9000
+
+
+def test_mcp_port_defaults_to_none(mock_spec):
+    """SimulationInstance.mcp_port is None when not provided."""
+    with patch(
+        "simulation_harness.core.simulation_instance.DeepAgent"
+    ) as mock_agent_cls:
+        mock_agent_cls.return_value = MagicMock()
+        instance = create_instance(mock_spec)
+        assert instance.mcp_port is None
+
+
+@pytest.mark.asyncio
+async def test_shutdown_stops_sidecar_when_present(mock_spec, mock_agent):
+    """shutdown() calls stop() on the sidecar if one is set."""
+    with patch(
+        "simulation_harness.core.simulation_instance.DeepAgent", return_value=mock_agent
+    ):
+        instance = create_instance(mock_spec)
+        mock_sidecar = MagicMock()
+        mock_sidecar.stop = AsyncMock()
+        instance._sidecar = mock_sidecar
+
+        await instance.shutdown()
+
+        mock_sidecar.stop.assert_called_once()
+
+
 # Made with Bob
