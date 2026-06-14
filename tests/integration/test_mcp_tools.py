@@ -6,11 +6,13 @@ Tests MCP tool listing, execution, multi-call coherence, and error handling.
 import os
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import yaml
 from fastapi.testclient import TestClient
+
+from tests.integration.conftest import poll_until_ready
 
 
 @pytest.fixture
@@ -128,22 +130,26 @@ def app_client():
 
     try:
         from simulation_harness.main import app
+        from simulation_harness.api.dependencies import reset_skill_registry
 
-        client = TestClient(app)
+        # Reset cached singletons so each test gets a fresh SkillRegistry
+        # with the correct config (HARNESS_CONFIG_PATH is already set above).
+        reset_skill_registry()
 
-        # Clean up any existing simulation before test
-        try:
-            client.delete("/api/v1/simulation")
-        except Exception:
-            pass
+        with TestClient(app) as client:
+            # Clean up any existing simulation before test
+            try:
+                client.delete("/api/v1/simulation")
+            except Exception:
+                pass
 
-        yield client
+            yield client
 
-        # Clean up after test
-        try:
-            client.delete("/api/v1/simulation")
-        except Exception:
-            pass
+            # Clean up after test
+            try:
+                client.delete("/api/v1/simulation")
+            except Exception:
+                pass
     finally:
         os.unlink(config_path)
         if "HARNESS_CONFIG_PATH" in os.environ:
@@ -160,7 +166,8 @@ class TestMCPToolListing:
     def test_tools_list_returns_correct_schemas(self, app_client, valid_openapi_spec):
         """Test that tools/list returns correct tool schemas from OpenAPI spec."""
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen:
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
@@ -169,15 +176,17 @@ class TestMCPToolListing:
                 "/api/v1/simulation",
                 json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
             )
-            assert response.status_code == 201
+            assert response.status_code == 202
+
+            final = poll_until_ready(app_client, timeout=30.0)
+            assert final["status"] == "ready", f"expected ready, got: {final}"
 
             # Get MCP server instance and call list_tools
             # Note: In integration tests, we verify the API creates the simulation
             # The actual MCP tool listing is tested via the MCP protocol
             # Here we verify the simulation was created successfully
-            data = response.json()
-            assert data["name"] == "test-api"
-            assert "mcp_url" in data
+            assert final["name"] == "test-api"
+            assert "mcp_url" in final
 
 
 class TestMCPToolExecution:
@@ -186,7 +195,8 @@ class TestMCPToolExecution:
     def test_tools_call_executes_successfully(self, app_client, valid_openapi_spec):
         """Test that tools/call executes successfully."""
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen:
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
@@ -207,13 +217,16 @@ class TestMCPToolExecution:
                         "regenerate_skill": False,
                     },
                 )
-                assert response.status_code == 201
+                assert response.status_code == 202
 
-                # Verify simulation is active and ready for tool calls
+                final = poll_until_ready(app_client, timeout=30.0)
+                assert final["status"] == "ready", f"expected ready, got: {final}"
+
+                # Verify simulation is ready for tool calls
                 status_response = app_client.get("/api/v1/simulation")
                 assert status_response.status_code == 200
                 data = status_response.json()
-                assert data["status"] == "active"
+                assert data["status"] == "ready"
                 assert data["session_state"]["tool_call_count"] == 0
 
     def test_tool_invocation_errors_preserve_state(
@@ -221,7 +234,8 @@ class TestMCPToolExecution:
     ):
         """Test that tool invocation errors don't corrupt simulation state."""
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen:
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
@@ -230,13 +244,16 @@ class TestMCPToolExecution:
                 "/api/v1/simulation",
                 json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
             )
-            assert response.status_code == 201
+            assert response.status_code == 202
+
+            final = poll_until_ready(app_client, timeout=30.0)
+            assert final["status"] == "ready", f"expected ready, got: {final}"
 
             # Verify simulation state is preserved after creation
             status_response = app_client.get("/api/v1/simulation")
             assert status_response.status_code == 200
             data = status_response.json()
-            assert data["status"] == "active"
+            assert data["status"] == "ready"
 
 
 class TestMultiCallCoherence:
@@ -245,7 +262,8 @@ class TestMultiCallCoherence:
     def test_multi_call_shared_context(self, app_client, valid_openapi_spec):
         """Test that multiple tool calls share context correctly."""
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen:
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
@@ -268,7 +286,10 @@ class TestMultiCallCoherence:
                         "regenerate_skill": False,
                     },
                 )
-                assert response.status_code == 201
+                assert response.status_code == 202
+
+                final = poll_until_ready(app_client, timeout=30.0)
+                assert final["status"] == "ready", f"expected ready, got: {final}"
 
                 # Verify simulation maintains state across potential calls
                 status_response = app_client.get("/api/v1/simulation")
@@ -281,7 +302,8 @@ class TestToolExecutionErrorHandling:
     def test_failed_calls_dont_burn_slots(self, app_client, valid_openapi_spec):
         """Test that failed tool calls don't increment the message counter."""
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen:
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
@@ -290,7 +312,10 @@ class TestToolExecutionErrorHandling:
                 "/api/v1/simulation",
                 json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
             )
-            assert response.status_code == 201
+            assert response.status_code == 202
+
+            final = poll_until_ready(app_client, timeout=30.0)
+            assert final["status"] == "ready", f"expected ready, got: {final}"
 
             # Get initial state
             status_response = app_client.get("/api/v1/simulation")
@@ -307,7 +332,8 @@ class TestLogging:
     def test_per_tool_call_log_line_emitted(self, app_client, valid_openapi_spec):
         """Test that each tool call emits a log line with required fields."""
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen:
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
@@ -323,7 +349,10 @@ class TestLogging:
                         "regenerate_skill": False,
                     },
                 )
-                assert response.status_code == 201
+                assert response.status_code == 202
+
+                final = poll_until_ready(app_client, timeout=30.0)
+                assert final["status"] == "ready", f"expected ready, got: {final}"
 
                 # Verify logger was used (simulation instance logs on creation)
                 assert mock_logger.info.called or mock_logger.debug.called

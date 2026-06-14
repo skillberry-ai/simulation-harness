@@ -8,11 +8,13 @@ import os
 import tempfile
 import time
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import yaml
 from fastapi.testclient import TestClient
+
+from tests.integration.conftest import poll_until_ready
 
 
 @pytest.fixture
@@ -76,22 +78,26 @@ def app_client():
 
     try:
         from simulation_harness.main import app
+        from simulation_harness.api.dependencies import reset_skill_registry
 
-        client = TestClient(app)
+        # Reset cached singletons so each test gets a fresh SkillRegistry
+        # with the correct config (HARNESS_CONFIG_PATH is already set above).
+        reset_skill_registry()
 
-        # Clean up any existing simulation before test
-        try:
-            client.delete("/api/v1/simulation")
-        except Exception:
-            pass
+        with TestClient(app) as client:
+            # Clean up any existing simulation before test
+            try:
+                client.delete("/api/v1/simulation")
+            except Exception:
+                pass
 
-        yield client
+            yield client
 
-        # Clean up after test
-        try:
-            client.delete("/api/v1/simulation")
-        except Exception:
-            pass
+            # Clean up after test
+            try:
+                client.delete("/api/v1/simulation")
+            except Exception:
+                pass
     finally:
         os.unlink(config_path)
         if "HARNESS_CONFIG_PATH" in os.environ:
@@ -108,7 +114,8 @@ class TestMaxMessagesEnforcement:
     def test_max_messages_enforced(self, app_client, valid_openapi_spec):
         """Test that max_messages limit is enforced."""
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen:
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
@@ -117,7 +124,10 @@ class TestMaxMessagesEnforcement:
                 "/api/v1/simulation",
                 json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
             )
-            assert response.status_code == 201
+            assert response.status_code == 202
+
+            final = poll_until_ready(app_client, timeout=30.0)
+            assert final["status"] == "ready", f"expected ready, got: {final}"
 
             # Get session state
             status_response = app_client.get("/api/v1/simulation")
@@ -132,7 +142,8 @@ class TestMaxMessagesEnforcement:
     def test_session_reset_after_max_messages(self, app_client, valid_openapi_spec):
         """Test that session can be reset after reaching max_messages."""
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen:
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
@@ -141,7 +152,10 @@ class TestMaxMessagesEnforcement:
                 "/api/v1/simulation",
                 json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
             )
-            assert response.status_code == 201
+            assert response.status_code == 202
+
+            final = poll_until_ready(app_client, timeout=30.0)
+            assert final["status"] == "ready", f"expected ready, got: {final}"
 
             # Reset session
             reset_response = app_client.post("/api/v1/simulation/reset")
@@ -160,7 +174,8 @@ class TestIdleTimeoutEnforcement:
     def test_idle_timeout_configured(self, app_client, valid_openapi_spec):
         """Test that idle_timeout is configured correctly."""
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen:
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
@@ -169,7 +184,10 @@ class TestIdleTimeoutEnforcement:
                 "/api/v1/simulation",
                 json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
             )
-            assert response.status_code == 201
+            assert response.status_code == 202
+
+            final = poll_until_ready(app_client, timeout=30.0)
+            assert final["status"] == "ready", f"expected ready, got: {final}"
 
             # Get session state
             status_response = app_client.get("/api/v1/simulation")
@@ -185,7 +203,8 @@ class TestIdleTimeoutEnforcement:
     def test_session_reset_after_idle_timeout(self, app_client, valid_openapi_spec):
         """Test that session can be reset after idle timeout."""
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen:
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
@@ -194,7 +213,10 @@ class TestIdleTimeoutEnforcement:
                 "/api/v1/simulation",
                 json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
             )
-            assert response.status_code == 201
+            assert response.status_code == 202
+
+            final = poll_until_ready(app_client, timeout=30.0)
+            assert final["status"] == "ready", f"expected ready, got: {final}"
 
             # Get initial last_activity
             status_response1 = app_client.get("/api/v1/simulation")
@@ -225,7 +247,8 @@ class TestCounterBehavior:
     def test_counter_advances_only_on_success(self, app_client, valid_openapi_spec):
         """Test that counter advances only on successful tool calls."""
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen:
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
@@ -234,7 +257,10 @@ class TestCounterBehavior:
                 "/api/v1/simulation",
                 json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
             )
-            assert response.status_code == 201
+            assert response.status_code == 202
+
+            final = poll_until_ready(app_client, timeout=30.0)
+            assert final["status"] == "ready", f"expected ready, got: {final}"
 
             # Get initial counter
             status_response = app_client.get("/api/v1/simulation")
@@ -245,7 +271,8 @@ class TestCounterBehavior:
     def test_failed_calls_dont_burn_slots(self, app_client, valid_openapi_spec):
         """Test that failed calls don't increment the counter."""
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen:
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
@@ -254,7 +281,10 @@ class TestCounterBehavior:
                 "/api/v1/simulation",
                 json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
             )
-            assert response.status_code == 201
+            assert response.status_code == 202
+
+            final = poll_until_ready(app_client, timeout=30.0)
+            assert final["status"] == "ready", f"expected ready, got: {final}"
 
             # Verify initial state
             status_response = app_client.get("/api/v1/simulation")
@@ -272,7 +302,8 @@ class TestConcurrentExecution:
     def test_bounded_queue_admits_up_to_max_depth(self, app_client, valid_openapi_spec):
         """Test that bounded queue admits up to max_depth concurrent calls."""
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen:
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
@@ -281,7 +312,10 @@ class TestConcurrentExecution:
                 "/api/v1/simulation",
                 json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
             )
-            assert response.status_code == 201
+            assert response.status_code == 202
+
+            final = poll_until_ready(app_client, timeout=30.0)
+            assert final["status"] == "ready", f"expected ready, got: {final}"
 
             # Get session state
             status_response = app_client.get("/api/v1/simulation")
@@ -298,7 +332,8 @@ class TestConcurrentExecution:
     def test_queue_overflow_rejected_immediately(self, app_client, valid_openapi_spec):
         """Test that queue overflow is rejected immediately."""
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen:
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
@@ -307,7 +342,10 @@ class TestConcurrentExecution:
                 "/api/v1/simulation",
                 json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
             )
-            assert response.status_code == 201
+            assert response.status_code == 202
+
+            final = poll_until_ready(app_client, timeout=30.0)
+            assert final["status"] == "ready", f"expected ready, got: {final}"
 
             # Verify queue depth tracking exists
             status_response = app_client.get("/api/v1/simulation")
@@ -318,7 +356,8 @@ class TestConcurrentExecution:
     def test_calls_serialize_no_interleaving(self, app_client, valid_openapi_spec):
         """Test that calls serialize without interleaving."""
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen:
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
@@ -327,13 +366,16 @@ class TestConcurrentExecution:
                 "/api/v1/simulation",
                 json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
             )
-            assert response.status_code == 201
+            assert response.status_code == 202
+
+            final = poll_until_ready(app_client, timeout=30.0)
+            assert final["status"] == "ready", f"expected ready, got: {final}"
 
             # Verify simulation is created and ready
             status_response = app_client.get("/api/v1/simulation")
             assert status_response.status_code == 200
             data = status_response.json()
-            assert data["status"] == "active"
+            assert data["status"] == "ready"
 
 
 # Made with Bob

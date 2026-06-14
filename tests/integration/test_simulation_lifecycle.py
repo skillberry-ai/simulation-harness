@@ -7,11 +7,13 @@ including skill generation, reuse, and session management.
 import os
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import yaml
 from fastapi.testclient import TestClient
+
+from tests.integration.conftest import poll_until_ready
 
 
 @pytest.fixture
@@ -108,22 +110,26 @@ def app_client():
 
     try:
         from simulation_harness.main import app
+        from simulation_harness.api.dependencies import reset_skill_registry
 
-        client = TestClient(app)
+        # Reset cached singletons so each test gets a fresh SkillRegistry
+        # with the correct config (HARNESS_CONFIG_PATH is already set above).
+        reset_skill_registry()
 
-        # Clean up any existing simulation before test
-        try:
-            client.delete("/api/v1/simulation")
-        except Exception:
-            pass  # Ignore if no simulation exists
+        with TestClient(app) as client:
+            # Clean up any existing simulation before test
+            try:
+                client.delete("/api/v1/simulation")
+            except Exception:
+                pass  # Ignore if no simulation exists
 
-        yield client
+            yield client
 
-        # Clean up after test
-        try:
-            client.delete("/api/v1/simulation")
-        except Exception:
-            pass  # Ignore if no simulation exists
+            # Clean up after test
+            try:
+                client.delete("/api/v1/simulation")
+            except Exception:
+                pass  # Ignore if no simulation exists
     finally:
         os.unlink(config_path)
         if "HARNESS_CONFIG_PATH" in os.environ:
@@ -141,7 +147,8 @@ class TestSimulationCreation:
         """Test creating a simulation from a valid OpenAPI spec."""
         # Mock skill generation to avoid actual LLM calls
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen:
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
@@ -150,21 +157,26 @@ class TestSimulationCreation:
                 json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
             )
 
-        assert response.status_code == 201
-        data = response.json()
-        assert data["name"] == "test-api"
-        assert data["status"] == "active"
-        assert "session_state" in data
-        assert data["session_state"]["tool_call_count"] == 0
-        assert data["mcp_url"] == "http://testserver/mcp/test-api"
-        assert "created_at" in data
+            assert response.status_code == 202
+            data = response.json()
+            assert data["name"] == "test-api"
+            assert data["status"] == "pending"
+
+            final = poll_until_ready(app_client, timeout=30.0)
+
+        assert final["status"] == "ready", f"expected ready, got: {final}"
+        assert "session_state" in final
+        assert final["session_state"]["tool_call_count"] == 0
+        assert final["mcp_url"] == "http://testserver/mcp/test-api"
+        assert "created_at" in final
 
     def test_create_simulation_openapi_31_accepted(
         self, app_client, valid_openapi_spec_31
     ):
         """Test that OpenAPI 3.1.x specs are accepted."""
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen:
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
@@ -173,9 +185,13 @@ class TestSimulationCreation:
                 json={"openapi_spec": valid_openapi_spec_31, "regenerate_skill": False},
             )
 
-        assert response.status_code == 201
-        data = response.json()
-        assert data["name"] == "test-api-3.1"
+            assert response.status_code == 202
+            data = response.json()
+            assert data["name"] == "test-api-3.1"
+
+            final = poll_until_ready(app_client, timeout=30.0)
+
+        assert final["status"] == "ready", f"expected ready, got: {final}"
 
     def test_create_simulation_invalid_spec_returns_422(self, app_client):
         """Test that invalid OpenAPI spec returns 422."""
@@ -214,7 +230,8 @@ class TestSimulationCreation:
     ):
         """Test that creating a duplicate simulation returns 409."""
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen:
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
@@ -223,9 +240,9 @@ class TestSimulationCreation:
                 "/api/v1/simulation",
                 json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
             )
-            assert response1.status_code == 201
+            assert response1.status_code == 202
 
-            # Try to create second simulation
+            # Try to create second simulation while first is still pending/active
             response2 = app_client.post(
                 "/api/v1/simulation",
                 json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
@@ -239,7 +256,8 @@ class TestSkillGeneration:
     def test_skill_generation_new_skill(self, app_client, valid_openapi_spec):
         """Test that a new skill is generated when none exists."""
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen:
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
@@ -248,7 +266,11 @@ class TestSkillGeneration:
                 json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
             )
 
-            assert response.status_code == 201
+            assert response.status_code == 202
+
+            final = poll_until_ready(app_client, timeout=30.0)
+            assert final["status"] == "ready", f"expected ready, got: {final}"
+
             # Verify skill generator was called
             mock_gen.assert_called_once()
 
@@ -259,11 +281,10 @@ class TestSkillGeneration:
         The skill registry should reuse the skill file created in the first call.
         """
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen:
             # Mock to return a path (simulating successful generation)
-            from pathlib import Path
-
             mock_gen.return_value = Path("/tmp/test-api/SKILL.md")
 
             # Create first simulation (generates skill)
@@ -271,7 +292,11 @@ class TestSkillGeneration:
                 "/api/v1/simulation",
                 json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
             )
-            assert response1.status_code == 201
+            assert response1.status_code == 202
+
+            final1 = poll_until_ready(app_client, timeout=30.0)
+            assert final1["status"] == "ready", f"expected ready, got: {final1}"
+
             first_call_count = mock_gen.call_count
             assert first_call_count >= 1, "Skill should be generated on first creation"
 
@@ -286,14 +311,18 @@ class TestSkillGeneration:
                 "/api/v1/simulation",
                 json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
             )
-            assert response2.status_code == 201
+            assert response2.status_code == 202
+
+            final2 = poll_until_ready(app_client, timeout=30.0)
+            assert final2["status"] == "ready", f"expected ready, got: {final2}"
             # The behavior of skill reuse is tested in unit tests for SkillRegistry
             # Here we just verify the API works correctly
 
     def test_regenerate_flag_forces_new_skill(self, app_client, valid_openapi_spec):
         """Test that regenerate=True forces new skill generation."""
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen:
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
@@ -302,7 +331,11 @@ class TestSkillGeneration:
                 "/api/v1/simulation",
                 json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
             )
-            assert response1.status_code == 201
+            assert response1.status_code == 202
+
+            final1 = poll_until_ready(app_client, timeout=30.0)
+            assert final1["status"] == "ready", f"expected ready, got: {final1}"
+
             first_call_count = mock_gen.call_count
 
             # Delete simulation
@@ -313,7 +346,11 @@ class TestSkillGeneration:
                 "/api/v1/simulation",
                 json={"openapi_spec": valid_openapi_spec, "regenerate_skill": True},
             )
-            assert response2.status_code == 201
+            assert response2.status_code == 202
+
+            final2 = poll_until_ready(app_client, timeout=30.0)
+            assert final2["status"] == "ready", f"expected ready, got: {final2}"
+
             # Skill generator should be called again
             assert mock_gen.call_count > first_call_count
 
@@ -324,7 +361,8 @@ class TestSimulationStatus:
     def test_get_simulation_status(self, app_client, valid_openapi_spec):
         """Test getting status of active simulation."""
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen:
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
@@ -333,7 +371,10 @@ class TestSimulationStatus:
                 "/api/v1/simulation",
                 json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
             )
-            assert create_response.status_code == 201
+            assert create_response.status_code == 202
+
+            final = poll_until_ready(app_client, timeout=30.0)
+            assert final["status"] == "ready", f"expected ready, got: {final}"
 
             # Get status
             status_response = app_client.get("/api/v1/simulation")
@@ -341,7 +382,7 @@ class TestSimulationStatus:
 
             data = status_response.json()
             assert data["name"] == "test-api"
-            assert data["status"] == "active"
+            assert data["status"] == "ready"
             assert "session_state" in data
 
     def test_get_simulation_status_no_simulation_returns_404(self, app_client):
@@ -356,7 +397,8 @@ class TestSimulationDeletion:
     def test_delete_simulation(self, app_client, valid_openapi_spec):
         """Test deleting an active simulation."""
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen:
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
@@ -365,7 +407,10 @@ class TestSimulationDeletion:
                 "/api/v1/simulation",
                 json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
             )
-            assert create_response.status_code == 201
+            assert create_response.status_code == 202
+
+            final = poll_until_ready(app_client, timeout=30.0)
+            assert final["status"] == "ready", f"expected ready, got: {final}"
 
             # Delete simulation
             delete_response = app_client.delete("/api/v1/simulation")
@@ -387,7 +432,8 @@ class TestSessionReset:
     def test_reset_session(self, app_client, valid_openapi_spec):
         """Test resetting simulation session."""
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen:
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
@@ -396,7 +442,10 @@ class TestSessionReset:
                 "/api/v1/simulation",
                 json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
             )
-            assert create_response.status_code == 201
+            assert create_response.status_code == 202
+
+            final = poll_until_ready(app_client, timeout=30.0)
+            assert final["status"] == "ready", f"expected ready, got: {final}"
 
             # Reset session
             reset_response = app_client.post("/api/v1/simulation/reset")
@@ -421,12 +470,12 @@ class TestMCPPortConfiguration:
     def test_create_simulation_with_mcp_port_returns_sidecar_url(
         self, app_client, valid_openapi_spec
     ):
-        """POST /simulation with mcp_port returns fully-qualified sidecar URL."""
+        """POST /simulation with mcp_port returns fully-qualified sidecar URL when ready."""
         from simulation_harness.mcp_integration.sidecar_server import SidecarMCPServer
-        from unittest.mock import AsyncMock, patch
 
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen, patch.object(SidecarMCPServer, "start", new_callable=AsyncMock):
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
@@ -439,16 +488,20 @@ class TestMCPPortConfiguration:
                 },
             )
 
-        assert response.status_code == 201
-        data = response.json()
-        assert data["mcp_url"] == "http://testserver:9000/mcp/test-api"
+            assert response.status_code == 202
+
+            final = poll_until_ready(app_client, timeout=30.0)
+
+        assert final["status"] == "ready", f"expected ready, got: {final}"
+        assert final["mcp_url"] == "http://testserver:9000/mcp/test-api"
 
     def test_create_simulation_without_mcp_port_returns_harness_url(
         self, app_client, valid_openapi_spec
     ):
-        """POST /simulation without mcp_port returns harness-relative URL (existing behavior)."""
+        """POST /simulation without mcp_port returns harness-relative URL when ready."""
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen:
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
@@ -457,19 +510,22 @@ class TestMCPPortConfiguration:
                 json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
             )
 
-        assert response.status_code == 201
-        data = response.json()
-        assert data["mcp_url"] == "http://testserver/mcp/test-api"
+            assert response.status_code == 202
+
+            final = poll_until_ready(app_client, timeout=30.0)
+
+        assert final["status"] == "ready", f"expected ready, got: {final}"
+        assert final["mcp_url"] == "http://testserver/mcp/test-api"
 
     def test_get_simulation_preserves_mcp_url_after_creation_with_port(
         self, app_client, valid_openapi_spec
     ):
-        """GET /simulation returns the same mcp_url as the creation response."""
+        """GET /simulation returns the same mcp_url as the ready status."""
         from simulation_harness.mcp_integration.sidecar_server import SidecarMCPServer
-        from unittest.mock import AsyncMock, patch
 
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen, patch.object(SidecarMCPServer, "start", new_callable=AsyncMock):
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
@@ -481,27 +537,30 @@ class TestMCPPortConfiguration:
                     "mcp_port": 9000,
                 },
             )
-            assert create_response.status_code == 201
-            create_url = create_response.json()["mcp_url"]
+            assert create_response.status_code == 202
+
+            final = poll_until_ready(app_client, timeout=30.0)
+
+        assert final["status"] == "ready", f"expected ready, got: {final}"
 
         get_response = app_client.get("/api/v1/simulation")
         assert get_response.status_code == 200
-        assert get_response.json()["mcp_url"] == create_url
-        assert create_url == "http://testserver:9000/mcp/test-api"
+        assert get_response.json()["mcp_url"] == final["mcp_url"]
+        assert final["mcp_url"] == "http://testserver:9000/mcp/test-api"
 
-    def test_create_simulation_port_in_use_returns_409(
+    def test_create_simulation_port_in_use_reaches_failed(
         self, app_client, valid_openapi_spec
     ):
-        """POST /simulation with an already-bound mcp_port returns 409."""
+        """POST /simulation with an already-bound mcp_port results in failed status."""
         import socket
-        from unittest.mock import patch
 
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen:
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
-            # Bind a port ourselves so the pre-check will fail
+            # Bind a port ourselves so the sidecar start will fail
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.bind(("0.0.0.0", 0))
@@ -515,18 +574,20 @@ class TestMCPPortConfiguration:
                         "mcp_port": taken_port,
                     },
                 )
+                assert response.status_code == 202
+
+                final = poll_until_ready(app_client, timeout=30.0)
             finally:
                 sock.close()
 
-        assert response.status_code == 409
-        assert str(taken_port) in response.json()["detail"]
+        assert final["status"] == "failed", f"expected failed, got: {final}"
+        assert str(taken_port) in str(final.get("error", {}))
 
     def test_delete_simulation_tears_down_sidecar(
         self, app_client, valid_openapi_spec
     ):
         """DELETE /simulation stops the sidecar server if one was started."""
         from simulation_harness.mcp_integration.sidecar_server import SidecarMCPServer
-        from unittest.mock import AsyncMock, patch
 
         stop_calls = []
 
@@ -534,7 +595,8 @@ class TestMCPPortConfiguration:
             stop_calls.append(True)
 
         with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
         ) as mock_gen, patch.object(
             SidecarMCPServer, "start", new_callable=AsyncMock
         ), patch.object(SidecarMCPServer, "stop", fake_stop):
@@ -548,12 +610,76 @@ class TestMCPPortConfiguration:
                     "mcp_port": 9000,
                 },
             )
-            assert create_response.status_code == 201
+            assert create_response.status_code == 202
+
+            final = poll_until_ready(app_client, timeout=30.0)
+            assert final["status"] == "ready", f"expected ready, got: {final}"
 
             delete_response = app_client.delete("/api/v1/simulation")
             assert delete_response.status_code == 204
 
         assert len(stop_calls) >= 1
+
+
+def test_skill_reuse_reaches_ready_quickly(app_client, valid_openapi_spec):
+    """Second POST reuses skill and reaches ready in polling."""
+    with patch(
+        "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+        new_callable=AsyncMock,
+    ) as mock_gen:
+        mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
+
+        # First simulation
+        r1 = app_client.post(
+            "/api/v1/simulation",
+            json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
+        )
+        assert r1.status_code == 202
+        final1 = poll_until_ready(app_client, timeout=60.0)
+        assert final1["status"] == "ready"
+
+        # Tear down
+        assert app_client.delete("/api/v1/simulation").status_code == 204
+
+        # Second simulation reuses the skill
+        r2 = app_client.post(
+            "/api/v1/simulation",
+            json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
+        )
+        assert r2.status_code == 202
+        final2 = poll_until_ready(app_client, timeout=30.0)
+        assert final2["status"] == "ready"
+
+
+def test_delete_during_pending_returns_404_on_subsequent_get(
+    app_client, valid_openapi_spec
+):
+    """DELETE during pending cancels creation; GET then returns 404."""
+    import asyncio
+
+    with patch(
+        "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+        new_callable=AsyncMock,
+    ) as mock_gen:
+        # Simulate a slow skill generation so DELETE happens during pending
+        async def slow_generate(*args, **kwargs):
+            await asyncio.sleep(10)
+            return Path("/tmp/fake-skill/SKILL.md")
+
+        mock_gen.side_effect = slow_generate
+
+        r = app_client.post(
+            "/api/v1/simulation",
+            json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
+        )
+        assert r.status_code == 202
+
+        # Immediately DELETE before creation completes
+        d = app_client.delete("/api/v1/simulation")
+        assert d.status_code == 204
+
+    g = app_client.get("/api/v1/simulation")
+    assert g.status_code == 404
 
 
 # Made with Bob
