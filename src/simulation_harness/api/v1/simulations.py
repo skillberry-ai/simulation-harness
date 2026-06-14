@@ -148,11 +148,12 @@ async def create_simulation(
         # Build response
         session_state = instance.get_session_state()
 
+        base_url = str(request.base_url).rstrip("/")
         return SimulationResponse(
             name=simulation_name,
             status="active",
             session_state=session_state,
-            mcp_endpoint=f"/mcp/{simulation_name}",
+            mcp_url=f"{base_url}/mcp/{simulation_name}",
             created_at=instance.created_at,
         )
 
