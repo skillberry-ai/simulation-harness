@@ -1,102 +1,189 @@
-"""SimulationHost - singleton holder for simulation instances."""
+"""SimulationHost - singleton holder for the active simulation record."""
 
 import asyncio
 from pathlib import Path
-from typing import Optional
+from typing import Any, Callable, Optional
 
 from simulation_harness.config.settings import get_config, get_secrets
+from simulation_harness.core.simulation_creator import SimulationCreator
 from simulation_harness.core.simulation_instance import SimulationInstance
+from simulation_harness.core.simulation_record import (
+    SimulationRecord,
+    SimulationStatus,
+)
+from simulation_harness.core.skill_registry import SkillRegistry
 from simulation_harness.mcp_integration.sidecar_server import SidecarMCPServer
-from simulation_harness.models.domain import SimulationSpec
 from simulation_harness.utils.errors import SimulationAlreadyExistsError
+from simulation_harness.utils.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+def _default_instance_factory(
+    *,
+    simulation_name: str,
+    openapi_spec: dict[str, Any],
+    skill_dir: Path,
+    mcp_port: int | None,
+) -> SimulationInstance:
+    """Build a SimulationInstance using global config + secrets."""
+    from simulation_harness.models.domain import SimulationSpec
+
+    config = get_config()
+    secrets = get_secrets()
+    spec = SimulationSpec(name=simulation_name, openapi_spec=openapi_spec)
+    return SimulationInstance(
+        spec=spec,
+        max_messages=config.sessions.max_messages,
+        idle_timeout_seconds=config.sessions.idle_timeout_seconds,
+        max_queue_depth=config.sessions.max_concurrent_queue_depth,
+        api_key=secrets.llm_api_key,
+        model=config.llm.simulation_model,
+        temperature=config.llm.temperature,
+        max_tokens=config.llm.max_tokens,
+        base_url=secrets.llm_api_base,
+        skill_dir=skill_dir,
+        agent_recursion_limit=getattr(config.sessions, "agent_recursion_limit", 10),
+        mcp_port=mcp_port,
+    )
 
 
 class SimulationHost:
-    """Manages at most one SimulationInstance with lifecycle serialization."""
+    """Manages at most one SimulationRecord with lifecycle serialization."""
 
     def __init__(self) -> None:
-        """Initialize the simulation host."""
-        self._instance: Optional[SimulationInstance] = None
+        self._record: Optional[SimulationRecord] = None
+        self._creation_task: Optional[asyncio.Task[None]] = None
         self._lifecycle_lock = asyncio.Lock()
 
-    async def create_simulation(
+    async def declare_simulation(
         self,
-        spec: SimulationSpec,
-        skill_dir: Path | None = None,
-        mcp_port: int | None = None,
-    ) -> SimulationInstance:
-        """Create a new simulation instance.
-
-        Args:
-            spec: Simulation specification
-            skill_dir: Optional path to skill directory for state store
-            mcp_port: Optional port to expose simulation as an MCP server
-
-        Returns:
-            Created simulation instance
+        *,
+        name: str,
+        openapi_spec: dict[str, Any],
+        regenerate: bool,
+        mcp_port: int | None,
+        skill_registry: SkillRegistry,
+        instance_factory: Callable[..., SimulationInstance] = _default_instance_factory,
+        max_duration_seconds: float | None = None,
+    ) -> SimulationRecord:
+        """Declare a new simulation. Returns immediately with status=pending.
 
         Raises:
-            SimulationAlreadyExistsError: If a simulation already exists
-            PortInUseError: If mcp_port is already bound by another process
+            SimulationAlreadyExistsError: if any record already exists.
         """
         async with self._lifecycle_lock:
-            if self._instance is not None:
+            if self._record is not None:
                 raise SimulationAlreadyExistsError(
                     "A simulation already exists. Delete it before creating a new one."
                 )
 
-            # Get configuration and secrets
-            config = get_config()
-            secrets = get_secrets()
+            if max_duration_seconds is None:
+                config = get_config()
+                max_duration_seconds = float(config.creation.max_duration_seconds)
 
-            # Create instance with configuration parameters
-            instance = SimulationInstance(
-                spec=spec,
-                max_messages=config.sessions.max_messages,
-                idle_timeout_seconds=config.sessions.idle_timeout_seconds,
-                max_queue_depth=config.sessions.max_concurrent_queue_depth,
-                api_key=secrets.llm_api_key,
-                model=config.llm.simulation_model,
-                temperature=config.llm.temperature,
-                max_tokens=config.llm.max_tokens,
-                base_url=secrets.llm_api_base,
-                skill_dir=skill_dir,
-                agent_recursion_limit=getattr(
-                    config.sessions, "agent_recursion_limit", 10
-                ),
+            record = SimulationRecord.declare(name=name, mcp_port=mcp_port)
+            self._record = record
+
+            def _skill_exists(simulation_name: str) -> bool:
+                folder = skill_registry.skills_folder / simulation_name
+                return (
+                    (folder / "SKILL.md").exists()
+                    and (folder / "schema.json").exists()
+                    and (folder / "db.json").exists()
+                    and (folder / "api.json").exists()
+                )
+
+            creator = SimulationCreator(
+                record=record,
+                skill_registry=skill_registry,
+                instance_factory=instance_factory,
+                openapi_spec=openapi_spec,
+                regenerate=regenerate,
+                max_duration_seconds=max_duration_seconds,
+                skill_exists=_skill_exists,
                 mcp_port=mcp_port,
             )
 
-            if mcp_port is not None:
-                sidecar = SidecarMCPServer(instance, mcp_port, config.mcp)
-                try:
-                    await sidecar.start()
-                except Exception:
-                    await instance.shutdown()
-                    raise
-                instance._sidecar = sidecar
+            self._creation_task = asyncio.create_task(
+                self._run_creation(creator, mcp_port)
+            )
+            return record
 
-            self._instance = instance
-            return self._instance
+    async def _run_creation(
+        self, creator: SimulationCreator, mcp_port: int | None
+    ) -> None:
+        """Drive the creator and start the sidecar (if requested) on success."""
+        try:
+            await creator.run()
+        except asyncio.CancelledError:
+            raise
+
+        record = self._record
+        if record is None:
+            return
+
+        if record.status == SimulationStatus.READY and mcp_port is not None:
+            try:
+                config = get_config()
+                sidecar = SidecarMCPServer(record.instance, mcp_port, config.mcp)
+                await sidecar.start()
+                record.instance._sidecar = sidecar  # type: ignore[union-attr]
+            except Exception as e:
+                logger.exception("Sidecar start failed; failing simulation")
+                if record.instance is not None:
+                    try:
+                        await record.instance.shutdown()
+                    except Exception:
+                        logger.exception("Instance shutdown after sidecar failure failed")
+                replacement = SimulationRecord.declare(name=record.name)
+                replacement.fail(
+                    code="sidecar_start_failed",
+                    message=str(e),
+                    details={"port": mcp_port},
+                )
+                self._record = replacement
+
+    async def get_record(self) -> Optional[SimulationRecord]:
+        """Return the current SimulationRecord, or None if no simulation declared."""
+        async with self._lifecycle_lock:
+            return self._record
 
     async def get_simulation(self) -> Optional[SimulationInstance]:
-        """Get the current simulation instance.
+        """Return the ready SimulationInstance, or None.
 
-        Returns:
-            Current simulation instance or None if no simulation exists
+        Backwards-compatible accessor: returns None until status=READY.
         """
         async with self._lifecycle_lock:
-            return self._instance
+            if self._record is None:
+                return None
+            if self._record.status != SimulationStatus.READY:
+                return None
+            return self._record.instance
 
     async def delete_simulation(self) -> None:
-        """Delete the current simulation instance.
+        """Delete the current simulation: cancel creation if in-flight, shutdown if ready.
 
-        This operation is idempotent - calling it when no simulation exists is safe.
+        Idempotent.
         """
         async with self._lifecycle_lock:
-            if self._instance is not None:
-                await self._instance.shutdown()
-                self._instance = None
+            record = self._record
+            task = self._creation_task
+            self._record = None
+            self._creation_task = None
+
+        if task is not None and not task.done():
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
+
+        if record is not None and record.instance is not None:
+            try:
+                await record.instance.shutdown()
+            except Exception:
+                logger.exception("Instance shutdown failed during delete")
 
 
 # Made with Bob
