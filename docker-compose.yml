@@ -1,0 +1,30 @@
+services:
+  harness:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: simulation-harness:dev
+    container_name: simulation-harness
+    ports:
+      - "8086:8086"
+    environment:
+      LLM_API_KEY: ${LLM_API_KEY:?set LLM_API_KEY in your shell or .env}
+      LLM_API_BASE: ${LLM_API_BASE:-}
+      HARNESS_LOG_LEVEL: ${HARNESS_LOG_LEVEL:-INFO}
+    volumes:
+      - ./skills-store:/app/skills-store
+      - ./logs:/app/logs
+      # Mount a custom harness.yaml without rebuilding:
+      # - ./config/harness.yaml:/app/config/harness.yaml:ro
+    restart: unless-stopped
+    stop_grace_period: 35s
+    healthcheck:
+      test:
+        ["CMD", "python", "-c",
+         "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8086/healthz', timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+# Made with Bob
