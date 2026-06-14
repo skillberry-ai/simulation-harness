@@ -28,15 +28,39 @@ class TestSimulationResponse:
             name="test-simulation",
             status="running",
             session_state=session_state,
-            mcp_endpoint="http://localhost:8000/mcp",
+            mcp_url="http://localhost:8000/mcp/test-simulation",
             created_at=now,
         )
 
         assert response.name == "test-simulation"
         assert response.status == "running"
         assert response.session_state == session_state
-        assert response.mcp_endpoint == "http://localhost:8000/mcp"
+        assert response.mcp_url == "http://localhost:8000/mcp/test-simulation"
         assert response.created_at == now
+
+    def test_mcp_url_is_absolute(self):
+        """Test that mcp_url holds a full absolute URL."""
+        now = datetime.now(timezone.utc)
+        session_state = SessionState(
+            tool_call_count=0,
+            max_messages=100,
+            idle_timeout_seconds=300,
+            last_activity=now,
+            queue_depth=0,
+            max_queue_depth=10,
+        )
+
+        response = SimulationResponse(
+            name="my-api",
+            status="active",
+            session_state=session_state,
+            mcp_url="http://localhost:8080/mcp/my-api",
+            created_at=now,
+        )
+
+        assert response.mcp_url.startswith("http")
+        assert "://" in response.mcp_url
+        assert "/mcp/" in response.mcp_url
 
     def test_all_fields_required(self):
         """Test that all fields are required."""
@@ -47,7 +71,7 @@ class TestSimulationResponse:
         assert "name" in error_str
         assert "status" in error_str
         assert "session_state" in error_str
-        assert "mcp_endpoint" in error_str
+        assert "mcp_url" in error_str
         assert "created_at" in error_str
 
     def test_session_state_must_be_valid(self):
@@ -59,7 +83,7 @@ class TestSimulationResponse:
                 name="test-simulation",
                 status="running",
                 session_state={"invalid": "dict"},
-                mcp_endpoint="http://localhost:8000/mcp",
+                mcp_url="http://localhost:8000/mcp/test-simulation",
                 created_at=now,
             )
 
@@ -82,7 +106,7 @@ class TestSimulationResponse:
                 name="test-simulation",
                 status="running",
                 session_state=session_state,
-                mcp_endpoint="http://localhost:8000/mcp",
+                mcp_url="http://localhost:8000/mcp/test-simulation",
                 created_at="not a datetime",
             )
 
@@ -104,7 +128,7 @@ class TestSimulationResponse:
             name="test-simulation",
             status="running",
             session_state=session_state,
-            mcp_endpoint="http://localhost:8000/mcp",
+            mcp_url="http://localhost:8000/mcp/test-simulation",
             created_at=now,
         )
 
@@ -113,7 +137,7 @@ class TestSimulationResponse:
         assert response_dict["name"] == "test-simulation"
         assert response_dict["status"] == "running"
         assert response_dict["session_state"]["tool_call_count"] == 3
-        assert response_dict["mcp_endpoint"] == "http://localhost:8000/mcp"
+        assert response_dict["mcp_url"] == "http://localhost:8000/mcp/test-simulation"
         assert isinstance(response_dict["created_at"], datetime)
 
 
