@@ -3,7 +3,8 @@
 import logging
 import pytest
 from pathlib import Path
-from unittest.mock import Mock, patch, call
+from unittest.mock import Mock, patch, call, AsyncMock
+from fastapi.testclient import TestClient
 
 
 class TestMainModule:
@@ -185,6 +186,21 @@ class TestLifespan:
             with pytest.raises(RuntimeError, match="Missing required secrets"):
                 async with main_mod.lifespan(main_mod.app):
                     pass  # pragma: no cover
+
+
+class TestExceptionHandlers:
+    """Test exception handlers for FastAPI app."""
+
+    def test_port_in_use_error_handler_exists(self):
+        """Verify PortInUseError exception handler is registered with the FastAPI app."""
+        from simulation_harness.main import app
+        from simulation_harness.utils.errors import PortInUseError
+
+        # Check that the handler is registered
+        assert PortInUseError in app.exception_handlers
+        handler = app.exception_handlers[PortInUseError]
+        assert handler is not None
+        assert callable(handler)
 
 
 # Made with Bob

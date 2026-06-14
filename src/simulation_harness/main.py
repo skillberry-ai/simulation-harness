@@ -22,6 +22,7 @@ from simulation_harness.mcp_integration.mcp_server import MCPServerWrapper
 from simulation_harness.utils.errors import (
     ConcurrentQueueFullError,
     OpenAPIValidationError,
+    PortInUseError,
     SessionExpiredError,
     SimulationAlreadyExistsError,
     SimulationNotFoundError,
@@ -360,6 +361,18 @@ async def simulation_already_exists_handler(
 ) -> JSONResponse:
     """Handle SimulationAlreadyExistsError with 409 Conflict."""
     logger.warning(f"Simulation already exists: {exc}")
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content={"detail": str(exc)},
+    )
+
+
+@app.exception_handler(PortInUseError)
+async def port_in_use_handler(
+    request: Request, exc: PortInUseError
+) -> JSONResponse:
+    """Handle PortInUseError with 409 Conflict."""
+    logger.warning(f"MCP port already in use: {exc}")
     return JSONResponse(
         status_code=status.HTTP_409_CONFLICT,
         content={"detail": str(exc)},
