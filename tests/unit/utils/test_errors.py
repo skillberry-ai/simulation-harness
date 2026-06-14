@@ -205,4 +205,62 @@ class TestPortInUseError:
         assert "9000" in str(err)
 
 
+class TestSimulationNotReadyError:
+    """Tests for SimulationNotReadyError."""
+
+    def test_simulation_not_ready_error_carries_status_and_retry_after(self):
+        from simulation_harness.utils.errors import SimulationNotReadyError
+
+        err = SimulationNotReadyError(
+            name="test-api", status="generating_skill", retry_after_seconds=2
+        )
+        assert err.name == "test-api"
+        assert err.status == "generating_skill"
+        assert err.retry_after_seconds == 2
+        assert "test-api" in str(err)
+
+    def test_simulation_not_ready_error_default_retry_after(self):
+        from simulation_harness.utils.errors import SimulationNotReadyError
+
+        err = SimulationNotReadyError(name="my-api", status="starting")
+        assert err.retry_after_seconds == 2
+
+    def test_simulation_not_ready_error_custom_message(self):
+        from simulation_harness.utils.errors import SimulationNotReadyError
+
+        err = SimulationNotReadyError(
+            name="my-api", status="starting", message="custom msg"
+        )
+        assert str(err) == "custom msg"
+
+    def test_simulation_not_ready_error_is_exception(self):
+        from simulation_harness.utils.errors import SimulationNotReadyError
+
+        err = SimulationNotReadyError(name="x", status="y")
+        assert isinstance(err, Exception)
+
+
+class TestCreationTimeoutError:
+    """Tests for CreationTimeoutError."""
+
+    def test_creation_timeout_error_carries_limit(self):
+        from simulation_harness.utils.errors import CreationTimeoutError
+
+        err = CreationTimeoutError(limit_seconds=120)
+        assert err.limit_seconds == 120
+        assert "120" in str(err)
+
+    def test_creation_timeout_error_custom_message(self):
+        from simulation_harness.utils.errors import CreationTimeoutError
+
+        err = CreationTimeoutError(limit_seconds=60, message="timed out after 60s")
+        assert str(err) == "timed out after 60s"
+
+    def test_creation_timeout_error_is_exception(self):
+        from simulation_harness.utils.errors import CreationTimeoutError
+
+        err = CreationTimeoutError(limit_seconds=30)
+        assert isinstance(err, Exception)
+
+
 # Made with Bob

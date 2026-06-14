@@ -53,4 +53,33 @@ class PortInUseError(Exception):
     pass
 
 
+class SimulationNotReadyError(Exception):
+    """Raised when an operation requires a ready simulation but one exists in a non-ready state."""
+
+    def __init__(
+        self,
+        name: str,
+        status: str,
+        retry_after_seconds: int = 2,
+        message: str | None = None,
+    ):
+        self.name = name
+        self.status = status
+        self.retry_after_seconds = retry_after_seconds
+        super().__init__(
+            message
+            or f"Simulation '{name}' is not ready (status={status}); retry in {retry_after_seconds}s."
+        )
+
+
+class CreationTimeoutError(Exception):
+    """Raised when simulation creation exceeds the configured wall-clock budget."""
+
+    def __init__(self, limit_seconds: int, message: str | None = None):
+        self.limit_seconds = limit_seconds
+        super().__init__(
+            message or f"Simulation creation exceeded {limit_seconds}s budget."
+        )
+
+
 # Made with Bob
