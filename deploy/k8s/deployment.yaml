@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simulation-harness
+  namespace: simulation-harness
+  labels:
+    app.kubernetes.io/name: simulation-harness
+    app.kubernetes.io/component: server
+spec:
+  replicas: 1   # session state is per-instance; >1 needs out-of-band routing.
+  strategy:
+    type: Recreate   # avoids two pods owning the same MCP simulation slot.
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: simulation-harness
+      app.kubernetes.io/component: server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: simulation-harness
+        app.kubernetes.io/component: server
+    spec:
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: harness
+          # Replace tag at deploy time (e.g. with kustomize image override).
+          image: ghcr.io/REPLACE_ORG/simulation-harness:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8086
+              protocol: TCP
+          envFrom:
+            - secretRef:
+                name: harness-secrets
+          env:
+            - name: HARNESS_CONFIG_PATH
+              value: /app/config/harness.yaml
+            - name: HARNESS_LOG_LEVEL
+              value: INFO
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+              readOnly: true
+            - name: skills-store
+              mountPath: /app/skills-store
+            - name: logs
+              mountPath: /app/logs
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 3
+            failureThreshold: 20
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: false   # uv writes bytecode caches at runtime.
+      volumes:
+        - name: config
+          configMap:
+            name: harness-config
+        - name: skills-store
+          emptyDir: {}
+        - name: logs
+          emptyDir: {}

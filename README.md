@@ -315,39 +315,30 @@ simulation-harness/
 └── skills/                 # Generated skill definitions
 ```
 
-## Deployment
+## Docker / Kubernetes
 
-### Docker
-
-```bash
-# Build image
-docker build -t simulation-harness:latest .
-
-# Run container
-docker run -p 8000:8000 \
-  -e OPENAI_API_KEY=your-key \
-  -v $(pwd)/config:/app/config \
-  -v $(pwd)/skills:/app/skills \
-  simulation-harness:latest
-```
-
-### Kubernetes
+Build and run the harness as a container, or deploy it to a Kubernetes cluster.
 
 ```bash
-# Apply manifests
-kubectl apply -f k8s/
+# Local
+docker build -t simulation-harness:dev .
+docker run --rm -p 8086:8086 -e LLM_API_KEY="$LLM_API_KEY" simulation-harness:dev
 
-# Check status
-kubectl get pods -l app=simulation-harness
+# docker compose
+LLM_API_KEY=... docker compose up -d
+
+# Kubernetes
+kubectl apply -k deploy/k8s/
 ```
+
+See [`deploy/README.md`](deploy/README.md) for the full env-var reference,
+probe semantics, and rollout commands.
 
 **Deployment Notes:**
 - Each instance hosts exactly one simulation (one OpenAPI spec → one skill → one MCP endpoint)
 - Multi-service orchestration is handled at the deployment layer (multiple instances)
 - The MCP URL is the simulation identifier
 - Phase 1 is single-tenant per instance; deploy more instances for concurrent users
-
-See [`docs/design/DESIGN.md`](docs/design/DESIGN.md) for detailed deployment configurations.
 
 ## Simulate CLI
 

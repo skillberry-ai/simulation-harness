@@ -11,9 +11,10 @@ class TestMainModule:
     """Test the __main__ module startup."""
 
     @patch("simulation_harness.__main__.uvicorn.run")
+    @patch("simulation_harness.__main__.apply_env_overrides", side_effect=lambda c: c)
     @patch("simulation_harness.__main__.load_config")
     def test_main_uses_configured_host_and_port(
-        self, mock_load_config, mock_uvicorn_run
+        self, mock_load_config, mock_apply_env, mock_uvicorn_run
     ):
         """Test that main() uses host and port from configuration."""
         mock_config = Mock()
@@ -31,8 +32,11 @@ class TestMainModule:
         assert call_kwargs["port"] == 9000
 
     @patch("simulation_harness.__main__.uvicorn.run")
+    @patch("simulation_harness.__main__.apply_env_overrides", side_effect=lambda c: c)
     @patch("simulation_harness.__main__.load_config")
-    def test_main_uses_default_host_and_port(self, mock_load_config, mock_uvicorn_run):
+    def test_main_uses_default_host_and_port(
+        self, mock_load_config, mock_apply_env, mock_uvicorn_run
+    ):
         """Test that main() uses default host and port when not configured."""
         mock_config = Mock()
         mock_config.server.host = "localhost"
@@ -49,8 +53,11 @@ class TestMainModule:
         assert call_kwargs["port"] == 8000
 
     @patch("simulation_harness.__main__.uvicorn.run")
+    @patch("simulation_harness.__main__.apply_env_overrides", side_effect=lambda c: c)
     @patch("simulation_harness.__main__.load_config")
-    def test_main_passes_app_to_uvicorn(self, mock_load_config, mock_uvicorn_run):
+    def test_main_passes_app_to_uvicorn(
+        self, mock_load_config, mock_apply_env, mock_uvicorn_run
+    ):
         """Test that main() passes the correct app string to uvicorn."""
         mock_config = Mock()
         mock_config.server.host = "localhost"
@@ -66,9 +73,10 @@ class TestMainModule:
         assert call_args[0] == "simulation_harness.main:app"
 
     @patch("simulation_harness.__main__.uvicorn.run")
+    @patch("simulation_harness.__main__.apply_env_overrides", side_effect=lambda c: c)
     @patch("simulation_harness.__main__.load_config")
     def test_main_loads_config_before_starting_uvicorn(
-        self, mock_load_config, mock_uvicorn_run
+        self, mock_load_config, mock_apply_env, mock_uvicorn_run
     ):
         """Test that main() loads config and passes its host/port to uvicorn."""
         mock_config = Mock()

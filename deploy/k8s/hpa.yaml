@@ -1,0 +1,23 @@
+# Note: a single harness pod owns its in-memory simulation. Scaling to >1
+# replicas means each replica has its own active simulation — clients must
+# either use a sticky LB or accept that creates land on different pods.
+# This HPA is opt-in and disabled by default in kustomization.yaml.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: simulation-harness
+  namespace: simulation-harness
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: simulation-harness
+  minReplicas: 1
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75

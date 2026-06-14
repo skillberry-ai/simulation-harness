@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 
 from simulation_harness.api.dependencies import get_simulation_host, get_skill_registry
 from simulation_harness.api.v1.simulations import router as simulations_router
+from simulation_harness.config.env_overrides import apply_env_overrides
 from simulation_harness.config.settings import (
     ConfigValidationError,
     load_config,
@@ -41,7 +42,8 @@ del _dotenv_values, _dotenv_file_vars
 
 try:
     config = load_config(config_path)
-except (FileNotFoundError, ConfigValidationError) as e:
+    config = apply_env_overrides(config)
+except (FileNotFoundError, ConfigValidationError, ValueError) as e:
     print(f"ERROR: Failed to load configuration: {e}")
     raise
 
@@ -89,6 +91,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     - Shutdown agent
     """
     # Startup
+    app.state.draining = False
     try:
         load_secrets()
     except Exception as e:
@@ -115,6 +118,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
     # Shutdown
+    app.state.draining = True
     logger.info("=" * 80)
     logger.info("Simulation Harness shutting down")
     logger.info("=" * 80)
@@ -454,6 +458,23 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
 async def health_check() -> dict[str, str]:
     """Health check endpoint."""
     return {"status": "healthy"}
+
+
+@app.get("/healthz", tags=["health"])
+async def liveness_probe() -> dict[str, str]:
+    """Kubernetes liveness probe — returns 200 once the process is up."""
+    return {"status": "ok"}
+
+
+@app.get("/readyz", tags=["health"])
+async def readiness_probe() -> JSONResponse:
+    """Kubernetes readiness probe — 503 once the app starts draining on shutdown."""
+    if getattr(app.state, "draining", False):
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "draining"},
+        )
+    return JSONResponse(status_code=200, content={"status": "ready"})
 
 
 logger.info("FastAPI application initialized")
