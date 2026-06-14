@@ -178,6 +178,7 @@ async def create_simulation(
     },
 )
 async def get_simulation(
+    request: Request,
     simulation_host: SimulationHostDep,
 ) -> SimulationResponse:
     """Get current simulation status.
@@ -202,11 +203,12 @@ async def get_simulation(
     # Build response
     session_state = instance.get_session_state()
 
+    base_url = str(request.base_url).rstrip("/")
     return SimulationResponse(
         name=instance.spec.name,
         status="active",
         session_state=session_state,
-        mcp_endpoint=f"/mcp/{instance.spec.name}",
+        mcp_url=f"{base_url}/mcp/{instance.spec.name}",
         created_at=instance.created_at,
     )
 

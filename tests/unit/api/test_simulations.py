@@ -211,7 +211,8 @@ class TestGetSimulation:
         assert data["session_state"]["tool_call_count"] == 0
         assert data["session_state"]["max_messages"] == 100
         assert data["session_state"]["queue_depth"] == 0
-        assert "mcp_endpoint" in data
+        assert "mcp_url" in data
+        assert data["mcp_url"] == "http://testserver/mcp/test-api"
         assert "created_at" in data
 
     @pytest.mark.asyncio
