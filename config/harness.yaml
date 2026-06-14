@@ -20,6 +20,9 @@ sessions:
   idle_timeout_seconds: 3600
   max_concurrent_queue_depth: 8
 
+creation:
+  max_duration_seconds: 120
+
 mcp:
   transport: sse  # or streamable_http
 

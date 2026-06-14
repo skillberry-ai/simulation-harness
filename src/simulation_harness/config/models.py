@@ -48,6 +48,19 @@ class SessionsConfig(BaseModel):
     )
 
 
+class CreationConfig(BaseModel):
+    """Async simulation creation configuration."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    max_duration_seconds: int = Field(
+        120,
+        gt=0,
+        description="Wall-clock budget for async simulation creation; "
+        "exceeded creations transition to failed with code 'creation_timeout'.",
+    )
+
+
 class MCPConfig(BaseModel):
     """MCP transport configuration."""
 
@@ -85,6 +98,10 @@ class HarnessConfig(BaseModel):
     llm: LLMConfig
     skills: SkillsConfig
     sessions: SessionsConfig
+    creation: CreationConfig = Field(
+        default_factory=CreationConfig,
+        description="Async simulation-creation tuning.",
+    )
     mcp: MCPConfig
     server: ServerSettings = Field(
         default_factory=ServerSettings, description="Server configuration"
