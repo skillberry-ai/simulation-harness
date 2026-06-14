@@ -6,7 +6,11 @@ import pytest
 from pydantic import ValidationError
 
 from simulation_harness.models.domain import SessionState
-from simulation_harness.models.responses import SimulationResponse
+from simulation_harness.models.responses import ProgressPayload, SimulationResponse
+
+
+def _make_progress(now):
+    return ProgressPayload(phase=None, started_at=now, updated_at=now)
 
 
 class TestSimulationResponse:
@@ -26,29 +30,42 @@ class TestSimulationResponse:
 
         response = SimulationResponse(
             name="test-simulation",
-            status="running",
+            status="ready",
             session_state=session_state,
             mcp_url="http://localhost:8000/mcp/test-simulation",
             created_at=now,
+            progress=_make_progress(now),
         )
 
         assert response.name == "test-simulation"
-        assert response.status == "running"
+        assert response.status == "ready"
         assert response.session_state == session_state
         assert response.mcp_url == "http://localhost:8000/mcp/test-simulation"
         assert response.created_at == now
 
-    def test_all_fields_required(self):
-        """Test that all fields are required."""
+    def test_required_fields(self):
+        """Test that name, status, created_at, and progress are required."""
         with pytest.raises(ValidationError) as exc_info:
             SimulationResponse()
 
         error_str = str(exc_info.value)
         assert "name" in error_str
         assert "status" in error_str
-        assert "session_state" in error_str
-        assert "mcp_url" in error_str
         assert "created_at" in error_str
+        assert "progress" in error_str
+
+    def test_optional_fields_default_to_none(self):
+        """Test that session_state, mcp_url, and error default to None."""
+        now = datetime.now(timezone.utc)
+        response = SimulationResponse(
+            name="test-simulation",
+            status="pending",
+            created_at=now,
+            progress=_make_progress(now),
+        )
+        assert response.session_state is None
+        assert response.mcp_url is None
+        assert response.error is None
 
     def test_session_state_must_be_valid(self):
         """Test that session_state must be a valid SessionState object."""
@@ -57,10 +74,11 @@ class TestSimulationResponse:
         with pytest.raises(ValidationError) as exc_info:
             SimulationResponse(
                 name="test-simulation",
-                status="running",
+                status="ready",
                 session_state={"invalid": "dict"},
                 mcp_url="http://localhost:8000/mcp/test-simulation",
                 created_at=now,
+                progress=_make_progress(now),
             )
 
         assert "session_state" in str(exc_info.value)
@@ -68,22 +86,13 @@ class TestSimulationResponse:
     def test_created_at_must_be_datetime(self):
         """Test that created_at must be a datetime object."""
         now = datetime.now(timezone.utc)
-        session_state = SessionState(
-            tool_call_count=0,
-            max_messages=100,
-            idle_timeout_seconds=300,
-            last_activity=now,
-            queue_depth=0,
-            max_queue_depth=10,
-        )
 
         with pytest.raises(ValidationError) as exc_info:
             SimulationResponse(
                 name="test-simulation",
                 status="running",
-                session_state=session_state,
-                mcp_url="http://localhost:8000/mcp/test-simulation",
                 created_at="not a datetime",
+                progress=_make_progress(now),
             )
 
         assert "created_at" in str(exc_info.value)
@@ -102,16 +111,17 @@ class TestSimulationResponse:
 
         response = SimulationResponse(
             name="test-simulation",
-            status="running",
+            status="ready",
             session_state=session_state,
             mcp_url="http://localhost:8000/mcp/test-simulation",
             created_at=now,
+            progress=_make_progress(now),
         )
 
         response_dict = response.model_dump()
 
         assert response_dict["name"] == "test-simulation"
-        assert response_dict["status"] == "running"
+        assert response_dict["status"] == "ready"
         assert response_dict["session_state"]["tool_call_count"] == 3
         assert response_dict["mcp_url"] == "http://localhost:8000/mcp/test-simulation"
         assert isinstance(response_dict["created_at"], datetime)

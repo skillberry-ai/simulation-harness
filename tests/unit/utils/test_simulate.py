@@ -39,11 +39,28 @@ SAMPLE_SPEC = {
     "paths": {},
 }
 
+SAMPLE_PENDING = {
+    "name": "test",
+    "status": "pending",
+    "mcp_url": None,
+    "created_at": "2026-06-10T00:00:00",
+    "progress": {
+        "phase": None,
+        "started_at": "2026-06-10T00:00:00",
+        "updated_at": "2026-06-10T00:00:00",
+    },
+}
+
 SAMPLE_RESPONSE = {
     "name": "test",
-    "status": "active",
+    "status": "ready",
     "mcp_url": "http://localhost:8086/mcp/test",
     "created_at": "2026-06-10T00:00:00",
+    "progress": {
+        "phase": None,
+        "started_at": "2026-06-10T00:00:00",
+        "updated_at": "2026-06-10T00:00:00",
+    },
 }
 
 
@@ -55,31 +72,40 @@ def _make_args(tmp_path, extra=None):
     return [str(spec_file), "--config", str(config_file)] + (extra or [])
 
 
+def _make_mock_response(payload):
+    resp = MagicMock()
+    resp.read.return_value = json.dumps(payload).encode()
+    resp.__enter__ = lambda s: s
+    resp.__exit__ = MagicMock(return_value=False)
+    return resp
+
+
 def test_main_success_prints_json(tmp_path, capsys):
-    mock_response = MagicMock()
-    mock_response.read.return_value = json.dumps(SAMPLE_RESPONSE).encode()
-    mock_response.__enter__ = lambda s: s
-    mock_response.__exit__ = MagicMock(return_value=False)
+    call_count = [0]
+
+    def fake_urlopen(req):
+        call_count[0] += 1
+        if req.method == "POST":
+            return _make_mock_response(SAMPLE_PENDING)
+        return _make_mock_response(SAMPLE_RESPONSE)
 
     with patch("sys.argv", ["simulate.py"] + _make_args(tmp_path)):
-        with patch("simulate.urlopen", return_value=mock_response):
+        with patch("simulate.urlopen", fake_urlopen):
             simulate.main()
 
     out = capsys.readouterr().out
-    assert json.loads(out) == SAMPLE_RESPONSE
+    json_start = out.index("{")
+    assert json.loads(out[json_start:]) == SAMPLE_RESPONSE
 
 
 def test_main_passes_name_flag(tmp_path):
-    mock_response = MagicMock()
-    mock_response.read.return_value = json.dumps(SAMPLE_RESPONSE).encode()
-    mock_response.__enter__ = lambda s: s
-    mock_response.__exit__ = MagicMock(return_value=False)
-
     captured_request = {}
 
     def fake_urlopen(req):
-        captured_request["body"] = json.loads(req.data.decode())
-        return mock_response
+        if req.method == "POST":
+            captured_request["body"] = json.loads(req.data.decode())
+            return _make_mock_response(SAMPLE_PENDING)
+        return _make_mock_response(SAMPLE_RESPONSE)
 
     with patch(
         "sys.argv", ["simulate.py"] + _make_args(tmp_path, ["--name", "my-sim"])
@@ -91,16 +117,13 @@ def test_main_passes_name_flag(tmp_path):
 
 
 def test_main_passes_regenerate_skill_flag(tmp_path):
-    mock_response = MagicMock()
-    mock_response.read.return_value = json.dumps(SAMPLE_RESPONSE).encode()
-    mock_response.__enter__ = lambda s: s
-    mock_response.__exit__ = MagicMock(return_value=False)
-
     captured_request = {}
 
     def fake_urlopen(req):
-        captured_request["body"] = json.loads(req.data.decode())
-        return mock_response
+        if req.method == "POST":
+            captured_request["body"] = json.loads(req.data.decode())
+            return _make_mock_response(SAMPLE_PENDING)
+        return _make_mock_response(SAMPLE_RESPONSE)
 
     with patch(
         "sys.argv", ["simulate.py"] + _make_args(tmp_path, ["--regenerate-skill"])
