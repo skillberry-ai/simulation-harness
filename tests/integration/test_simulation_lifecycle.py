@@ -415,4 +415,145 @@ class TestSessionReset:
         assert response.status_code == 404
 
 
+class TestMCPPortConfiguration:
+    """Test mcp_port field on CreateSimulationRequest."""
+
+    def test_create_simulation_with_mcp_port_returns_sidecar_url(
+        self, app_client, valid_openapi_spec
+    ):
+        """POST /simulation with mcp_port returns fully-qualified sidecar URL."""
+        from simulation_harness.mcp_integration.sidecar_server import SidecarMCPServer
+        from unittest.mock import AsyncMock, patch
+
+        with patch(
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+        ) as mock_gen, patch.object(SidecarMCPServer, "start", new_callable=AsyncMock):
+            mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
+
+            response = app_client.post(
+                "/api/v1/simulation",
+                json={
+                    "openapi_spec": valid_openapi_spec,
+                    "regenerate_skill": False,
+                    "mcp_port": 9000,
+                },
+            )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["mcp_url"] == "http://testserver:9000/mcp/test-api"
+
+    def test_create_simulation_without_mcp_port_returns_harness_url(
+        self, app_client, valid_openapi_spec
+    ):
+        """POST /simulation without mcp_port returns harness-relative URL (existing behavior)."""
+        with patch(
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+        ) as mock_gen:
+            mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
+
+            response = app_client.post(
+                "/api/v1/simulation",
+                json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
+            )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["mcp_url"] == "http://testserver/mcp/test-api"
+
+    def test_get_simulation_preserves_mcp_url_after_creation_with_port(
+        self, app_client, valid_openapi_spec
+    ):
+        """GET /simulation returns the same mcp_url as the creation response."""
+        from simulation_harness.mcp_integration.sidecar_server import SidecarMCPServer
+        from unittest.mock import AsyncMock, patch
+
+        with patch(
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+        ) as mock_gen, patch.object(SidecarMCPServer, "start", new_callable=AsyncMock):
+            mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
+
+            create_response = app_client.post(
+                "/api/v1/simulation",
+                json={
+                    "openapi_spec": valid_openapi_spec,
+                    "regenerate_skill": False,
+                    "mcp_port": 9000,
+                },
+            )
+            assert create_response.status_code == 201
+            create_url = create_response.json()["mcp_url"]
+
+        get_response = app_client.get("/api/v1/simulation")
+        assert get_response.status_code == 200
+        assert get_response.json()["mcp_url"] == create_url
+        assert create_url == "http://testserver:9000/mcp/test-api"
+
+    def test_create_simulation_port_in_use_returns_409(
+        self, app_client, valid_openapi_spec
+    ):
+        """POST /simulation with an already-bound mcp_port returns 409."""
+        import socket
+        from unittest.mock import patch
+
+        with patch(
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+        ) as mock_gen:
+            mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
+
+            # Bind a port ourselves so the pre-check will fail
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind(("0.0.0.0", 0))
+            taken_port = sock.getsockname()[1]
+            try:
+                response = app_client.post(
+                    "/api/v1/simulation",
+                    json={
+                        "openapi_spec": valid_openapi_spec,
+                        "regenerate_skill": False,
+                        "mcp_port": taken_port,
+                    },
+                )
+            finally:
+                sock.close()
+
+        assert response.status_code == 409
+        assert str(taken_port) in response.json()["detail"]
+
+    def test_delete_simulation_tears_down_sidecar(
+        self, app_client, valid_openapi_spec
+    ):
+        """DELETE /simulation stops the sidecar server if one was started."""
+        from simulation_harness.mcp_integration.sidecar_server import SidecarMCPServer
+        from unittest.mock import AsyncMock, patch
+
+        stop_calls = []
+
+        async def fake_stop(self):
+            stop_calls.append(True)
+
+        with patch(
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill"
+        ) as mock_gen, patch.object(
+            SidecarMCPServer, "start", new_callable=AsyncMock
+        ), patch.object(SidecarMCPServer, "stop", fake_stop):
+            mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
+
+            create_response = app_client.post(
+                "/api/v1/simulation",
+                json={
+                    "openapi_spec": valid_openapi_spec,
+                    "regenerate_skill": False,
+                    "mcp_port": 9000,
+                },
+            )
+            assert create_response.status_code == 201
+
+            delete_response = app_client.delete("/api/v1/simulation")
+            assert delete_response.status_code == 204
+
+        assert len(stop_calls) >= 1
+
+
 # Made with Bob
