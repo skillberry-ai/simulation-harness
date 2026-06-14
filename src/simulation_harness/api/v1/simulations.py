@@ -13,10 +13,21 @@ from simulation_harness.openapi.parser import OpenAPISpec, validate_openapi_dict
 from simulation_harness.utils.errors import (
     SimulationAlreadyExistsError,
     OpenAPIValidationError,
+    PortInUseError,
 )
 from simulation_harness.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def _build_mcp_url(request: Request, simulation_name: str, mcp_port: int | None) -> str:
+    """Build the MCP URL for the simulation response."""
+    if mcp_port is not None:
+        host = request.url.hostname
+        return f"http://{host}:{mcp_port}/mcp/{simulation_name}"
+    base_url = str(request.base_url).rstrip("/")
+    return f"{base_url}/mcp/{simulation_name}"
+
 
 router = APIRouter()
 
@@ -56,7 +67,7 @@ async def validate_body_size(request: Request) -> None:
         "or pass `regenerate_skill: true` to force skill regeneration for the same name."
     ),
     responses={
-        409: {"description": "A simulation is already active — delete it first"},
+        409: {"description": "A simulation is already active — delete it first, or port is in use"},
         413: {"description": "Request body exceeds the 10 MB limit"},
         422: {"description": "Invalid or unprocessable OpenAPI specification"},
         500: {"description": "Skill generation failed or internal server error"},
@@ -137,9 +148,14 @@ async def create_simulation(
         # Create simulation instance with skill directory
         try:
             instance = await simulation_host.create_simulation(
-                spec, skill_dir=skill_dir
+                spec, skill_dir=skill_dir, mcp_port=body.mcp_port
             )
         except SimulationAlreadyExistsError as e:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(e),
+            )
+        except PortInUseError as e:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=str(e),
@@ -147,13 +163,12 @@ async def create_simulation(
 
         # Build response
         session_state = instance.get_session_state()
-
-        base_url = str(request.base_url).rstrip("/")
+        mcp_url = _build_mcp_url(request, simulation_name, instance.mcp_port)
         return SimulationResponse(
             name=simulation_name,
             status="active",
             session_state=session_state,
-            mcp_url=f"{base_url}/mcp/{simulation_name}",
+            mcp_url=mcp_url,
             created_at=instance.created_at,
         )
 
@@ -203,12 +218,12 @@ async def get_simulation(
     # Build response
     session_state = instance.get_session_state()
 
-    base_url = str(request.base_url).rstrip("/")
+    mcp_url = _build_mcp_url(request, instance.spec.name, instance.mcp_port)
     return SimulationResponse(
         name=instance.spec.name,
         status="active",
         session_state=session_state,
-        mcp_url=f"{base_url}/mcp/{instance.spec.name}",
+        mcp_url=mcp_url,
         created_at=instance.created_at,
     )
 

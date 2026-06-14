@@ -74,6 +74,7 @@ def mock_simulation_instance():
     instance.get_session_state.return_value = session_state
     instance.reset_session = AsyncMock()
     instance.get_state_snapshot = MagicMock()
+    instance.mcp_port = None
     return instance
 
 
@@ -187,6 +188,76 @@ class TestCreateSimulation:
         detail = response.json()["detail"].lower()
         assert "openapi" in detail or "validation" in detail or "info" in detail
 
+    @pytest.mark.asyncio
+    async def test_create_simulation_with_mcp_port_returns_sidecar_url(
+        self,
+        client,
+        valid_openapi_spec,
+        mock_simulation_host,
+        mock_skill_registry,
+        mock_simulation_instance,
+    ):
+        """When mcp_port is provided, mcp_url uses that port."""
+        mock_skill_registry.ensure_skill.return_value = Path("/path/to/skill.md")
+        mock_simulation_instance.mcp_port = 9000
+        mock_simulation_host.create_simulation.return_value = mock_simulation_instance
+
+        response = client.post(
+            "/api/v1/simulation",
+            json={"openapi_spec": valid_openapi_spec, "mcp_port": 9000},
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["mcp_url"] == "http://testserver:9000/mcp/test-api"
+
+    @pytest.mark.asyncio
+    async def test_create_simulation_without_mcp_port_returns_harness_url(
+        self,
+        client,
+        valid_openapi_spec,
+        mock_simulation_host,
+        mock_skill_registry,
+        mock_simulation_instance,
+    ):
+        """When mcp_port is absent, mcp_url uses the harness base URL (unchanged behavior)."""
+        mock_skill_registry.ensure_skill.return_value = Path("/path/to/skill.md")
+        mock_simulation_instance.mcp_port = None
+        mock_simulation_host.create_simulation.return_value = mock_simulation_instance
+
+        response = client.post(
+            "/api/v1/simulation",
+            json={"openapi_spec": valid_openapi_spec},
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["mcp_url"] == "http://testserver/mcp/test-api"
+
+    @pytest.mark.asyncio
+    async def test_create_simulation_port_in_use_returns_409(
+        self,
+        client,
+        valid_openapi_spec,
+        mock_simulation_host,
+        mock_skill_registry,
+    ):
+        """When sidecar port is already in use, returns 409."""
+        from simulation_harness.utils.errors import PortInUseError
+
+        mock_skill_registry.ensure_skill.return_value = Path("/path/to/skill.md")
+        mock_simulation_host.create_simulation.side_effect = PortInUseError(
+            "Port 9000 is already in use"
+        )
+
+        response = client.post(
+            "/api/v1/simulation",
+            json={"openapi_spec": valid_openapi_spec, "mcp_port": 9000},
+        )
+
+        assert response.status_code == 409
+        assert "9000" in response.json()["detail"]
+
 
 class TestGetSimulation:
     """Tests for GET /api/v1/simulation endpoint."""
@@ -250,6 +321,20 @@ class TestGetSimulation:
         assert response.status_code == 404
         detail = response.json()["detail"].lower()
         assert "simulation" in detail and "found" in detail
+
+    @pytest.mark.asyncio
+    async def test_get_simulation_with_mcp_port_returns_sidecar_url(
+        self, client, mock_simulation_host, mock_simulation_instance
+    ):
+        """GET /simulation returns sidecar mcp_url when mcp_port is set."""
+        mock_simulation_instance.mcp_port = 9000
+        mock_simulation_host.get_simulation.return_value = mock_simulation_instance
+
+        response = client.get("/api/v1/simulation")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["mcp_url"] == "http://testserver:9000/mcp/test-api"
 
 
 class TestDeleteSimulation:
