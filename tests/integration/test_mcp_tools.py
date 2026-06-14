@@ -177,7 +177,7 @@ class TestMCPToolListing:
             # Here we verify the simulation was created successfully
             data = response.json()
             assert data["name"] == "test-api"
-            assert "mcp_endpoint" in data
+            assert "mcp_url" in data
 
 
 class TestMCPToolExecution:

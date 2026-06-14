@@ -38,7 +38,7 @@ SAMPLE_SPEC = {"openapi": "3.0.0", "info": {"title": "Test", "version": "1.0"}, 
 SAMPLE_RESPONSE = {
     "name": "test",
     "status": "active",
-    "mcp_endpoint": "/mcp/test",
+    "mcp_url": "http://localhost:8086/mcp/test",
     "created_at": "2026-06-10T00:00:00",
 }
 

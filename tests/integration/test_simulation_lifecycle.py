@@ -156,7 +156,7 @@ class TestSimulationCreation:
         assert data["status"] == "active"
         assert "session_state" in data
         assert data["session_state"]["tool_call_count"] == 0
-        assert data["mcp_endpoint"] == "/mcp/test-api"
+        assert data["mcp_url"] == "http://testserver/mcp/test-api"
         assert "created_at" in data
 
     def test_create_simulation_openapi_31_accepted(
