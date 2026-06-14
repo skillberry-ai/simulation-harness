@@ -384,9 +384,7 @@ async def put_simulation_database(
     if record.status != SimulationStatus.READY or record.instance is None:
         raise SimulationNotReadyError(name=record.name, status=record.status.value)
 
-    await simulation_host.replace_database(
-        new_db=body, skill_registry=skill_registry
-    )
+    await simulation_host.replace_database(new_db=body, skill_registry=skill_registry)
     return {"message": "Database replaced; simulation reset"}
 
 

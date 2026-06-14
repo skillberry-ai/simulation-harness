@@ -715,7 +715,11 @@ class TestGetSimulationDatabase:
     """Tests for GET /api/v1/simulation/database endpoint."""
 
     async def test_returns_db_for_active_skill(
-        self, client, mock_simulation_host, mock_skill_registry, mock_simulation_instance
+        self,
+        client,
+        mock_simulation_host,
+        mock_skill_registry,
+        mock_simulation_instance,
     ):
         record = SimulationRecord.declare(name="demo-api")
         record.transition(SimulationStatus.INITIALIZING, phase="agent_init")
@@ -731,16 +735,12 @@ class TestGetSimulationDatabase:
         assert resp.json() == {"items": [{"id": "1", "name": "alpha"}]}
         mock_skill_registry.read_db.assert_called_once_with("demo-api")
 
-    async def test_no_simulation_returns_404(
-        self, client, mock_simulation_host
-    ):
+    async def test_no_simulation_returns_404(self, client, mock_simulation_host):
         mock_simulation_host.get_record = AsyncMock(return_value=None)
         resp = client.get("/api/v1/simulation/database")
         assert resp.status_code == 404
 
-    async def test_pending_returns_503(
-        self, client, mock_simulation_host
-    ):
+    async def test_pending_returns_503(self, client, mock_simulation_host):
         record = SimulationRecord.declare(name="demo-api")
         record.transition(SimulationStatus.GENERATING_SKILL, phase="skill_generation")
         mock_simulation_host.get_record = AsyncMock(return_value=record)
@@ -748,24 +748,37 @@ class TestGetSimulationDatabase:
         assert resp.status_code == 503
 
     async def test_missing_db_file_returns_500(
-        self, client, mock_simulation_host, mock_skill_registry, mock_simulation_instance
+        self,
+        client,
+        mock_simulation_host,
+        mock_skill_registry,
+        mock_simulation_instance,
     ):
         record = SimulationRecord.declare(name="demo-api")
         record.transition(SimulationStatus.INITIALIZING, phase="agent_init")
         record.mark_ready(mock_simulation_instance)
         mock_simulation_host.get_record = AsyncMock(return_value=record)
-        mock_skill_registry.read_db = MagicMock(side_effect=FileNotFoundError("missing"))
+        mock_skill_registry.read_db = MagicMock(
+            side_effect=FileNotFoundError("missing")
+        )
 
         resp = client.get("/api/v1/simulation/database")
         assert resp.status_code == 500
-        assert "db.json" in resp.json()["detail"].lower() or "skill bundle" in resp.json()["detail"].lower()
+        assert (
+            "db.json" in resp.json()["detail"].lower()
+            or "skill bundle" in resp.json()["detail"].lower()
+        )
 
 
 class TestGetSimulationSchema:
     """Tests for GET /api/v1/simulation/schema endpoint."""
 
     async def test_returns_schema_for_active_skill(
-        self, client, mock_simulation_host, mock_skill_registry, mock_simulation_instance
+        self,
+        client,
+        mock_simulation_host,
+        mock_skill_registry,
+        mock_simulation_instance,
     ):
         record = SimulationRecord.declare(name="demo-api")
         record.transition(SimulationStatus.INITIALIZING, phase="agent_init")
@@ -798,7 +811,11 @@ class TestPutSimulationDatabase:
     """Tests for PUT /api/v1/simulation/database endpoint."""
 
     async def test_valid_put_writes_and_resets(
-        self, client, mock_simulation_host, mock_skill_registry, mock_simulation_instance
+        self,
+        client,
+        mock_simulation_host,
+        mock_skill_registry,
+        mock_simulation_instance,
     ):
         record = SimulationRecord.declare(name="demo-api")
         record.transition(SimulationStatus.INITIALIZING, phase="agent_init")

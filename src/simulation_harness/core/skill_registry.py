@@ -119,7 +119,6 @@ class SkillRegistry:
             )
             raise
 
-
     def _skill_path(self, simulation_name: str, filename: str) -> Path:
         return self.skills_folder / simulation_name / filename
 
@@ -127,7 +126,9 @@ class SkillRegistry:
         """Read schema.json for a skill. Raises FileNotFoundError if missing."""
         path = self._skill_path(simulation_name, "schema.json")
         if not path.exists():
-            raise FileNotFoundError(f"schema.json not found for skill '{simulation_name}'")
+            raise FileNotFoundError(
+                f"schema.json not found for skill '{simulation_name}'"
+            )
         return json.loads(path.read_text())
 
     def read_db(self, simulation_name: str) -> dict[str, Any]:
@@ -150,9 +151,7 @@ class SkillRegistry:
             jsonschema.validate(instance=db, schema=schema)
         except jsonschema.ValidationError as e:
             json_path = ".".join(str(p) for p in e.absolute_path) or "<root>"
-            raise DatabaseValidationError(
-                message=e.message, json_path=json_path
-            ) from e
+            raise DatabaseValidationError(message=e.message, json_path=json_path) from e
         except jsonschema.SchemaError as e:
             raise DatabaseValidationError(
                 message=f"schema is not a valid JSON Schema: {e.message}"

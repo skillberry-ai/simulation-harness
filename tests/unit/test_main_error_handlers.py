@@ -1,6 +1,5 @@
 """Verify exception handlers wired in main.py map domain errors to status codes."""
 
-import os
 import tempfile
 
 import pytest

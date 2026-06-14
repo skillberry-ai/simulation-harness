@@ -1,6 +1,8 @@
 """Tests for SkillRegistry."""
 
+import json
 from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
 from simulation_harness.core.skill_registry import SkillRegistry
@@ -390,9 +392,6 @@ async def test_ensure_skill_reuses_when_all_four_files_exist(
 
     assert result == skill_file
     mock_generator.generate_skill.assert_not_called()
-
-
-import json
 
 
 @pytest.fixture

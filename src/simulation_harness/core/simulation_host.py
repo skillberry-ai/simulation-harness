@@ -192,7 +192,6 @@ class SimulationHost:
             except Exception:
                 logger.exception("Instance shutdown failed during delete")
 
-
     async def replace_database(
         self,
         *,
