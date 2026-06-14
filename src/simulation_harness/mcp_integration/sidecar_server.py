@@ -5,7 +5,7 @@ import socket as _socket
 from typing import TYPE_CHECKING
 
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from starlette.responses import Response as StarletteResponse
 
 from simulation_harness.config.models import MCPConfig, TransportType
@@ -73,6 +73,9 @@ class SidecarMCPServer:
             if self._server_task.done():
                 exc = self._server_task.exception()
                 if exc:
+                    import errno as _errno
+                    if isinstance(exc, OSError) and exc.errno in (_errno.EADDRINUSE, _errno.EACCES):
+                        raise PortInUseError(f"Port {self._port} is already in use") from exc
                     raise exc
                 break
             if asyncio.get_running_loop().time() > deadline:
@@ -90,7 +93,7 @@ class SidecarMCPServer:
         if self._server_task is not None:
             try:
                 await asyncio.wait_for(self._server_task, timeout=5.0)
-            except (asyncio.TimeoutError, asyncio.CancelledError):
+            except asyncio.TimeoutError:
                 self._server_task.cancel()
         logger.info(f"Sidecar MCP server on port {self._port} stopped")
 
@@ -133,7 +136,6 @@ class SidecarMCPServer:
                 await sse_transport.handle_post_message(
                     request.scope, request.receive, _capture
                 )
-                from fastapi import Response
                 return Response(
                     content=captured["body"],
                     status_code=captured["status"],

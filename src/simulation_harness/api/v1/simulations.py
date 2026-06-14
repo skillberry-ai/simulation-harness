@@ -24,7 +24,8 @@ def _build_mcp_url(request: Request, simulation_name: str, mcp_port: int | None)
     """Build the MCP URL for the simulation response."""
     if mcp_port is not None:
         host = request.url.hostname
-        return f"http://{host}:{mcp_port}/mcp/{simulation_name}"
+        scheme = request.url.scheme
+        return f"{scheme}://{host}:{mcp_port}/mcp/{simulation_name}"
     base_url = str(request.base_url).rstrip("/")
     return f"{base_url}/mcp/{simulation_name}"
 
