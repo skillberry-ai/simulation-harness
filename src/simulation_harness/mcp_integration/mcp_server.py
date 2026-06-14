@@ -1,5 +1,6 @@
 """MCP server wrapper for simulation harness."""
 
+import json
 from typing import Any
 
 from mcp.server import Server
@@ -150,33 +151,49 @@ class MCPServerWrapper:
                         TextContent(
                             type="text",
                             text=result.error or "Tool execution failed",
-                        )
+                        ),
+                        TextContent(
+                            type="text",
+                            text=json.dumps({"reason": "tool_execution_failed"}),
+                        ),
                     ],
                     isError=True,
                 )
 
         except SessionExpiredError as e:
-            # Translate session expired error to MCP error
             logger.warning(f"Session expired during tool call: {e}")
             return CallToolResult(
                 content=[
                     TextContent(
                         type="text",
                         text=f"Session expired: {str(e)}",
-                    )
+                    ),
+                    TextContent(
+                        type="text",
+                        text=json.dumps(
+                            {
+                                "reason": "session_expired",
+                                "limit": e.limit,
+                                "observed": e.observed,
+                            }
+                        ),
+                    ),
                 ],
                 isError=True,
             )
 
         except ConcurrentQueueFullError as e:
-            # Translate queue full error to MCP error
             logger.warning(f"Queue full during tool call: {e}")
             return CallToolResult(
                 content=[
                     TextContent(
                         type="text",
                         text=f"Queue full: {str(e)}",
-                    )
+                    ),
+                    TextContent(
+                        type="text",
+                        text=json.dumps({"reason": "concurrent_queue_full"}),
+                    ),
                 ],
                 isError=True,
             )

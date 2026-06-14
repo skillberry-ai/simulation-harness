@@ -1,5 +1,7 @@
 """Tests for MCP server wrapper."""
 
+import json
+
 import pytest
 from unittest.mock import AsyncMock, Mock
 
@@ -162,6 +164,65 @@ async def test_call_tool_with_arguments(mock_simulation_instance):
 
     # Should return success result
     assert result["isError"] is False
+
+
+
+@pytest.mark.asyncio
+async def test_handle_call_tool_session_expired_includes_structured_reason(
+    mock_simulation_instance,
+):
+    """Test that SessionExpiredError returns a JSON content block with reason field."""
+    mock_simulation_instance.execute_tool.side_effect = SessionExpiredError(
+        reason="max_messages_exceeded", limit=100, observed=101
+    )
+
+    wrapper = MCPServerWrapper(mock_simulation_instance)
+    result = await wrapper._handle_call_tool("getTest", {})
+
+    assert result.isError is True
+    assert len(result.content) >= 2
+    structured = json.loads(result.content[-1].text)
+    assert structured["reason"] == "session_expired"
+    assert structured["limit"] == 100
+    assert structured["observed"] == 101
+
+
+@pytest.mark.asyncio
+async def test_handle_call_tool_queue_full_includes_structured_reason(
+    mock_simulation_instance,
+):
+    """Test that ConcurrentQueueFullError returns a JSON content block with reason field."""
+    mock_simulation_instance.execute_tool.side_effect = ConcurrentQueueFullError(
+        "Queue full"
+    )
+
+    wrapper = MCPServerWrapper(mock_simulation_instance)
+    result = await wrapper._handle_call_tool("getTest", {})
+
+    assert result.isError is True
+    assert len(result.content) >= 2
+    structured = json.loads(result.content[-1].text)
+    assert structured["reason"] == "concurrent_queue_full"
+
+
+@pytest.mark.asyncio
+async def test_handle_call_tool_execution_failure_includes_structured_reason(
+    mock_simulation_instance,
+):
+    """Test that tool execution failure returns a JSON content block with reason field."""
+    mock_simulation_instance.execute_tool.return_value = ToolCallResult(
+        success=False,
+        content="",
+        error="Something went wrong",
+    )
+
+    wrapper = MCPServerWrapper(mock_simulation_instance)
+    result = await wrapper._handle_call_tool("getTest", {})
+
+    assert result.isError is True
+    assert len(result.content) >= 2
+    structured = json.loads(result.content[-1].text)
+    assert structured["reason"] == "tool_execution_failed"
 
 
 # Made with Bob

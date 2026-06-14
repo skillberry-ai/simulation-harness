@@ -414,24 +414,31 @@ content-type: application/json
 
 Errors raised inside a tool call are surfaced through the MCP protocol's
 `isError` flag rather than as HTTP errors — the HTTP/SSE transport itself is
-healthy. The `CallToolResult` looks like:
+healthy. Every error `CallToolResult` contains **two content blocks**: a
+human-readable text message followed by a structured JSON payload:
 
 ```json
 {
   "isError": true,
   "content": [
-    {"type": "text", "text": "Session expired: Session expired: max_messages_exceeded (limit=100, observed=101)"}
+    {"type": "text", "text": "Session expired: max_messages_exceeded (limit=100, observed=101)"},
+    {"type": "text", "text": "{\"reason\": \"session_expired\", \"limit\": 100, \"observed\": 101}"}
   ]
 }
 ```
 
-The text body of the error is one of:
+The last content block is always the structured JSON payload. Stable reason
+codes and their extra fields:
 
-- `Session expired: <details>` — session limit reached; recover with
-  `POST /api/v1/simulation/reset`.
-- `Queue full: <details>` — too many concurrent calls; back off and retry.
-- `<tool error message>` — the simulated tool itself returned a failure; the
-  session counter is **not** advanced and the agent thread is preserved.
+| `reason` | Trigger | Extra fields |
+|---|---|---|
+| `session_expired` | Session limit reached | `limit`, `observed` |
+| `concurrent_queue_full` | Queue depth exceeded | — |
+| `tool_execution_failed` | Simulated tool returned a failure | — |
+
+For `session_expired`, recover with `POST /api/v1/simulation/reset`. For
+`concurrent_queue_full`, back off and retry. For `tool_execution_failed`, the
+session counter is **not** advanced and the agent thread is preserved.
 
 Truly unexpected exceptions inside a tool call are not wrapped — they bubble
 through the MCP SDK's standard error path.
