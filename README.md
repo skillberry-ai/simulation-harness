@@ -315,6 +315,25 @@ simulation-harness/
 └── skills/                 # Generated skill definitions
 ```
 
+## Docker / Kubernetes
+
+Build and run the harness as a container, or deploy it to a Kubernetes cluster.
+
+```bash
+# Local
+docker build -t simulation-harness:dev .
+docker run --rm -p 8086:8086 -e LLM_API_KEY="$LLM_API_KEY" simulation-harness:dev
+
+# docker compose
+LLM_API_KEY=... docker compose up -d
+
+# Kubernetes
+kubectl apply -k deploy/k8s/
+```
+
+See [`deploy/README.md`](deploy/README.md) for the full env-var reference,
+probe semantics, and rollout commands.
+
 ## Deployment
 
 ### Docker
