@@ -58,6 +58,7 @@ config/local.yaml
 .harness.pid
 skills-store/
 logs/
+deploy/k8s/secret.yaml
 
 # AI lifecycle artifacts
 docs/plans

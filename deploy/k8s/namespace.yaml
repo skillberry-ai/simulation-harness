@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: simulation-harness
+  labels:
+    app.kubernetes.io/name: simulation-harness
+    app.kubernetes.io/part-of: simulation-harness
