@@ -88,10 +88,10 @@ class HarnessAPIClient:
             duration_ms = (time.time() - start) * 1000
             
             return APIResponse(
-                success=response.status_code == 201,
+                success=response.status_code == 202,
                 status_code=response.status_code,
-                data=response.json() if response.status_code == 201 else None,
-                error=None if response.status_code == 201 else response.text,
+                data=response.json() if response.status_code == 202 else None,
+                error=None if response.status_code == 202 else response.text,
                 duration_ms=duration_ms,
             )
         except Exception as e:
@@ -224,6 +224,26 @@ class HarnessAPIClient:
                 duration_ms=duration_ms,
             )
     
+    async def poll_until_ready(self, timeout: float = 60.0) -> APIResponse:
+        """Poll GET /simulation until status is ready or failed.
+
+        Args:
+            timeout: Maximum seconds to wait before raising TimeoutError
+
+        Returns:
+            APIResponse with final simulation details (status ready or failed)
+
+        Raises:
+            TimeoutError: If simulation does not reach ready/failed within timeout
+        """
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            resp = await self.get_simulation()
+            if resp.data and resp.data.get("status") in ("ready", "failed"):
+                return resp
+            time.sleep(0.5)
+        raise TimeoutError(f"Simulation did not reach ready/failed within {timeout}s")
+
     async def close(self) -> None:
         """Close the HTTP client."""
         await self.client.aclose()

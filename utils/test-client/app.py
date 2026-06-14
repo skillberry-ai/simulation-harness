@@ -157,22 +157,46 @@ with tab2:
             response.duration_ms,
             response.error,
         )
-        
+
         render_response_metrics(
             response.status_code,
             response.duration_ms,
             response.success,
         )
-        
+
         if response.success and response.data:
-            # Update state
-            state.update_simulation(
-                name=response.data.get("name"),
-                status=response.data.get("status"),
-                created_at=datetime.fromisoformat(response.data.get("created_at")),
-                mcp_endpoint=response.data.get("mcp_endpoint"),
-            )
-            render_json_viewer(response.data, "Simulation Created")
+            # If creation is async (pending), poll until ready or failed
+            if response.data.get("status") == "pending":
+                with st.spinner("Waiting for simulation to become ready…"):
+                    async def poll_sim():
+                        client = HarnessAPIClient(state.harness_url)
+                        try:
+                            poll_response = await client.poll_until_ready(timeout=180.0)
+                        except TimeoutError as exc:
+                            poll_response = None
+                            st.error(str(exc))
+                        finally:
+                            await client.close()
+                        return poll_response
+
+                    response = asyncio.run(poll_sim()) or response
+
+            if response and response.data:
+                sim_status = response.data.get("status")
+                if sim_status == "failed":
+                    err = response.data.get("error") or {}
+                    st.error(
+                        f"Simulation creation failed: {err.get('code', 'unknown')} — {err.get('message', '')}"
+                    )
+                else:
+                    # Update state
+                    state.update_simulation(
+                        name=response.data.get("name"),
+                        status=response.data.get("status"),
+                        created_at=datetime.fromisoformat(response.data.get("created_at")),
+                        mcp_endpoint=response.data.get("mcp_endpoint"),
+                    )
+                    render_json_viewer(response.data, "Simulation Created")
         elif response.error:
             st.error(f"Error: {response.error}")
     

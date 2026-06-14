@@ -66,18 +66,50 @@ def main() -> None:
 
     url = f"{server_url}/api/v1/simulation"
     data = json.dumps(body).encode("utf-8")
-    req = Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
+    import time
 
+    req = Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
     try:
         with urlopen(req) as response:
-            result = json.loads(response.read())
-            print(json.dumps(result, indent=2))
+            declared = json.loads(response.read())
+            print(f"Declared: {declared['name']} status={declared['status']}")
     except HTTPError as e:
         body_text = e.read().decode("utf-8")
         print(f"Error {e.code}: {body_text}", file=sys.stderr)
         sys.exit(1)
     except URLError as e:
         print(f"Connection error: {e.reason}", file=sys.stderr)
+        sys.exit(1)
+
+    # Poll until ready or failed
+    poll_url = f"{server_url}/api/v1/simulation"
+    deadline = time.monotonic() + 180  # 3 min cap
+    while time.monotonic() < deadline:
+        try:
+            with urlopen(Request(poll_url, method="GET")) as resp:
+                data = json.loads(resp.read())
+                sim_status = data.get("status")
+                phase = (data.get("progress") or {}).get("phase")
+                print(f"  status={sim_status} phase={phase}")
+                if sim_status == "ready":
+                    print(json.dumps(data, indent=2))
+                    break
+                if sim_status == "failed":
+                    err = data.get("error") or {}
+                    print(
+                        f"Simulation creation failed: {err.get('code', 'unknown')} — {err.get('message', '')}",
+                        file=sys.stderr,
+                    )
+                    sys.exit(1)
+        except HTTPError as e:
+            print(f"Poll error {e.code}: {e.read().decode()}", file=sys.stderr)
+            sys.exit(1)
+        except URLError as e:
+            print(f"Connection error while polling: {e.reason}", file=sys.stderr)
+            sys.exit(1)
+        time.sleep(1)
+    else:
+        print("Simulation did not reach ready within 180s", file=sys.stderr)
         sys.exit(1)
 
 
