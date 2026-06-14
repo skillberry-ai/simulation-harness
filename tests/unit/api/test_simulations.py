@@ -133,9 +133,7 @@ class TestCreateSimulation:
         assert "session_state" in data
         assert data["session_state"]["tool_call_count"] == 0
         assert "mcp_url" in data
-        assert data["mcp_url"].startswith("http")
-        assert "://" in data["mcp_url"]
-        assert "/mcp/test-api" in data["mcp_url"]
+        assert data["mcp_url"] == "http://testserver/mcp/test-api"
         assert "created_at" in data
 
         # Verify mocks were called
