@@ -574,4 +574,49 @@ class TestBodySizeLimit:
         assert response.status_code in [201, 413, 500]
 
 
+class TestSimulationResponseShape:
+    """Tests for the SimulationResponse model itself."""
+
+    def test_response_accepts_pending_record_without_session_state(self):
+        from datetime import datetime, timezone
+        from simulation_harness.models.responses import (
+            ProgressPayload,
+            SimulationResponse,
+        )
+
+        now = datetime.now(timezone.utc)
+        resp = SimulationResponse(
+            name="test-api",
+            status="pending",
+            session_state=None,
+            mcp_url=None,
+            created_at=now,
+            progress=ProgressPayload(phase=None, started_at=now, updated_at=now),
+            error=None,
+        )
+        assert resp.status == "pending"
+        assert resp.session_state is None
+
+    def test_response_accepts_failed_record_with_error(self):
+        from datetime import datetime, timezone
+        from simulation_harness.models.responses import (
+            ErrorPayload,
+            ProgressPayload,
+            SimulationResponse,
+        )
+
+        now = datetime.now(timezone.utc)
+        resp = SimulationResponse(
+            name="test-api",
+            status="failed",
+            session_state=None,
+            mcp_url=None,
+            created_at=now,
+            progress=ProgressPayload(phase="skill_generation", started_at=now, updated_at=now),
+            error=ErrorPayload(code="creation_timeout", message="exceeded 120s", details={}),
+        )
+        assert resp.error is not None
+        assert resp.error.code == "creation_timeout"
+
+
 # Made with Bob
