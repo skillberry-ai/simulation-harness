@@ -15,20 +15,16 @@ def test_uvicorn_respects_logging_config():
     """
     with patch("simulation_harness.__main__.uvicorn.run") as mock_run:
         with patch("simulation_harness.__main__.load_config") as mock_load:
-            with patch("simulation_harness.__main__.get_config") as mock_get:
-                # Setup mock config
-                mock_config = MagicMock()
-                mock_config.server.host = "0.0.0.0"
-                mock_config.server.port = 8000
-                mock_load.return_value = mock_config
-                mock_get.return_value = mock_config
+            mock_config = MagicMock()
+            mock_config.server.host = "0.0.0.0"
+            mock_config.server.port = 8000
+            mock_load.return_value = mock_config
 
-                # Import and run main
-                from simulation_harness.__main__ import main
+            from simulation_harness.__main__ import main
 
-                main()
+            main()
 
-            # Verify uvicorn.run was called with log_config=None
+        # Verify uvicorn.run was called with log_config=None
             mock_run.assert_called_once()
             call_kwargs = mock_run.call_args.kwargs
 
@@ -53,7 +49,7 @@ def test_logging_configured_before_uvicorn():
     # This test verifies the module-level logging setup in main.py
     # by checking that the logger is configured when the module is imported
 
-    with patch.dict(os.environ, {"HARNESS_CONFIG_PATH": "config/harness.yaml"}):
+    with patch.dict(os.environ, {"HARNESS_CONFIG_PATH": "config/harness.yaml", "LLM_API_KEY": "test-key"}):
         # Import main.py (this triggers module-level logging setup)
         import simulation_harness.main as main_module
 

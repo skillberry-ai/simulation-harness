@@ -5,6 +5,7 @@ Tests MCP tool listing, execution, multi-call coherence, and error handling.
 
 import os
 import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -102,7 +103,6 @@ def app_client():
         config = {
             "llm": {
                 "provider": "openai",
-                "api_key_env": "OPENAI_API_KEY",
                 "skill_generation_model": "gpt-4",
                 "simulation_model": "gpt-4",
                 "temperature": 0,
@@ -122,8 +122,9 @@ def app_client():
         yaml.dump(config, f)
         config_path = f.name
 
+    _prior_key = os.environ.get("LLM_API_KEY")
     os.environ["HARNESS_CONFIG_PATH"] = config_path
-    os.environ["OPENAI_API_KEY"] = "test-key"
+    os.environ["LLM_API_KEY"] = "test-key"
 
     try:
         from simulation_harness.main import app
@@ -147,8 +148,10 @@ def app_client():
         os.unlink(config_path)
         if "HARNESS_CONFIG_PATH" in os.environ:
             del os.environ["HARNESS_CONFIG_PATH"]
-        if "MCP_API_KEY" in os.environ:
-            del os.environ["MCP_API_KEY"]
+        if _prior_key is not None:
+            os.environ["LLM_API_KEY"] = _prior_key
+        elif "LLM_API_KEY" in os.environ:
+            del os.environ["LLM_API_KEY"]
 
 
 class TestMCPToolListing:
@@ -159,7 +162,7 @@ class TestMCPToolListing:
         with patch(
             "simulation_harness.skills.generator.SkillGenerator.generate_skill"
         ) as mock_gen:
-            mock_gen.return_value = "# Generated skill content"
+            mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
             # Create simulation
             response = app_client.post(
@@ -185,7 +188,7 @@ class TestMCPToolExecution:
         with patch(
             "simulation_harness.skills.generator.SkillGenerator.generate_skill"
         ) as mock_gen:
-            mock_gen.return_value = "# Generated skill content"
+            mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
             # Mock the agent's generate_response method
             with patch(
@@ -220,7 +223,7 @@ class TestMCPToolExecution:
         with patch(
             "simulation_harness.skills.generator.SkillGenerator.generate_skill"
         ) as mock_gen:
-            mock_gen.return_value = "# Generated skill content"
+            mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
             # Create simulation
             response = app_client.post(
@@ -244,7 +247,7 @@ class TestMultiCallCoherence:
         with patch(
             "simulation_harness.skills.generator.SkillGenerator.generate_skill"
         ) as mock_gen:
-            mock_gen.return_value = "# Generated skill content"
+            mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
             # Mock the agent to track calls
             with patch(
@@ -280,7 +283,7 @@ class TestToolExecutionErrorHandling:
         with patch(
             "simulation_harness.skills.generator.SkillGenerator.generate_skill"
         ) as mock_gen:
-            mock_gen.return_value = "# Generated skill content"
+            mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
             # Create simulation
             response = app_client.post(
@@ -306,7 +309,7 @@ class TestLogging:
         with patch(
             "simulation_harness.skills.generator.SkillGenerator.generate_skill"
         ) as mock_gen:
-            mock_gen.return_value = "# Generated skill content"
+            mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
             # Mock logger to capture log calls
             with patch(

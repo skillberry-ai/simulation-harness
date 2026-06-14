@@ -6,6 +6,7 @@ including skill generation, reuse, and session management.
 
 import os
 import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -84,18 +85,26 @@ def app_client():
     """Create test client with valid config and clean state for each test."""
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
         config = {
-            "server": {
-                "command": "npx",
-                "args": ["-y", "@modelcontextprotocol/server-everything"],
-                "api_key_env": "MCP_API_KEY",
-                "transport": "sse",
-            }
+            "llm": {
+                "provider": "openai",
+                "skill_generation_model": "gpt-4",
+                "simulation_model": "gpt-4",
+                "temperature": 0,
+            },
+            "skills": {"folder": "./skills"},
+            "sessions": {
+                "max_messages": 100,
+                "idle_timeout_seconds": 3600,
+                "max_concurrent_queue_depth": 8,
+            },
+            "mcp": {"transport": "sse"},
         }
         yaml.dump(config, f)
         config_path = f.name
 
+    _prior_key = os.environ.get("LLM_API_KEY")
     os.environ["HARNESS_CONFIG_PATH"] = config_path
-    os.environ["MCP_API_KEY"] = "test-key"
+    os.environ["LLM_API_KEY"] = "test-key"
 
     try:
         from simulation_harness.main import app
@@ -119,8 +128,10 @@ def app_client():
         os.unlink(config_path)
         if "HARNESS_CONFIG_PATH" in os.environ:
             del os.environ["HARNESS_CONFIG_PATH"]
-        if "MCP_API_KEY" in os.environ:
-            del os.environ["MCP_API_KEY"]
+        if _prior_key is not None:
+            os.environ["LLM_API_KEY"] = _prior_key
+        elif "LLM_API_KEY" in os.environ:
+            del os.environ["LLM_API_KEY"]
 
 
 class TestSimulationCreation:
@@ -132,7 +143,7 @@ class TestSimulationCreation:
         with patch(
             "simulation_harness.skills.generator.SkillGenerator.generate_skill"
         ) as mock_gen:
-            mock_gen.return_value = "# Generated skill content"
+            mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
             response = app_client.post(
                 "/api/v1/simulation",
@@ -155,7 +166,7 @@ class TestSimulationCreation:
         with patch(
             "simulation_harness.skills.generator.SkillGenerator.generate_skill"
         ) as mock_gen:
-            mock_gen.return_value = "# Generated skill content"
+            mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
             response = app_client.post(
                 "/api/v1/simulation",
@@ -205,7 +216,7 @@ class TestSimulationCreation:
         with patch(
             "simulation_harness.skills.generator.SkillGenerator.generate_skill"
         ) as mock_gen:
-            mock_gen.return_value = "# Generated skill content"
+            mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
             # Create first simulation
             response1 = app_client.post(
@@ -230,7 +241,7 @@ class TestSkillGeneration:
         with patch(
             "simulation_harness.skills.generator.SkillGenerator.generate_skill"
         ) as mock_gen:
-            mock_gen.return_value = "# Generated skill content"
+            mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
             response = app_client.post(
                 "/api/v1/simulation",
@@ -284,7 +295,7 @@ class TestSkillGeneration:
         with patch(
             "simulation_harness.skills.generator.SkillGenerator.generate_skill"
         ) as mock_gen:
-            mock_gen.return_value = "# Generated skill content"
+            mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
             # Create first simulation
             response1 = app_client.post(
@@ -315,7 +326,7 @@ class TestSimulationStatus:
         with patch(
             "simulation_harness.skills.generator.SkillGenerator.generate_skill"
         ) as mock_gen:
-            mock_gen.return_value = "# Generated skill content"
+            mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
             # Create simulation
             create_response = app_client.post(
@@ -347,7 +358,7 @@ class TestSimulationDeletion:
         with patch(
             "simulation_harness.skills.generator.SkillGenerator.generate_skill"
         ) as mock_gen:
-            mock_gen.return_value = "# Generated skill content"
+            mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
             # Create simulation
             create_response = app_client.post(
@@ -378,7 +389,7 @@ class TestSessionReset:
         with patch(
             "simulation_harness.skills.generator.SkillGenerator.generate_skill"
         ) as mock_gen:
-            mock_gen.return_value = "# Generated skill content"
+            mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
             # Create simulation
             create_response = app_client.post(

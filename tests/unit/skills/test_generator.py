@@ -5,6 +5,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import SecretStr
 
 from simulation_harness.skills.generator import SkillGenerator
 
@@ -14,7 +15,7 @@ class TestSkillGeneratorInitialization:
 
     def test_generator_initialization(self) -> None:
         """Test that generator initializes with correct parameters."""
-        api_key = "test-api-key"
+        api_key = SecretStr("test-api-key")
         model = "gpt-4"
         temperature = 0.0
         max_tokens = 20000
@@ -36,14 +37,15 @@ class TestSkillGeneratorInitialization:
 
     def test_generator_initialization_with_defaults(self) -> None:
         """Test that generator uses default values when not provided."""
-        api_key = "test-api-key"
+        api_key = SecretStr("test-api-key")
 
         SkillGenerator(api_key=api_key)
 
     def test_llm_initialization_with_all_parameters(self) -> None:
         """Test that LLM is initialized with correct parameters."""
+        api_key = SecretStr("test-key")
         generator = SkillGenerator(
-            api_key="test-key",
+            api_key=api_key,
             model="gpt-4-turbo",
             temperature=0.5,
             max_tokens=10000,
@@ -55,7 +57,7 @@ class TestSkillGeneratorInitialization:
 
             mock_llm.assert_called_once_with(
                 model="gpt-4-turbo",
-                api_key="test-key",
+                api_key=api_key,
                 temperature=0.5,
                 max_tokens=10000,
                 model_kwargs={"response_format": {"type": "json_object"}},
@@ -64,14 +66,15 @@ class TestSkillGeneratorInitialization:
 
     def test_llm_initialization_without_base_url(self) -> None:
         """Test that LLM is initialized without base_url when not provided."""
-        generator = SkillGenerator(api_key="test-key")
+        api_key = SecretStr("test-key")
+        generator = SkillGenerator(api_key=api_key)
 
         with patch("simulation_harness.skills.generator.ChatOpenAI") as mock_llm:
             generator._initialize_llm()
 
             mock_llm.assert_called_once_with(
                 model="gpt-4",
-                api_key="test-key",
+                api_key=api_key,
                 temperature=0.0,
                 max_tokens=20000,
                 model_kwargs={"response_format": {"type": "json_object"}},
@@ -130,7 +133,7 @@ class TestSkillGeneration:
         sample_openapi_spec: dict[str, Any],
     ) -> None:
         """Test that generate_skill creates SKILL.md, schema.json, db.json, and api.json."""
-        generator = SkillGenerator(api_key="test-key")
+        generator = SkillGenerator(api_key=SecretStr("test-key"))
 
         # Mock the LLM response with 3-file JSON structure
         mock_response = MagicMock()
@@ -216,7 +219,7 @@ class TestSkillGeneration:
         sample_openapi_spec: dict[str, Any],
     ) -> None:
         """Test that atomic write leaves no temp directories on success."""
-        generator = SkillGenerator(api_key="test-key")
+        generator = SkillGenerator(api_key=SecretStr("test-key"))
 
         mock_response = MagicMock()
         mock_response.content = '{"skill_md": "---\\nname: test\\n---\\n# Test", "schema_json": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "properties": {"items": {"type": "array", "items": {"type": "object"}}}}, "db_json": {"items": []}}'
@@ -243,7 +246,7 @@ class TestSkillGeneration:
         sample_openapi_spec: dict[str, Any],
     ) -> None:
         """Test that atomic write cleans up temp directories on failure."""
-        generator = SkillGenerator(api_key="test-key")
+        generator = SkillGenerator(api_key=SecretStr("test-key"))
 
         with patch("simulation_harness.skills.generator.ChatOpenAI") as mock_llm_class:
             mock_llm = AsyncMock()
@@ -270,7 +273,7 @@ class TestSkillGeneration:
         sample_openapi_spec: dict[str, Any],
     ) -> None:
         """Test that no partial SKILL.md files are left on failure."""
-        generator = SkillGenerator(api_key="test-key")
+        generator = SkillGenerator(api_key=SecretStr("test-key"))
 
         with patch("simulation_harness.skills.generator.ChatOpenAI") as mock_llm_class:
             mock_llm = AsyncMock()
@@ -319,7 +322,7 @@ class TestThreeFileGeneration:
         sample_openapi_spec: dict[str, Any],
     ) -> None:
         """Test that LLM is configured to return JSON."""
-        generator = SkillGenerator(api_key="test-key")
+        generator = SkillGenerator(api_key=SecretStr("test-key"))
 
         mock_response = MagicMock()
         mock_response.content = '{"skill_md": "---\\nname: test\\n---\\n# Test", "schema_json": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "properties": {"items": {"type": "array", "items": {"type": "object"}}}}, "db_json": {"items": []}}'
@@ -349,7 +352,7 @@ class TestThreeFileGeneration:
         sample_openapi_spec: dict[str, Any],
     ) -> None:
         """Test that invalid JSON response raises RuntimeError."""
-        generator = SkillGenerator(api_key="test-key")
+        generator = SkillGenerator(api_key=SecretStr("test-key"))
 
         mock_response = MagicMock()
         mock_response.content = "This is not valid JSON"
@@ -373,7 +376,7 @@ class TestThreeFileGeneration:
         sample_openapi_spec: dict[str, Any],
     ) -> None:
         """Test that missing required fields raises RuntimeError."""
-        generator = SkillGenerator(api_key="test-key")
+        generator = SkillGenerator(api_key=SecretStr("test-key"))
 
         # Missing db_json field
         mock_response = MagicMock()
@@ -398,7 +401,7 @@ class TestThreeFileGeneration:
         sample_openapi_spec: dict[str, Any],
     ) -> None:
         """Test that wrong field types raise RuntimeError."""
-        generator = SkillGenerator(api_key="test-key")
+        generator = SkillGenerator(api_key=SecretStr("test-key"))
 
         # skill_md should be string, not object
         mock_response = MagicMock()
@@ -443,7 +446,7 @@ class TestSchemaValidation:
         sample_openapi_spec: dict[str, Any],
     ) -> None:
         """Test that db.json is validated against schema.json."""
-        generator = SkillGenerator(api_key="test-key")
+        generator = SkillGenerator(api_key=SecretStr("test-key"))
 
         # Valid schema and db
         mock_response = MagicMock()
@@ -501,7 +504,7 @@ class TestSchemaValidation:
         sample_openapi_spec: dict[str, Any],
     ) -> None:
         """Test that invalid db.json raises RuntimeError."""
-        generator = SkillGenerator(api_key="test-key")
+        generator = SkillGenerator(api_key=SecretStr("test-key"))
 
         # db.json missing required field "name"
         mock_response = MagicMock()
@@ -557,7 +560,7 @@ class TestSchemaValidation:
         sample_openapi_spec: dict[str, Any],
     ) -> None:
         """Test that invalid schema.json raises RuntimeError."""
-        generator = SkillGenerator(api_key="test-key")
+        generator = SkillGenerator(api_key=SecretStr("test-key"))
 
         # Invalid schema (type should be string, not array)
         mock_response = MagicMock()
@@ -591,7 +594,7 @@ class TestSchemaValidation:
         sample_openapi_spec: dict[str, Any],
     ) -> None:
         """Test that temp dir is cleaned up on validation failure."""
-        generator = SkillGenerator(api_key="test-key")
+        generator = SkillGenerator(api_key=SecretStr("test-key"))
 
         # Invalid db.json
         mock_response = MagicMock()
@@ -641,7 +644,7 @@ class TestSchemaValidation:
         sample_openapi_spec: dict[str, Any],
     ) -> None:
         """Test that temp dir is cleaned up even if write fails after LLM call."""
-        generator = SkillGenerator(api_key="test-key")
+        generator = SkillGenerator(api_key=SecretStr("test-key"))
 
         mock_response = MagicMock()
         mock_response.content = "---\nname: test\n---\n# Test"
@@ -690,14 +693,9 @@ class TestAssetLoading:
 class TestBaseURLWiring:
     """Test that base_url is properly wired from config to SkillGenerator."""
 
-    def test_skill_generator_receives_base_url_from_config(self) -> None:
-        """Test that SkillGenerator is initialized with base_url from config.
-
-        This test verifies the fix for the bug where get_skill_registry() was
-        reading from environment variables instead of using the loaded config,
-        and not passing base_url to SkillGenerator at all.
-        """
-        from unittest.mock import patch
+    def test_skill_generator_receives_base_url_from_secrets(self) -> None:
+        """Test that SkillGenerator is initialized with base_url from secrets."""
+        from unittest.mock import MagicMock, patch
         import simulation_harness.api.dependencies as deps
         from simulation_harness.config.models import (
             HarnessConfig,
@@ -707,13 +705,11 @@ class TestBaseURLWiring:
             MCPConfig,
             TransportType,
         )
+        from pydantic import SecretStr
 
-        # Create a real config with api_base set
         config = HarnessConfig(
             llm=LLMConfig(
                 provider="openai",
-                api_key_env="TEST_API_KEY",
-                api_base="https://custom.api.com/v1",
                 skill_generation_model="gpt-4",
                 simulation_model="gpt-4",
                 temperature=0.0,
@@ -725,11 +721,14 @@ class TestBaseURLWiring:
             ),
             mcp=MCPConfig(transport=TransportType.SSE),
         )
-        config.llm._resolved_api_key = "test-key"
+        mock_secrets = MagicMock()
+        mock_secrets.llm_api_key = SecretStr("test-key")
+        mock_secrets.llm_api_base = "https://custom.api.com/v1"
 
-        # Patch get_config where it's imported in dependencies module
         with patch(
             "simulation_harness.api.dependencies.get_config", return_value=config
+        ), patch(
+            "simulation_harness.api.dependencies.get_secrets", return_value=mock_secrets
         ):
             # Reset the global registry to force recreation
             deps._skill_registry = None
@@ -739,12 +738,12 @@ class TestBaseURLWiring:
 
             # Verify the generator was created with the correct base_url
             assert registry.generator.base_url == "https://custom.api.com/v1"
-            assert registry.generator.api_key == "test-key"
+            assert registry.generator.api_key == SecretStr("test-key")
             assert registry.generator.model == "gpt-4"
 
-    def test_skill_generator_base_url_none_when_not_in_config(self) -> None:
+    def test_skill_generator_base_url_none_when_not_in_secrets(self) -> None:
         """Test that SkillGenerator base_url is None when not configured."""
-        from unittest.mock import patch
+        from unittest.mock import MagicMock, patch
         import simulation_harness.api.dependencies as deps
         from simulation_harness.config.models import (
             HarnessConfig,
@@ -754,13 +753,11 @@ class TestBaseURLWiring:
             MCPConfig,
             TransportType,
         )
+        from pydantic import SecretStr
 
-        # Create a real config without api_base
         config = HarnessConfig(
             llm=LLMConfig(
                 provider="openai",
-                api_key_env="TEST_API_KEY",
-                api_base=None,
                 skill_generation_model="gpt-4",
                 simulation_model="gpt-4",
                 temperature=0.0,
@@ -772,11 +769,14 @@ class TestBaseURLWiring:
             ),
             mcp=MCPConfig(transport=TransportType.SSE),
         )
-        config.llm._resolved_api_key = "test-key"
+        mock_secrets = MagicMock()
+        mock_secrets.llm_api_key = SecretStr("test-key")
+        mock_secrets.llm_api_base = None
 
-        # Patch get_config where it's imported in dependencies module
         with patch(
             "simulation_harness.api.dependencies.get_config", return_value=config
+        ), patch(
+            "simulation_harness.api.dependencies.get_secrets", return_value=mock_secrets
         ):
             # Reset the global registry
             deps._skill_registry = None
@@ -787,3 +787,32 @@ class TestBaseURLWiring:
             # Verify base_url is None (will use OpenAI default)
             assert registry.generator.base_url is None
 
+
+
+class TestSkillRegistryInvalidation:
+    def test_load_secrets_clears_skill_registry(self, monkeypatch):
+        """load_secrets() must clear the cached _skill_registry so it's rebuilt with new creds."""
+        import simulation_harness.api.dependencies as deps
+        from unittest.mock import MagicMock
+
+        monkeypatch.setenv("LLM_API_KEY", "sk-first")
+        monkeypatch.delenv("LLM_API_BASE", raising=False)
+
+        from simulation_harness.config import load_secrets
+
+        # Seed a fake cached registry
+        deps._skill_registry = MagicMock()
+
+        # Calling load_secrets() should wipe the cache
+        load_secrets(env_file=None)
+
+        assert deps._skill_registry is None
+
+    def test_reset_skill_registry_clears_cached_singleton(self):
+        """reset_skill_registry() provides a public API to clear the cache."""
+        import simulation_harness.api.dependencies as deps
+        from simulation_harness.api.dependencies import reset_skill_registry
+
+        deps._skill_registry = MagicMock()
+        reset_skill_registry()
+        assert deps._skill_registry is None

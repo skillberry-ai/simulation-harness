@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import SecretStr
 
 from simulation_harness.core.simulation_instance import SimulationInstance
 from simulation_harness.models.domain import SimulationSpec
@@ -39,7 +40,7 @@ def create_instance(spec, **kwargs):
         "max_messages": 100,
         "idle_timeout_seconds": 3600,
         "max_queue_depth": 10,
-        "api_key": "test-key",
+        "api_key": SecretStr("test-key"),
         "model": "gpt-4",
         "temperature": 0.7,
         "max_tokens": 4000,
@@ -560,6 +561,28 @@ async def test_expiry_check_before_counter_increment():
         assert result.success is True
         state = instance.get_session_state()
         assert state.tool_call_count == 1
+
+
+def test_create_instance_forwards_base_url_to_agent(mock_spec):
+    """base_url passed to SimulationInstance is forwarded to DeepAgent."""
+    with patch(
+        "simulation_harness.core.simulation_instance.DeepAgent"
+    ) as mock_agent_cls:
+        mock_agent_cls.return_value = MagicMock()
+        create_instance(mock_spec, base_url="https://custom.example.com/v1")
+        _, kwargs = mock_agent_cls.call_args
+        assert kwargs["base_url"] == "https://custom.example.com/v1"
+
+
+def test_create_instance_base_url_defaults_to_none(mock_spec):
+    """base_url defaults to None when not provided."""
+    with patch(
+        "simulation_harness.core.simulation_instance.DeepAgent"
+    ) as mock_agent_cls:
+        mock_agent_cls.return_value = MagicMock()
+        create_instance(mock_spec)
+        _, kwargs = mock_agent_cls.call_args
+        assert kwargs["base_url"] is None
 
 
 # Made with Bob

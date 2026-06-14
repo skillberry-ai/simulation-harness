@@ -102,7 +102,7 @@ def test_cannot_mount_multiple_transports(fastapi_app, mock_mcp_wrapper):
     mount_sse_transport(fastapi_app, mock_mcp_wrapper)
 
     # Attempting to mount second transport should raise error
-    with pytest.raises(ValueError, match="transport already mounted"):
+    with pytest.raises(ValueError, match="A transport is already mounted"):
         mount_streamable_http_transport(fastapi_app, mock_mcp_wrapper)
 
 

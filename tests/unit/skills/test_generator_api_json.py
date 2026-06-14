@@ -6,6 +6,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import SecretStr
 
 from simulation_harness.skills.generator import SkillGenerator
 
@@ -62,7 +63,7 @@ class TestApiJsonStorage:
         sample_openapi_spec: dict[str, Any],
     ) -> None:
         """Test that generate_skill creates api.json file."""
-        generator = SkillGenerator(api_key="test-key")
+        generator = SkillGenerator(api_key=SecretStr("test-key"))
 
         # Mock the LLM response with 3-file JSON structure
         mock_response = MagicMock()
@@ -125,7 +126,7 @@ class TestApiJsonStorage:
         sample_openapi_spec: dict[str, Any],
     ) -> None:
         """Test that api.json is always in JSON format, even if input was YAML."""
-        generator = SkillGenerator(api_key="test-key")
+        generator = SkillGenerator(api_key=SecretStr("test-key"))
 
         mock_response = MagicMock()
         mock_response.content = '{"skill_md": "---\\nname: test\\n---\\n# Test", "schema_json": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "properties": {"items": {"type": "array", "items": {"type": "object"}}}}, "db_json": {"items": []}}'
@@ -157,7 +158,7 @@ class TestApiJsonStorage:
         sample_openapi_spec: dict[str, Any],
     ) -> None:
         """Test that api.json is cleaned up if skill generation fails."""
-        generator = SkillGenerator(api_key="test-key")
+        generator = SkillGenerator(api_key=SecretStr("test-key"))
 
         with patch("simulation_harness.skills.generator.ChatOpenAI") as mock_llm_class:
             mock_llm = AsyncMock()
@@ -187,7 +188,7 @@ class TestApiJsonStorage:
         temp_skills_dir: Path,
     ) -> None:
         """Test that api.json preserves complex OpenAPI spec structure."""
-        generator = SkillGenerator(api_key="test-key")
+        generator = SkillGenerator(api_key=SecretStr("test-key"))
 
         # Complex spec with nested schemas, security, servers, etc.
         complex_spec = {

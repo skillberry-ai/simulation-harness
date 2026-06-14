@@ -1,6 +1,7 @@
 """Tests for __main__ module."""
 
 import logging
+import pytest
 from pathlib import Path
 from unittest.mock import Mock, patch, call
 
@@ -9,112 +10,82 @@ class TestMainModule:
     """Test the __main__ module startup."""
 
     @patch("simulation_harness.__main__.uvicorn.run")
-    @patch("simulation_harness.__main__.get_config")
+    @patch("simulation_harness.__main__.load_config")
     def test_main_uses_configured_host_and_port(
-        self, mock_get_config, mock_uvicorn_run
+        self, mock_load_config, mock_uvicorn_run
     ):
         """Test that main() uses host and port from configuration."""
-        # Setup mock config
         mock_config = Mock()
         mock_config.server.host = "0.0.0.0"
         mock_config.server.port = 9000
-        mock_get_config.return_value = mock_config
+        mock_load_config.return_value = mock_config
 
-        # Import and run main
         from simulation_harness.__main__ import main
 
         main()
 
-        # Verify uvicorn.run was called with correct parameters
         mock_uvicorn_run.assert_called_once()
         call_kwargs = mock_uvicorn_run.call_args[1]
         assert call_kwargs["host"] == "0.0.0.0"
         assert call_kwargs["port"] == 9000
 
     @patch("simulation_harness.__main__.uvicorn.run")
-    @patch("simulation_harness.__main__.get_config")
-    def test_main_uses_default_host_and_port(self, mock_get_config, mock_uvicorn_run):
+    @patch("simulation_harness.__main__.load_config")
+    def test_main_uses_default_host_and_port(self, mock_load_config, mock_uvicorn_run):
         """Test that main() uses default host and port when not configured."""
-        # Setup mock config with defaults
         mock_config = Mock()
         mock_config.server.host = "localhost"
         mock_config.server.port = 8000
-        mock_get_config.return_value = mock_config
+        mock_load_config.return_value = mock_config
 
-        # Import and run main
         from simulation_harness.__main__ import main
 
         main()
 
-        # Verify uvicorn.run was called with default parameters
         mock_uvicorn_run.assert_called_once()
         call_kwargs = mock_uvicorn_run.call_args[1]
         assert call_kwargs["host"] == "localhost"
         assert call_kwargs["port"] == 8000
 
     @patch("simulation_harness.__main__.uvicorn.run")
-    @patch("simulation_harness.__main__.get_config")
-    def test_main_passes_app_to_uvicorn(self, mock_get_config, mock_uvicorn_run):
+    @patch("simulation_harness.__main__.load_config")
+    def test_main_passes_app_to_uvicorn(self, mock_load_config, mock_uvicorn_run):
         """Test that main() passes the correct app string to uvicorn."""
-        # Setup mock config
         mock_config = Mock()
         mock_config.server.host = "localhost"
         mock_config.server.port = 8000
-        mock_get_config.return_value = mock_config
+        mock_load_config.return_value = mock_config
 
-        # Import and run main
         from simulation_harness.__main__ import main
 
         main()
 
-        # Verify uvicorn.run was called with app string
         mock_uvicorn_run.assert_called_once()
         call_args = mock_uvicorn_run.call_args[0]
         assert call_args[0] == "simulation_harness.main:app"
 
     @patch("simulation_harness.__main__.uvicorn.run")
-    @patch("simulation_harness.__main__.get_config")
     @patch("simulation_harness.__main__.load_config")
-    def test_main_loads_config_before_getting_it(
-        self, mock_load_config, mock_get_config, mock_uvicorn_run
+    def test_main_loads_config_before_starting_uvicorn(
+        self, mock_load_config, mock_uvicorn_run
     ):
-        """Test that main() loads configuration before accessing global config."""
+        """Test that main() loads config and passes its host/port to uvicorn."""
         mock_config = Mock()
         mock_config.server.host = "0.0.0.0"
         mock_config.server.port = 8086
-        mock_get_config.return_value = mock_config
+        mock_load_config.return_value = mock_config
 
         from simulation_harness.__main__ import main
 
         main()
 
         assert mock_load_config.called
-        assert mock_get_config.called
         assert mock_uvicorn_run.called
 
-        ordered_calls = [
-            call.load_config("config/harness.yaml"),
-            call.get_config(),
-            call.uvicorn.run(
-                "simulation_harness.main:app",
-                host="0.0.0.0",
-                port=8086,
-                log_level="info",
-                log_config=None,
-            ),
-        ]
-        actual_calls = [
-            call.load_config(
-                *mock_load_config.call_args[0], **mock_load_config.call_args[1]
-            ),
-            call.get_config(
-                *mock_get_config.call_args[0], **mock_get_config.call_args[1]
-            ),
-            call.uvicorn.run(
-                *mock_uvicorn_run.call_args[0], **mock_uvicorn_run.call_args[1]
-            ),
-        ]
-        assert actual_calls == ordered_calls
+        call_kwargs = mock_uvicorn_run.call_args[1]
+        assert call_kwargs["host"] == "0.0.0.0"
+        assert call_kwargs["port"] == 8086
+        assert mock_uvicorn_run.call_args[0][0] == "simulation_harness.main:app"
 
 
 class TestLoggingConfiguration:
@@ -131,7 +102,6 @@ class TestLoggingConfiguration:
         config_data = {
             "llm": {
                 "provider": "openai",
-                "api_key": "test-key",
                 "skill_generation_model": "gpt-4",
                 "simulation_model": "gpt-4",
                 "temperature": 0,
@@ -194,6 +164,27 @@ class TestLoggingConfiguration:
 
         # Verify destination folder is configured
         assert config.logging.destination_folder == "./logs"
+
+
+class TestLifespan:
+    """Test FastAPI lifespan startup/shutdown behaviour."""
+
+    @pytest.mark.asyncio
+    async def test_lifespan_wraps_oserror_from_load_secrets_as_runtime_error(
+        self, monkeypatch
+    ):
+        """lifespan converts any non-ValidationError from load_secrets to RuntimeError."""
+        monkeypatch.setenv("LLM_API_KEY", "test-key")
+        monkeypatch.setenv("HARNESS_CONFIG_PATH", "config/harness.yaml")
+
+        import simulation_harness.main as main_mod
+
+        with patch.object(
+            main_mod, "load_secrets", side_effect=PermissionError("cannot read .env")
+        ):
+            with pytest.raises(RuntimeError, match="Missing required secrets"):
+                async with main_mod.lifespan(main_mod.app):
+                    pass  # pragma: no cover
 
 
 # Made with Bob

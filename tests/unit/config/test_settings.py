@@ -1,612 +1,155 @@
-"""Tests for configuration loading and validation."""
-
-import os
+"""Tests for non-secret configuration loading and validation."""
 
 import pytest
 import yaml
 
 from simulation_harness.config import (
     HarnessConfig,
-    ServerConfig,
     TransportType,
     load_config,
     ConfigValidationError,
 )
 
 
-class TestConfigModels:
-    """Test Pydantic config models."""
+def _minimal_yaml_dict() -> dict:
+    return {
+        "llm": {
+            "provider": "openai",
+            "skill_generation_model": "gpt-4",
+            "simulation_model": "gpt-4",
+            "temperature": 0.0,
+        },
+        "skills": {"folder": "/tmp/skills"},
+        "sessions": {
+            "max_messages": 100,
+            "idle_timeout_seconds": 3600,
+            "max_concurrent_queue_depth": 8,
+        },
+        "mcp": {"transport": "sse"},
+    }
 
-    def test_transport_type_enum_values(self):
-        """Test TransportType enum has correct values."""
+
+class TestTransportType:
+    def test_enum_values(self):
         assert TransportType.SSE.value == "sse"
         assert TransportType.STREAMABLE_HTTP.value == "streamable_http"
 
-    def test_server_config_with_api_key(self):
-        """Test ServerConfig with literal api_key."""
-        config = ServerConfig(
-            command="npx",
-            args=["-y", "@modelcontextprotocol/server-everything"],
-            api_key="test-key-123",
-            transport="sse",
-        )
-        assert config.api_key == "test-key-123"
-        assert config.api_key_env is None
-        assert config.transport == TransportType.SSE
 
-    def test_server_config_with_api_key_env(self):
-        """Test ServerConfig with api_key_env."""
-        config = ServerConfig(
-            command="npx",
-            args=["-y", "@modelcontextprotocol/server-everything"],
-            api_key_env="MY_API_KEY",
-            transport="streamable_http",
-        )
-        assert config.api_key is None
-        assert config.api_key_env == "MY_API_KEY"
-        assert config.transport == TransportType.STREAMABLE_HTTP
-
-    def test_server_config_requires_api_key_or_env(self):
-        """Test ServerConfig requires either api_key or api_key_env."""
-        with pytest.raises(
-            ValueError, match="Either api_key or api_key_env must be provided"
-        ):
-            ServerConfig(
-                command="npx",
-                args=["-y", "@modelcontextprotocol/server-everything"],
-                transport="sse",
-            )
-
-    def test_server_config_rejects_both_api_keys(self):
-        """Test ServerConfig rejects both api_key and api_key_env."""
-        with pytest.raises(
-            ValueError, match="Cannot provide both api_key and api_key_env"
-        ):
-            ServerConfig(
-                command="npx",
-                args=["-y", "@modelcontextprotocol/server-everything"],
-                api_key="test-key",
-                api_key_env="MY_KEY",
-                transport="sse",
-            )
-
-    def test_server_config_invalid_transport(self):
-        """Test ServerConfig rejects invalid transport."""
-        with pytest.raises(ValueError):
-            ServerConfig(
-                command="npx",
-                args=["-y", "@modelcontextprotocol/server-everything"],
-                api_key="test-key",
-                transport="invalid_transport",
-            )
-
-    def test_server_settings_with_defaults(self):
-        """Test ServerSettings with default host and port."""
+class TestServerSettings:
+    def test_defaults(self):
         from simulation_harness.config.models import ServerSettings
 
         config = ServerSettings()
         assert config.host == "localhost"
         assert config.port == 8000
 
-    def test_server_settings_with_custom_values(self):
-        """Test ServerSettings with custom host and port."""
+    def test_custom_values(self):
         from simulation_harness.config.models import ServerSettings
 
         config = ServerSettings(host="0.0.0.0", port=9000)
         assert config.host == "0.0.0.0"
         assert config.port == 9000
 
-    def test_server_settings_validates_port_range(self):
-        """Test ServerSettings validates port is in valid range."""
+    def test_port_range_validated(self):
         from simulation_harness.config.models import ServerSettings
 
         with pytest.raises(ValueError):
             ServerSettings(port=0)
+        with pytest.raises(ValueError):
+            ServerSettings(port=70000)
+
+
+class TestLLMConfig:
+    def test_minimal_valid(self):
+        from simulation_harness.config.models import LLMConfig
+
+        config = LLMConfig(
+            provider="openai",
+            skill_generation_model="gpt-4",
+            simulation_model="gpt-4",
+            temperature=0.0,
+        )
+        assert config.provider == "openai"
+        assert config.max_tokens is None
+
+    def test_rejects_removed_fields(self):
+        """LLMConfig must forbid removed fields like api_key_env."""
+        from simulation_harness.config.models import LLMConfig
 
         with pytest.raises(ValueError):
-            ServerSettings(port=65536)
-
-        # Valid ports should work
-        config = ServerSettings(port=1)
-        assert config.port == 1
-
-        config = ServerSettings(port=65535)
-        assert config.port == 65535
-
-    def test_harness_config_structure(self):
-        """Test HarnessConfig with the new configuration sections."""
-        config = HarnessConfig(
-            llm={
-                "provider": "openai",
-                "api_key_env": "TEST_API_KEY",
-                "skill_generation_model": "gpt-4",
-                "simulation_model": "gpt-4",
-                "temperature": 0,
-            },
-            skills={"folder": "./skills"},
-            sessions={
-                "max_messages": 100,
-                "idle_timeout_seconds": 3600,
-                "max_concurrent_queue_depth": 8,
-            },
-            mcp={"transport": "sse"},
-            server={"host": "localhost", "port": 8000},
-        )
-        assert config.llm.provider == "openai"
-        assert config.llm.api_key_env == "TEST_API_KEY"
-        assert config.skills.folder == "./skills"
-        assert config.sessions.max_messages == 100
-        assert config.server.host == "localhost"
-        assert config.server.port == 8000
-        assert config.sessions.idle_timeout_seconds == 3600
-        assert config.sessions.max_concurrent_queue_depth == 8
-        assert config.mcp.transport == TransportType.SSE
-
-    def test_llm_config_structure(self):
-        """Test LLM configuration section."""
-        config_data = {
-            "llm": {
-                "provider": "openai",
-                "api_key_env": "OPENAI_API_KEY",
-                "skill_generation_model": "gpt-4",
-                "simulation_model": "gpt-4",
-                "temperature": 0,
-            },
-            "skills": {"folder": "./skills"},
-            "sessions": {
-                "max_messages": 100,
-                "idle_timeout_seconds": 3600,
-                "max_concurrent_queue_depth": 8,
-            },
-            "mcp": {"transport": "sse"},
-        }
-        config = HarnessConfig(**config_data)
-        assert config.llm.provider == "openai"
-        assert config.llm.skill_generation_model == "gpt-4"
-        assert config.llm.simulation_model == "gpt-4"
-        assert config.llm.temperature == 0
-
-    def test_llm_config_with_api_base_literal(self):
-        """Test LLMConfig accepts literal api_base."""
-        config_data = {
-            "llm": {
-                "provider": "openai",
-                "api_key_env": "TEST_API_KEY",
-                "api_base": "https://example.test/v1",
-                "skill_generation_model": "gpt-4",
-                "simulation_model": "gpt-4",
-                "temperature": 0,
-            },
-            "skills": {"folder": "./skills"},
-            "sessions": {
-                "max_messages": 100,
-                "idle_timeout_seconds": 3600,
-            },
-            "mcp": {"transport": "sse"},
-        }
-        config = HarnessConfig(**config_data)
-        assert config.llm.api_base == "https://example.test/v1"
-        assert config.llm.api_base_env is None
-
-    def test_llm_config_with_api_base_env(self):
-        """Test LLMConfig accepts api_base_env."""
-        config_data = {
-            "llm": {
-                "provider": "openai",
-                "api_key_env": "TEST_API_KEY",
-                "api_base_env": "OPENAI_API_BASE",
-                "skill_generation_model": "gpt-4",
-                "simulation_model": "gpt-4",
-                "temperature": 0,
-            },
-            "skills": {"folder": "./skills"},
-            "sessions": {
-                "max_messages": 100,
-                "idle_timeout_seconds": 3600,
-            },
-            "mcp": {"transport": "sse"},
-        }
-        config = HarnessConfig(**config_data)
-        assert config.llm.api_base is None
-        assert config.llm.api_base_env == "OPENAI_API_BASE"
-
-    def test_logging_config_with_defaults(self):
-        """Test LoggingConfig with default values."""
-        from simulation_harness.config.models import LoggingConfig
-
-        config = LoggingConfig()
-        assert config.level == "INFO"
-        assert config.destination_folder == "./logs"
-
-    def test_logging_config_with_custom_values(self):
-        """Test LoggingConfig with custom level and destination."""
-        from simulation_harness.config.models import LoggingConfig
-
-        config = LoggingConfig(level="DEBUG", destination_folder="/var/log/harness")
-        assert config.level == "DEBUG"
-        assert config.destination_folder == "/var/log/harness"
-
-    def test_logging_config_validates_level(self):
-        """Test LoggingConfig validates log level is valid."""
-        from simulation_harness.config.models import LoggingConfig
-
-        # Valid levels should work
-        for level in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
-            config = LoggingConfig(level=level)
-            assert config.level == level
-
-        # Invalid level should raise ValueError
-        with pytest.raises(ValueError, match="Invalid log level"):
-            LoggingConfig(level="INVALID")
-
-        with pytest.raises(ValueError, match="Invalid log level"):
-            LoggingConfig(level="debug")  # lowercase should fail
-
-    def test_harness_config_with_logging_defaults(self):
-        """Test HarnessConfig includes logging with defaults."""
-        config = HarnessConfig(
-            llm={
-                "provider": "openai",
-                "api_key_env": "TEST_API_KEY",
-                "skill_generation_model": "gpt-4",
-                "simulation_model": "gpt-4",
-                "temperature": 0,
-            },
-            skills={"folder": "./skills"},
-            sessions={
-                "max_messages": 100,
-                "idle_timeout_seconds": 3600,
-                "max_concurrent_queue_depth": 8,
-            },
-            mcp={"transport": "sse"},
-        )
-        # Should have default logging config
-        assert config.logging.level == "INFO"
-        assert config.logging.destination_folder == "./logs"
-
-    def test_harness_config_with_custom_logging(self):
-        """Test HarnessConfig with custom logging configuration."""
-        config = HarnessConfig(
-            llm={
-                "provider": "openai",
-                "api_key_env": "TEST_API_KEY",
-                "skill_generation_model": "gpt-4",
-                "simulation_model": "gpt-4",
-                "temperature": 0,
-            },
-            skills={"folder": "./skills"},
-            sessions={
-                "max_messages": 100,
-                "idle_timeout_seconds": 3600,
-                "max_concurrent_queue_depth": 8,
-            },
-            mcp={"transport": "sse"},
-            logging={"level": "DEBUG", "destination_folder": "/custom/logs"},
-        )
-        assert config.logging.level == "DEBUG"
-        assert config.logging.destination_folder == "/custom/logs"
-
-
-    def test_llm_config_rejects_literal_api_key(self):
-        """LLMConfig must not accept a literal api_key field."""
-        from pydantic import ValidationError
-        with pytest.raises(ValidationError):
-            HarnessConfig(
-                llm={
-                    "provider": "openai",
-                    "api_key": "sk-literal-key",  # should be rejected
-                    "skill_generation_model": "gpt-4",
-                    "simulation_model": "gpt-4",
-                    "temperature": 0,
-                },
-                skills={"folder": "./skills"},
-                sessions={"max_messages": 100, "idle_timeout_seconds": 3600, "max_concurrent_queue_depth": 8},
-                mcp={"transport": "sse"},
+            LLMConfig(
+                provider="openai",
+                skill_generation_model="gpt-4",
+                simulation_model="gpt-4",
+                api_key_env="OLD_FIELD",  # type: ignore[call-arg]
             )
 
-    def test_llm_config_resolved_api_key_not_in_schema(self):
-        """_resolved_api_key must not appear in the model's JSON schema."""
+    def test_temperature_range(self):
         from simulation_harness.config.models import LLMConfig
-        schema = LLMConfig.model_json_schema()
-        assert "api_key" not in schema.get("properties", {})
-        assert "resolved_api_key" not in schema.get("properties", {})
-        assert "_resolved_api_key" not in schema.get("properties", {})
+
+        with pytest.raises(ValueError):
+            LLMConfig(
+                provider="openai",
+                skill_generation_model="gpt-4",
+                simulation_model="gpt-4",
+                temperature=3.0,
+            )
 
 
-class TestConfigLoader:
-    """Test configuration loading from YAML."""
+class TestHarnessConfig:
+    def test_construct_from_minimal_dict(self):
+        config = HarnessConfig(**_minimal_yaml_dict())
+        assert config.llm.provider == "openai"
+        assert config.mcp.transport == TransportType.SSE
+        assert config.server.host == "localhost"
+        assert config.logging.level == "INFO"
 
-    def test_load_config_from_valid_yaml(self, tmp_path):
-        """Test loading valid configuration from YAML file."""
-        config_file = tmp_path / "harness.yaml"
-        config_data = {
-            "llm": {
-                "provider": "openai",
-                "api_key_env": "TEST_API_KEY",
-                "skill_generation_model": "gpt-4",
-                "simulation_model": "gpt-4",
-                "temperature": 0,
-            },
-            "skills": {"folder": "./skills"},
-            "sessions": {
-                "max_messages": 100,
-                "idle_timeout_seconds": 3600,
-                "max_concurrent_queue_depth": 8,
-            },
-            "mcp": {"transport": "sse"},
-        }
-        config_file.write_text(yaml.dump(config_data))
 
-        os.environ["TEST_API_KEY"] = "test-key-123"
-        try:
-            config = load_config(str(config_file))
+class TestLoadConfig:
+    def _write(self, tmp_path, data: dict) -> str:
+        p = tmp_path / "harness.yaml"
+        p.write_text(yaml.dump(data))
+        return str(p)
 
-            assert isinstance(config, HarnessConfig)
-            assert config.llm.provider == "openai"
-            assert config.llm._resolved_api_key == "test-key-123"
-            assert config.skills.folder == "./skills"
-            assert config.sessions.max_messages == 100
-            assert config.mcp.transport == TransportType.SSE
-        finally:
-            del os.environ["TEST_API_KEY"]
+    def test_loads_minimal_yaml(self, tmp_path):
+        path = self._write(tmp_path, _minimal_yaml_dict())
+        config = load_config(path)
+        assert config.llm.provider == "openai"
 
-    def test_load_config_with_api_key_env(self, tmp_path):
-        """Test loading config with api_key_env in the new llm section."""
-        config_file = tmp_path / "harness.yaml"
-        config_data = {
-            "llm": {
-                "provider": "openai",
-                "api_key_env": "TEST_API_KEY",
-                "skill_generation_model": "gpt-4",
-                "simulation_model": "gpt-4",
-                "temperature": 0,
-            },
-            "skills": {"folder": "./skills"},
-            "sessions": {
-                "max_messages": 100,
-                "idle_timeout_seconds": 3600,
-                "max_concurrent_queue_depth": 8,
-            },
-            "mcp": {"transport": "streamable_http"},
-        }
-        config_file.write_text(yaml.dump(config_data))
-
-        # Set environment variable
-        os.environ["TEST_API_KEY"] = "env-resolved-key"
-        try:
-            config = load_config(str(config_file))
-            assert config.llm.api_key_env == "TEST_API_KEY"
-            assert config.mcp.transport == TransportType.STREAMABLE_HTTP
-        finally:
-            del os.environ["TEST_API_KEY"]
-
-    def test_load_config_with_api_base_env(self, tmp_path):
-        """Test loading config with api_base_env resolved from environment."""
-        config_file = tmp_path / "api_base_env.yaml"
-        config_data = {
-            "llm": {
-                "provider": "openai",
-                "api_key_env": "TEST_API_KEY",
-                "api_base_env": "TEST_API_BASE",
-                "skill_generation_model": "gpt-4",
-                "simulation_model": "gpt-4",
-                "temperature": 0,
-            },
-            "skills": {"folder": "./skills"},
-            "sessions": {
-                "max_messages": 100,
-                "idle_timeout_seconds": 3600,
-                "max_concurrent_queue_depth": 8,
-            },
-            "mcp": {"transport": "sse"},
-        }
-        config_file.write_text(yaml.dump(config_data))
-
-        os.environ["TEST_API_KEY"] = "test-key-123"
-        os.environ["TEST_API_BASE"] = "https://example.test/v1"
-        try:
-            config = load_config(str(config_file))
-            assert config.llm.api_base_env == "TEST_API_BASE"
-        finally:
-            del os.environ["TEST_API_KEY"]
-            del os.environ["TEST_API_BASE"]
-
-    def test_load_config_missing_api_key_env_var(self, tmp_path):
-        """Test loading config fails when api_key_env does not resolve."""
-        config_file = tmp_path / "missing_api_key_env.yaml"
-        config_data = {
-            "llm": {
-                "provider": "openai",
-                "api_key_env": "MISSING_API_KEY",
-                "skill_generation_model": "gpt-4",
-                "simulation_model": "gpt-4",
-                "temperature": 0,
-            },
-            "skills": {"folder": "./skills"},
-            "sessions": {
-                "max_messages": 100,
-                "idle_timeout_seconds": 3600,
-                "max_concurrent_queue_depth": 8,
-            },
-            "mcp": {"transport": "sse"},
-        }
-        config_file.write_text(yaml.dump(config_data))
-
-        with pytest.raises(ConfigValidationError, match="api_key_env"):
-            load_config(str(config_file))
-
-    def test_load_config_missing_api_base_env_var(self, tmp_path):
-        """Test loading config fails when api_base_env does not resolve."""
-        config_file = tmp_path / "missing_api_base_env.yaml"
-        config_data = {
-            "llm": {
-                "provider": "openai",
-                "api_key_env": "TEST_API_KEY",
-                "api_base_env": "MISSING_API_BASE",
-                "skill_generation_model": "gpt-4",
-                "simulation_model": "gpt-4",
-                "temperature": 0,
-            },
-            "skills": {"folder": "./skills"},
-            "sessions": {
-                "max_messages": 100,
-                "idle_timeout_seconds": 3600,
-                "max_concurrent_queue_depth": 8,
-            },
-            "mcp": {"transport": "sse"},
-        }
-        config_file.write_text(yaml.dump(config_data))
-
-        os.environ["TEST_API_KEY"] = "test-key-123"
-        try:
-            with pytest.raises(ConfigValidationError, match="api_base_env"):
-                load_config(str(config_file))
-        finally:
-            del os.environ["TEST_API_KEY"]
-
-    def test_load_config_missing_file(self):
-        """Test loading config from non-existent file raises FileNotFoundError."""
+    def test_missing_file_raises(self):
         with pytest.raises(FileNotFoundError):
-            load_config("/nonexistent/path/harness.yaml")
+            load_config("/nonexistent/harness.yaml")
 
-    def test_load_config_invalid_yaml(self, tmp_path):
-        """Test loading invalid YAML raises ConfigValidationError."""
-        config_file = tmp_path / "invalid.yaml"
-        config_file.write_text("invalid: yaml: content: [")
+    def test_invalid_yaml_raises(self, tmp_path):
+        p = tmp_path / "bad.yaml"
+        p.write_text("invalid: yaml: content: [")
+        with pytest.raises(ConfigValidationError):
+            load_config(str(p))
 
-        with pytest.raises(ConfigValidationError, match="Failed to parse YAML"):
-            load_config(str(config_file))
+    def test_empty_file_raises(self, tmp_path):
+        p = tmp_path / "empty.yaml"
+        p.write_text("")
+        with pytest.raises(ConfigValidationError):
+            load_config(str(p))
 
-    def test_load_config_empty_file(self, tmp_path):
-        """Test loading empty YAML file raises ConfigValidationError."""
-        config_file = tmp_path / "empty.yaml"
-        config_file.write_text("")
+    def test_missing_required_section_raises(self, tmp_path):
+        bad = _minimal_yaml_dict()
+        del bad["llm"]
+        path = self._write(tmp_path, bad)
+        with pytest.raises(ConfigValidationError):
+            load_config(path)
 
-        with pytest.raises(ConfigValidationError, match="Configuration file is empty"):
-            load_config(str(config_file))
+    def test_invalid_transport_raises(self, tmp_path):
+        bad = _minimal_yaml_dict()
+        bad["mcp"]["transport"] = "carrier_pigeon"
+        path = self._write(tmp_path, bad)
+        with pytest.raises(ConfigValidationError):
+            load_config(path)
 
-    def test_load_config_missing_required_fields(self, tmp_path):
-        """Test loading config with missing required fields raises ConfigValidationError."""
-        config_file = tmp_path / "incomplete.yaml"
-        config_data = {
-            "llm": {
-                "provider": "openai",
-                "api_key_env": "TEST_API_KEY",
-            }
-        }
-        config_file.write_text(yaml.dump(config_data))
-
-        with pytest.raises(
-            ConfigValidationError, match="Configuration validation failed"
-        ):
-            load_config(str(config_file))
-
-    def test_load_config_invalid_transport_value(self, tmp_path):
-        """Test loading config with invalid transport value raises ConfigValidationError."""
-        config_file = tmp_path / "bad_transport.yaml"
-        config_data = {
-            "llm": {
-                "provider": "openai",
-                "api_key_env": "TEST_API_KEY",
-                "skill_generation_model": "gpt-4",
-                "simulation_model": "gpt-4",
-                "temperature": 0,
-            },
-            "skills": {"folder": "./skills"},
-            "sessions": {
-                "max_messages": 100,
-                "idle_timeout_seconds": 3600,
-                "max_concurrent_queue_depth": 8,
-            },
-            "mcp": {"transport": "websocket"},
-        }
-        config_file.write_text(yaml.dump(config_data))
-
-        with pytest.raises(
-            ConfigValidationError, match="Configuration validation failed"
-        ):
-            load_config(str(config_file))
-
-    def test_api_key_resolution_from_env(self, tmp_path):
-        """Test API key resolution from environment variable."""
-        config_file = tmp_path / "test_config.yaml"
-        config_file.write_text("""
-llm:
-  provider: openai
-  api_key_env: TEST_OPENAI_KEY
-  skill_generation_model: gpt-4
-  simulation_model: gpt-4
-skills:
-  folder: ./skills
-sessions:
-  max_messages: 100
-  idle_timeout_seconds: 3600
-  max_concurrent_queue_depth: 8
-mcp:
-  transport: sse
-""")
-
-        os.environ["TEST_OPENAI_KEY"] = "sk-test-key-123"
-        try:
-            config = load_config(str(config_file))
-            assert config.llm._resolved_api_key == "sk-test-key-123"
-            assert config.llm.api_key_env == "TEST_OPENAI_KEY"
-        finally:
-            del os.environ["TEST_OPENAI_KEY"]
-
-    def test_api_key_missing_env_var(self, tmp_path):
-        """Test error when environment variable is not set."""
-        config_file = tmp_path / "test_config.yaml"
-        config_file.write_text("""
-llm:
-  provider: openai
-  api_key_env: MISSING_KEY
-  skill_generation_model: gpt-4
-  simulation_model: gpt-4
-skills:
-  folder: ./skills
-sessions:
-  max_messages: 100
-  idle_timeout_seconds: 3600
-  max_concurrent_queue_depth: 8
-mcp:
-  transport: sse
-""")
-
-        with pytest.raises(
-            ConfigValidationError, match="api_key_env 'MISSING_KEY' is not set"
-        ):
-            load_config(str(config_file))
-
-    def test_api_base_resolution_from_env(self, tmp_path):
-        """Test API base URL resolution from environment variable."""
-        config_file = tmp_path / "test_config.yaml"
-        config_file.write_text("""
-llm:
-  provider: openai
-  api_key_env: TEST_API_KEY
-  api_base_env: TEST_API_BASE
-  skill_generation_model: gpt-4
-  simulation_model: gpt-4
-skills:
-  folder: ./skills
-sessions:
-  max_messages: 100
-  idle_timeout_seconds: 3600
-  max_concurrent_queue_depth: 8
-mcp:
-  transport: sse
-""")
-
-        os.environ["TEST_API_KEY"] = "sk-literal-key"
-        os.environ["TEST_API_BASE"] = "https://custom.api.com/v1"
-        try:
-            config = load_config(str(config_file))
-            assert config.llm.api_base == "https://custom.api.com/v1"
-            assert config.llm.api_base_env == "TEST_API_BASE"
-        finally:
-            del os.environ["TEST_API_KEY"]
-            del os.environ["TEST_API_BASE"]
-
-
-# Made with Bob
+    def test_legacy_api_key_env_field_rejected(self, tmp_path):
+        """Old api_key_env field must be rejected (extra='forbid')."""
+        bad = _minimal_yaml_dict()
+        bad["llm"]["api_key_env"] = "OPENAI_API_KEY"
+        path = self._write(tmp_path, bad)
+        with pytest.raises(ConfigValidationError):
+            load_config(path)

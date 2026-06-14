@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 
 from simulation_harness.models.domain import SessionState
-from simulation_harness.utils.logging import log_tool_call
+from simulation_harness.utils.logging import log_tool_call, log_tool_call_legacy
 
 
 class TestLogToolCall:
@@ -24,7 +24,7 @@ class TestLogToolCall:
             max_queue_depth=10,
         )
 
-        log_tool_call(
+        log_tool_call_legacy(
             tool_name="get_user",
             arguments={"user_id": "123"},
             result={"name": "John Doe"},
@@ -56,7 +56,7 @@ class TestLogToolCall:
             max_queue_depth=10,
         )
 
-        log_tool_call(
+        log_tool_call_legacy(
             tool_name="delete_user",
             arguments={"user_id": "999"},
             result=None,
@@ -96,7 +96,7 @@ class TestLogToolCall:
             max_queue_depth=10,
         )
 
-        log_tool_call(
+        log_tool_call_legacy(
             tool_name="list_items",
             arguments={"limit": 10},
             result={"items": []},
@@ -139,7 +139,7 @@ class TestLogToolCall:
             },
         }
 
-        log_tool_call(
+        log_tool_call_legacy(
             tool_name="search_records",
             arguments=complex_args,
             result={"count": 42},
@@ -164,7 +164,7 @@ class TestLogToolCall:
             max_queue_depth=10,
         )
 
-        log_tool_call(
+        log_tool_call_legacy(
             tool_name="update_status",
             arguments={"id": "abc", "status": "completed"},
             result={"success": True},
@@ -194,7 +194,7 @@ class TestLogToolCall:
             max_queue_depth=10,
         )
 
-        log_tool_call(
+        log_tool_call_legacy(
             tool_name="process_batch",
             arguments={"batch_id": "batch-123"},
             result={"processed": 100},

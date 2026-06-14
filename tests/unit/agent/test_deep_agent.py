@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import pytest
+from pydantic import SecretStr
 from unittest.mock import Mock, AsyncMock, patch
 from langchain_core.messages import SystemMessage
 from simulation_harness.agent.deep_agent import DeepAgent
@@ -38,7 +39,7 @@ def mock_operation():
 def test_deep_agent_initialization(mock_spec, mock_operation):
     """Test DeepAgent initializes correctly."""
     agent = DeepAgent(
-        api_key="test-key",
+        api_key=SecretStr("test-key"),
         model="gpt-4",
         temperature=0.7,
         max_tokens=1000,
@@ -59,7 +60,7 @@ def test_deep_agent_initialization(mock_spec, mock_operation):
 def test_deep_agent_initialization_with_base_url(mock_spec, mock_operation):
     """Test DeepAgent initializes with custom base URL."""
     agent = DeepAgent(
-        api_key="test-key",
+        api_key=SecretStr("test-key"),
         model="gpt-4",
         temperature=0.7,
         max_tokens=1000,
@@ -75,7 +76,7 @@ def test_deep_agent_initialization_with_base_url(mock_spec, mock_operation):
 async def test_generate_response_basic(mock_spec, mock_operation):
     """Test generating a basic response."""
     agent = DeepAgent(
-        api_key="test-key",
+        api_key=SecretStr("test-key"),
         model="gpt-4",
         temperature=0.7,
         max_tokens=1000,
@@ -103,7 +104,7 @@ async def test_generate_response_basic(mock_spec, mock_operation):
 async def test_generate_response_with_default_thread(mock_spec, mock_operation):
     """Test generating response with default thread ID."""
     agent = DeepAgent(
-        api_key="test-key",
+        api_key=SecretStr("test-key"),
         model="gpt-4",
         temperature=0.7,
         max_tokens=1000,
@@ -129,7 +130,7 @@ async def test_generate_response_with_default_thread(mock_spec, mock_operation):
 async def test_generate_response_invalid_json(mock_spec, mock_operation):
     """Test handling invalid JSON response."""
     agent = DeepAgent(
-        api_key="test-key",
+        api_key=SecretStr("test-key"),
         model="gpt-4",
         temperature=0.7,
         max_tokens=1000,
@@ -156,7 +157,7 @@ async def test_generate_response_invalid_json(mock_spec, mock_operation):
 async def test_generate_response_tool_not_found(mock_spec, mock_operation):
     """Test handling tool not found error."""
     agent = DeepAgent(
-        api_key="test-key",
+        api_key=SecretStr("test-key"),
         model="gpt-4",
         temperature=0.7,
         max_tokens=1000,
@@ -173,7 +174,7 @@ async def test_generate_response_tool_not_found(mock_spec, mock_operation):
 async def test_reset_specific_thread(mock_spec, mock_operation):
     """Test resetting a specific thread."""
     agent = DeepAgent(
-        api_key="test-key",
+        api_key=SecretStr("test-key"),
         model="gpt-4",
         temperature=0.7,
         max_tokens=1000,
@@ -196,7 +197,7 @@ async def test_reset_specific_thread(mock_spec, mock_operation):
 async def test_reset_all_threads(mock_spec, mock_operation):
     """Test resetting all threads."""
     agent = DeepAgent(
-        api_key="test-key",
+        api_key=SecretStr("test-key"),
         model="gpt-4",
         temperature=0.7,
         max_tokens=1000,
@@ -220,7 +221,7 @@ async def test_reset_all_threads(mock_spec, mock_operation):
 async def test_shutdown(mock_spec, mock_operation):
     """Test shutting down the agent."""
     agent = DeepAgent(
-        api_key="test-key",
+        api_key=SecretStr("test-key"),
         model="gpt-4",
         temperature=0.7,
         max_tokens=1000,
@@ -259,7 +260,7 @@ def test_deep_agent_uses_prompt_for_stateful_react_agent(mock_spec, mock_operati
         mock_chat_openai.return_value = mock_llm
 
         agent = DeepAgent(
-            api_key="test-key",
+            api_key=SecretStr("test-key"),
             model="gpt-4",
             temperature=0.7,
             max_tokens=1000,
@@ -277,6 +278,28 @@ def test_deep_agent_uses_prompt_for_stateful_react_agent(mock_spec, mock_operati
     assert "state_modifier" not in kwargs
     assert isinstance(kwargs["prompt"], SystemMessage)
     assert kwargs["prompt"].content == agent.system_prompt
+
+
+def test_empty_string_base_url_is_forwarded_not_silently_dropped(
+    mock_spec, mock_operation
+):
+    """base_url='' must reach ChatOpenAI, not be silently omitted by a falsy check."""
+    with patch("simulation_harness.agent.deep_agent.ChatOpenAI") as mock_chat:
+        mock_chat.return_value = Mock()
+        DeepAgent(
+            api_key=SecretStr("test-key"),
+            model="gpt-4",
+            temperature=0.7,
+            max_tokens=1000,
+            base_url="",
+            spec=mock_spec,
+            operations=[mock_operation],
+        )
+        call_kwargs = mock_chat.call_args[1]
+        assert "base_url" in call_kwargs, (
+            "base_url='' was silently dropped — use 'if base_url is not None:'"
+        )
+        assert call_kwargs["base_url"] == ""
 
 
 # Made with Bob

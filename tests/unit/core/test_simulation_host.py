@@ -1,8 +1,10 @@
 """Tests for SimulationHost."""
 
+import os
+
 import pytest
 
-from simulation_harness.config.settings import load_config
+from simulation_harness.config.settings import load_config, load_secrets
 from simulation_harness.core.simulation_host import SimulationHost
 from simulation_harness.models.domain import SimulationSpec
 from simulation_harness.utils.errors import SimulationAlreadyExistsError
@@ -10,8 +12,30 @@ from simulation_harness.utils.errors import SimulationAlreadyExistsError
 
 @pytest.fixture(scope="module", autouse=True)
 def load_test_config():
-    """Load configuration before running tests."""
-    load_config("config/harness.yaml")
+    """Load configuration and secrets before running tests."""
+    from pathlib import Path
+    from simulation_harness.config import settings as settings_mod
+
+    # Resolve absolute path from file: file -> core/ -> unit/ -> tests/ -> project root
+    config_path = str(
+        Path(__file__).parent.parent.parent.parent / "config" / "harness.yaml"
+    )
+    load_config(config_path)
+
+    prior_key = os.environ.get("LLM_API_KEY")
+    os.environ["LLM_API_KEY"] = "test-key-for-unit-tests"
+    load_secrets(env_file=None)
+
+    yield
+
+    # Restore env var
+    if prior_key is not None:
+        os.environ["LLM_API_KEY"] = prior_key
+    elif "LLM_API_KEY" in os.environ:
+        del os.environ["LLM_API_KEY"]
+
+    # Reset module-level global so later test modules start clean
+    settings_mod._global_secrets = None
 
 
 @pytest.mark.asyncio

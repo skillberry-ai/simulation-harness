@@ -140,7 +140,7 @@ async def test_both_transports_handle_session_expired_identically(
     from simulation_harness.utils.errors import SessionExpiredError
 
     mock_simulation_instance.execute_tool.side_effect = SessionExpiredError(
-        "Session expired: max_messages=100 reached"
+        reason="max_messages_exceeded", limit=100, observed=101
     )
 
     # Create wrappers for both transports
