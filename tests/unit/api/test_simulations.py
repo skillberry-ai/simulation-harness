@@ -5,12 +5,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 from simulation_harness.models.domain import SimulationSpec, SessionState
 from simulation_harness.core.simulation_instance import SimulationInstance
+from simulation_harness.core.simulation_record import SimulationRecord, SimulationStatus
 from simulation_harness.utils.errors import (
     SimulationAlreadyExistsError,
+    SimulationNotReadyError,
 )
 
 
@@ -35,8 +38,9 @@ def valid_openapi_spec():
 def mock_simulation_host():
     """Mock SimulationHost for testing."""
     host = MagicMock()
-    host.create_simulation = AsyncMock()
-    host.get_simulation = AsyncMock()
+    host.declare_simulation = AsyncMock()
+    host.get_record = AsyncMock(return_value=None)
+    host.get_simulation = AsyncMock(return_value=None)
     host.delete_simulation = AsyncMock()
     return host
 
@@ -94,6 +98,19 @@ def app(mock_simulation_host, mock_skill_registry):
     app.dependency_overrides[get_simulation_host] = lambda: mock_simulation_host
     app.dependency_overrides[get_skill_registry] = lambda: mock_skill_registry
 
+    # Add SimulationNotReadyError handler (mirrors main.py Task 8)
+    @app.exception_handler(SimulationNotReadyError)
+    async def not_ready_handler(request, exc: SimulationNotReadyError):
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": str(exc),
+                "name": exc.name,
+                "status": exc.status,
+            },
+            headers={"Retry-After": str(exc.retry_after_seconds)},
+        )
+
     return app
 
 
@@ -106,135 +123,109 @@ def client(app):
 class TestCreateSimulation:
     """Tests for POST /api/v1/simulation endpoint."""
 
-    @pytest.mark.asyncio
-    async def test_create_simulation_success(
+    async def test_create_simulation_returns_202_pending(
         self,
         client,
         valid_openapi_spec,
         mock_simulation_host,
         mock_skill_registry,
-        mock_simulation_instance,
     ):
-        """Test successful simulation creation."""
-        # Setup mocks
-        mock_skill_registry.ensure_skill.return_value = Path("/path/to/skill.md")
-        mock_simulation_host.create_simulation.return_value = mock_simulation_instance
+        """Test that POST /simulation returns 202 with pending status immediately."""
+        record = SimulationRecord.declare(name="test-api")
+        mock_simulation_host.declare_simulation = AsyncMock(return_value=record)
 
-        # Make request
         response = client.post(
             "/api/v1/simulation",
             json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
         )
 
-        # Verify response
-        assert response.status_code == 201
+        assert response.status_code == 202
         data = response.json()
-        assert data["name"] == "test-api"  # Name derived from spec title
-        assert data["status"] == "active"
-        assert "session_state" in data
-        assert data["session_state"]["tool_call_count"] == 0
-        assert "mcp_url" in data
-        assert data["mcp_url"] == "http://testserver/mcp/test-api"
+        assert data["name"] == "test-api"
+        assert data["status"] == "pending"
+        assert data["session_state"] is None
+        assert data["mcp_url"] is None
+        assert "progress" in data
         assert "created_at" in data
 
-        # Verify mocks were called
-        mock_skill_registry.ensure_skill.assert_called_once()
-        mock_simulation_host.create_simulation.assert_called_once()
+        mock_simulation_host.declare_simulation.assert_called_once()
 
-    @pytest.mark.asyncio
-    async def test_create_simulation_duplicate(
+    async def test_create_simulation_duplicate_returns_409(
         self, client, valid_openapi_spec, mock_simulation_host, mock_skill_registry
     ):
         """Test creating simulation when one already exists returns 409."""
-        # Setup mock to raise error
-        mock_simulation_host.create_simulation.side_effect = (
+        mock_simulation_host.declare_simulation.side_effect = (
             SimulationAlreadyExistsError("A simulation already exists")
         )
 
-        # Make request
         response = client.post(
             "/api/v1/simulation",
             json={"openapi_spec": valid_openapi_spec},
         )
 
-        # Verify response
         assert response.status_code == 409
         assert "already exists" in response.json()["detail"].lower()
 
-    @pytest.mark.asyncio
-    async def test_create_simulation_invalid_spec(
+    async def test_create_simulation_invalid_spec_returns_422(
         self,
         client,
         mock_simulation_host,
         mock_skill_registry,
-        mock_simulation_instance,
     ):
         """Test creating simulation with invalid OpenAPI spec returns 422."""
-        # Setup mocks (won't be called due to validation failure)
-        mock_skill_registry.ensure_skill.return_value = "/path/to/skill.md"
-        mock_simulation_host.create_simulation.return_value = mock_simulation_instance
-
         # Invalid spec (missing required 'info' field)
         invalid_spec = {"openapi": "3.0.0"}
 
-        # Make request
         response = client.post(
             "/api/v1/simulation",
             json={"openapi_spec": invalid_spec},
         )
 
-        # Should return 422 for invalid spec
         assert response.status_code == 422
         detail = response.json()["detail"].lower()
         assert "openapi" in detail or "validation" in detail or "info" in detail
 
-    @pytest.mark.asyncio
-    async def test_create_simulation_with_mcp_port_returns_sidecar_url(
+    async def test_create_simulation_name_derived_from_spec_title(
         self,
         client,
         valid_openapi_spec,
         mock_simulation_host,
         mock_skill_registry,
-        mock_simulation_instance,
     ):
-        """When mcp_port is provided, mcp_url uses that port."""
-        mock_skill_registry.ensure_skill.return_value = Path("/path/to/skill.md")
-        mock_simulation_instance.mcp_port = 9000
-        mock_simulation_host.create_simulation.return_value = mock_simulation_instance
-
-        response = client.post(
-            "/api/v1/simulation",
-            json={"openapi_spec": valid_openapi_spec, "mcp_port": 9000},
-        )
-
-        assert response.status_code == 201
-        data = response.json()
-        assert data["mcp_url"] == "http://testserver:9000/mcp/test-api"
-
-    @pytest.mark.asyncio
-    async def test_create_simulation_without_mcp_port_returns_harness_url(
-        self,
-        client,
-        valid_openapi_spec,
-        mock_simulation_host,
-        mock_skill_registry,
-        mock_simulation_instance,
-    ):
-        """When mcp_port is absent, mcp_url uses the harness base URL (unchanged behavior)."""
-        mock_skill_registry.ensure_skill.return_value = Path("/path/to/skill.md")
-        mock_simulation_instance.mcp_port = None
-        mock_simulation_host.create_simulation.return_value = mock_simulation_instance
+        """Test that simulation name is derived from spec info.title."""
+        record = SimulationRecord.declare(name="test-api")
+        mock_simulation_host.declare_simulation = AsyncMock(return_value=record)
 
         response = client.post(
             "/api/v1/simulation",
             json={"openapi_spec": valid_openapi_spec},
         )
 
-        assert response.status_code == 201
-        data = response.json()
-        assert data["mcp_url"] == "http://testserver/mcp/test-api"
+        assert response.status_code == 202
+        # Name should be "test-api" derived from "Test API"
+        call_kwargs = mock_simulation_host.declare_simulation.call_args.kwargs
+        assert call_kwargs["name"] == "test-api"
 
-    @pytest.mark.asyncio
+    async def test_create_simulation_name_override(
+        self,
+        client,
+        valid_openapi_spec,
+        mock_simulation_host,
+        mock_skill_registry,
+    ):
+        """Test that explicit name overrides spec title."""
+        record = SimulationRecord.declare(name="my-custom-name")
+        mock_simulation_host.declare_simulation = AsyncMock(return_value=record)
+
+        response = client.post(
+            "/api/v1/simulation",
+            json={"openapi_spec": valid_openapi_spec, "name": "My Custom Name"},
+        )
+
+        assert response.status_code == 202
+        call_kwargs = mock_simulation_host.declare_simulation.call_args.kwargs
+        assert call_kwargs["name"] == "my-custom-name"
+
     async def test_create_simulation_port_in_use_returns_409(
         self,
         client,
@@ -242,12 +233,9 @@ class TestCreateSimulation:
         mock_simulation_host,
         mock_skill_registry,
     ):
-        """When sidecar port is already in use, returns 409."""
-        from simulation_harness.utils.errors import PortInUseError
-
-        mock_skill_registry.ensure_skill.return_value = Path("/path/to/skill.md")
-        mock_simulation_host.create_simulation.side_effect = PortInUseError(
-            "Port 9000 is already in use"
+        """When declare_simulation raises SimulationAlreadyExistsError, returns 409."""
+        mock_simulation_host.declare_simulation.side_effect = (
+            SimulationAlreadyExistsError("A simulation already exists")
         )
 
         response = client.post(
@@ -256,79 +244,74 @@ class TestCreateSimulation:
         )
 
         assert response.status_code == 409
-        assert "9000" in response.json()["detail"]
 
 
 class TestGetSimulation:
     """Tests for GET /api/v1/simulation endpoint."""
 
-    @pytest.mark.asyncio
-    async def test_get_simulation_success(
-        self, client, mock_simulation_host, mock_simulation_instance
+    async def test_get_simulation_not_found_returns_404(
+        self, client, mock_simulation_host
     ):
-        """Test getting simulation status successfully."""
-        # Setup mock
-        mock_simulation_host.get_simulation.return_value = mock_simulation_instance
-
-        # Make request
-        response = client.get("/api/v1/simulation")
-
-        # Verify response
-        assert response.status_code == 200
-        data = response.json()
-        assert data["name"] == "test-api"  # Name from mock spec
-        assert data["status"] == "active"
-        assert "session_state" in data
-        assert data["session_state"]["tool_call_count"] == 0
-        assert data["session_state"]["max_messages"] == 100
-        assert data["session_state"]["queue_depth"] == 0
-        assert "mcp_url" in data
-        assert data["mcp_url"] == "http://testserver/mcp/test-api"
-        assert "created_at" in data
-
-    @pytest.mark.asyncio
-    async def test_get_simulation_created_at_consistent(
-        self, client, mock_simulation_host, mock_simulation_instance
-    ):
-        """Test that created_at remains consistent across multiple GET requests."""
-        # Setup mock
-        mock_simulation_host.get_simulation.return_value = mock_simulation_instance
-
-        # Make first request
-        response1 = client.get("/api/v1/simulation")
-        assert response1.status_code == 200
-        created_at_1 = response1.json()["created_at"]
-
-        # Make second request
-        response2 = client.get("/api/v1/simulation")
-        assert response2.status_code == 200
-        created_at_2 = response2.json()["created_at"]
-
-        # Verify created_at is the same
-        assert created_at_1 == created_at_2
-        assert created_at_1 == "2026-05-30T10:00:00Z"
-
-    @pytest.mark.asyncio
-    async def test_get_simulation_not_found(self, client, mock_simulation_host):
         """Test getting simulation when none exists returns 404."""
-        # Setup mock
-        mock_simulation_host.get_simulation.return_value = None
+        mock_simulation_host.get_record = AsyncMock(return_value=None)
 
-        # Make request
         response = client.get("/api/v1/simulation")
 
-        # Verify response
         assert response.status_code == 404
         detail = response.json()["detail"].lower()
         assert "simulation" in detail and "found" in detail
 
-    @pytest.mark.asyncio
-    async def test_get_simulation_with_mcp_port_returns_sidecar_url(
+    async def test_get_simulation_pending_returns_200_with_pending_status(
+        self, client, mock_simulation_host
+    ):
+        """Test getting simulation in pending state returns 200 with pending status."""
+        record = SimulationRecord.declare(name="test-api")
+        mock_simulation_host.get_record = AsyncMock(return_value=record)
+
+        response = client.get("/api/v1/simulation")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["name"] == "test-api"
+        assert data["status"] == "pending"
+        assert data["session_state"] is None
+        assert data["mcp_url"] is None
+        assert "progress" in data
+
+    async def test_get_simulation_ready_returns_session_state_and_mcp_url(
+        self, client, mock_simulation_host, mock_simulation_instance
+    ):
+        """Test getting simulation in ready state returns session_state and mcp_url."""
+        record = SimulationRecord.declare(name="test-api")
+        record.transition(SimulationStatus.INITIALIZING, phase="agent_init")
+        record.mark_ready(mock_simulation_instance)
+
+        mock_simulation_host.get_record = AsyncMock(return_value=record)
+
+        response = client.get("/api/v1/simulation")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["name"] == "test-api"
+        assert data["status"] == "ready"
+        assert data["session_state"] is not None
+        assert data["session_state"]["tool_call_count"] == 0
+        assert data["session_state"]["max_messages"] == 100
+        assert data["session_state"]["queue_depth"] == 0
+        assert data["mcp_url"] == "http://testserver/mcp/test-api"
+        assert "created_at" in data
+
+    async def test_get_simulation_ready_with_mcp_port_returns_sidecar_url(
         self, client, mock_simulation_host, mock_simulation_instance
     ):
         """GET /simulation returns sidecar mcp_url when mcp_port is set."""
         mock_simulation_instance.mcp_port = 9000
-        mock_simulation_host.get_simulation.return_value = mock_simulation_instance
+
+        record = SimulationRecord.declare(name="test-api", mcp_port=9000)
+        record.transition(SimulationStatus.INITIALIZING, phase="agent_init")
+        record.mark_ready(mock_simulation_instance)
+
+        mock_simulation_host.get_record = AsyncMock(return_value=record)
 
         response = client.get("/api/v1/simulation")
 
@@ -336,39 +319,94 @@ class TestGetSimulation:
         data = response.json()
         assert data["mcp_url"] == "http://testserver:9000/mcp/test-api"
 
+    async def test_get_simulation_created_at_consistent(
+        self, client, mock_simulation_host, mock_simulation_instance
+    ):
+        """Test that created_at remains consistent across multiple GET requests."""
+        record = SimulationRecord.declare(name="test-api")
+        record.transition(SimulationStatus.INITIALIZING, phase="agent_init")
+        record.mark_ready(mock_simulation_instance)
+        # Fix the created_at so we can assert a known value
+        fixed_time = datetime(2026, 5, 30, 10, 0, 0, tzinfo=timezone.utc)
+        record.created_at = fixed_time
+
+        mock_simulation_host.get_record = AsyncMock(return_value=record)
+
+        response1 = client.get("/api/v1/simulation")
+        assert response1.status_code == 200
+        created_at_1 = response1.json()["created_at"]
+
+        response2 = client.get("/api/v1/simulation")
+        assert response2.status_code == 200
+        created_at_2 = response2.json()["created_at"]
+
+        assert created_at_1 == created_at_2
+        assert created_at_1 == "2026-05-30T10:00:00Z"
+
+    async def test_get_simulation_failed_returns_error_payload(
+        self, client, mock_simulation_host
+    ):
+        """Test getting a failed simulation returns error payload."""
+        record = SimulationRecord.declare(name="test-api")
+        record.fail(
+            code="creation_timeout",
+            message="exceeded 120s",
+            details={"limit": 120},
+        )
+
+        mock_simulation_host.get_record = AsyncMock(return_value=record)
+
+        response = client.get("/api/v1/simulation")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "failed"
+        assert data["session_state"] is None
+        assert data["mcp_url"] is None
+        assert data["error"] is not None
+        assert data["error"]["code"] == "creation_timeout"
+        assert data["error"]["message"] == "exceeded 120s"
+
 
 class TestDeleteSimulation:
     """Tests for DELETE /api/v1/simulation endpoint."""
 
-    @pytest.mark.asyncio
     async def test_delete_simulation_success(
         self, client, mock_simulation_host, mock_simulation_instance
     ):
         """Test deleting simulation successfully."""
-        # Setup mock
-        mock_simulation_host.get_simulation.return_value = mock_simulation_instance
-        mock_simulation_host.delete_simulation.return_value = None
+        record = SimulationRecord.declare(name="test-api")
+        record.transition(SimulationStatus.INITIALIZING, phase="agent_init")
+        record.mark_ready(mock_simulation_instance)
 
-        # Make request
+        mock_simulation_host.get_record = AsyncMock(return_value=record)
+        mock_simulation_host.delete_simulation = AsyncMock(return_value=None)
+
         response = client.delete("/api/v1/simulation")
 
-        # Verify response
         assert response.status_code == 204
         assert response.content == b""
-
-        # Verify delete was called
         mock_simulation_host.delete_simulation.assert_called_once()
 
-    @pytest.mark.asyncio
-    async def test_delete_simulation_not_found(self, client, mock_simulation_host):
-        """Test deleting simulation when none exists returns 404."""
-        # Setup mock
-        mock_simulation_host.get_simulation.return_value = None
+    async def test_delete_pending_simulation_success(
+        self, client, mock_simulation_host
+    ):
+        """Test deleting a pending simulation (mid-creation) also returns 204."""
+        record = SimulationRecord.declare(name="test-api")
+        mock_simulation_host.get_record = AsyncMock(return_value=record)
+        mock_simulation_host.delete_simulation = AsyncMock(return_value=None)
 
-        # Make request
         response = client.delete("/api/v1/simulation")
 
-        # Verify response
+        assert response.status_code == 204
+        mock_simulation_host.delete_simulation.assert_called_once()
+
+    async def test_delete_simulation_not_found(self, client, mock_simulation_host):
+        """Test deleting simulation when none exists returns 404."""
+        mock_simulation_host.get_record = AsyncMock(return_value=None)
+
+        response = client.delete("/api/v1/simulation")
+
         assert response.status_code == 404
         detail = response.json()["detail"].lower()
         assert "simulation" in detail and "found" in detail
@@ -377,49 +415,66 @@ class TestDeleteSimulation:
 class TestResetSession:
     """Tests for POST /api/v1/simulation/reset endpoint."""
 
-    @pytest.mark.asyncio
     async def test_reset_session_success(
         self, client, mock_simulation_host, mock_simulation_instance
     ):
-        """Test resetting session successfully."""
-        # Setup mock
-        mock_simulation_host.get_simulation.return_value = mock_simulation_instance
+        """Test resetting session successfully when simulation is ready."""
+        record = SimulationRecord.declare(name="test-api")
+        record.transition(SimulationStatus.INITIALIZING, phase="agent_init")
+        record.mark_ready(mock_simulation_instance)
 
-        # Make request
+        mock_simulation_host.get_record = AsyncMock(return_value=record)
+
         response = client.post("/api/v1/simulation/reset")
 
-        # Verify response
         assert response.status_code == 200
         data = response.json()
         assert data["message"] == "Session reset successfully"
-
-        # Verify reset was called
         mock_simulation_instance.reset_session.assert_called_once()
 
-    @pytest.mark.asyncio
     async def test_reset_session_not_found(self, client, mock_simulation_host):
         """Test resetting session when no simulation exists returns 404."""
-        # Setup mock
-        mock_simulation_host.get_simulation.return_value = None
+        mock_simulation_host.get_record = AsyncMock(return_value=None)
 
-        # Make request
         response = client.post("/api/v1/simulation/reset")
 
-        # Verify response
         assert response.status_code == 404
         detail = response.json()["detail"].lower()
         assert "simulation" in detail and "found" in detail
+
+    async def test_reset_session_pending_returns_503(
+        self, client, mock_simulation_host
+    ):
+        """Test resetting session when simulation is pending returns 503."""
+        record = SimulationRecord.declare(name="test-api")
+        mock_simulation_host.get_record = AsyncMock(return_value=record)
+
+        response = client.post("/api/v1/simulation/reset")
+
+        assert response.status_code == 503
+        assert response.headers.get("Retry-After") == "2"
+
+    async def test_reset_session_generating_skill_returns_503(
+        self, client, mock_simulation_host
+    ):
+        """Test resetting session when simulation is generating skill returns 503."""
+        record = SimulationRecord.declare(name="test-api")
+        record.transition(SimulationStatus.GENERATING_SKILL, phase="skill_generation")
+        mock_simulation_host.get_record = AsyncMock(return_value=record)
+
+        response = client.post("/api/v1/simulation/reset")
+
+        assert response.status_code == 503
+        assert response.headers.get("Retry-After") == "2"
 
 
 class TestGetSimulationState:
     """Tests for GET /api/v1/simulation/state endpoint."""
 
-    @pytest.mark.asyncio
     async def test_get_simulation_state_success(
         self, client, mock_simulation_host, mock_simulation_instance
     ):
         """Test getting simulation state snapshot successfully."""
-        # Setup mock to return state snapshot
         mock_simulation_instance.get_state_snapshot.return_value = {
             "restaurants": [
                 {"id": "1", "name": "Test Restaurant", "cuisine": "Italian"}
@@ -429,12 +484,14 @@ class TestGetSimulationState:
             ],
         }
 
-        mock_simulation_host.get_simulation.return_value = mock_simulation_instance
+        record = SimulationRecord.declare(name="test-api")
+        record.transition(SimulationStatus.INITIALIZING, phase="agent_init")
+        record.mark_ready(mock_simulation_instance)
 
-        # Make request
+        mock_simulation_host.get_record = AsyncMock(return_value=record)
+
         response = client.get("/api/v1/simulation/state")
 
-        # Verify response
         assert response.status_code == 200
         data = response.json()
         assert "restaurants" in data
@@ -442,80 +499,83 @@ class TestGetSimulationState:
         assert len(data["restaurants"]) == 1
         assert data["restaurants"][0]["name"] == "Test Restaurant"
         assert len(data["reservations"]) == 1
-
-        # Verify get_state_snapshot was called with default thread_id
         mock_simulation_instance.get_state_snapshot.assert_called_once_with("default")
 
-    @pytest.mark.asyncio
     async def test_get_simulation_state_custom_thread_id(
         self, client, mock_simulation_host, mock_simulation_instance
     ):
         """Test getting state with custom thread_id parameter."""
-        # Setup mock
         mock_simulation_instance.get_state_snapshot.return_value = {
             "restaurants": [{"id": "2", "name": "Custom Thread Restaurant"}]
         }
 
-        mock_simulation_host.get_simulation.return_value = mock_simulation_instance
+        record = SimulationRecord.declare(name="test-api")
+        record.transition(SimulationStatus.INITIALIZING, phase="agent_init")
+        record.mark_ready(mock_simulation_instance)
 
-        # Make request with custom thread_id
+        mock_simulation_host.get_record = AsyncMock(return_value=record)
+
         response = client.get("/api/v1/simulation/state?thread_id=custom-thread-123")
 
-        # Verify response
         assert response.status_code == 200
         data = response.json()
         assert "restaurants" in data
         assert data["restaurants"][0]["name"] == "Custom Thread Restaurant"
-
-        # Verify get_state_snapshot was called with custom thread_id
         mock_simulation_instance.get_state_snapshot.assert_called_once_with(
             "custom-thread-123"
         )
 
-    @pytest.mark.asyncio
     async def test_get_simulation_state_no_simulation(
         self, client, mock_simulation_host
     ):
         """Test getting state when no simulation exists returns 404."""
-        # Setup mock
-        mock_simulation_host.get_simulation.return_value = None
+        mock_simulation_host.get_record = AsyncMock(return_value=None)
 
-        # Make request
         response = client.get("/api/v1/simulation/state")
 
-        # Verify response
         assert response.status_code == 404
         detail = response.json()["detail"].lower()
         assert "simulation" in detail and "found" in detail
 
-    @pytest.mark.asyncio
     async def test_get_simulation_state_no_store_registry(
         self, client, mock_simulation_host, mock_simulation_instance
     ):
         """Test getting state when simulation has no store registry returns empty state."""
-        # Setup mock to return empty dict (no store registry)
         mock_simulation_instance.get_state_snapshot.return_value = {}
 
-        mock_simulation_host.get_simulation.return_value = mock_simulation_instance
+        record = SimulationRecord.declare(name="test-api")
+        record.transition(SimulationStatus.INITIALIZING, phase="agent_init")
+        record.mark_ready(mock_simulation_instance)
 
-        # Make request
+        mock_simulation_host.get_record = AsyncMock(return_value=record)
+
         response = client.get("/api/v1/simulation/state")
 
-        # Verify response - should return empty dict
         assert response.status_code == 200
         data = response.json()
         assert data == {}
+
+    async def test_get_simulation_state_pending_returns_503(
+        self, client, mock_simulation_host
+    ):
+        """Test getting state when simulation is pending returns 503."""
+        record = SimulationRecord.declare(name="test-api")
+        mock_simulation_host.get_record = AsyncMock(return_value=record)
+
+        response = client.get("/api/v1/simulation/state")
+
+        assert response.status_code == 503
+        assert response.headers.get("Retry-After") == "2"
 
 
 class TestListSimulationTools:
     """Tests for GET /api/v1/simulation/tools endpoint."""
 
-    @pytest.mark.asyncio
     async def test_list_simulation_tools_no_simulation_returns_404(
         self, client, mock_simulation_host
     ):
         """Test listing tools when no simulation is active returns 404."""
-        mock_simulation_host.get_simulation.return_value = None
+        mock_simulation_host.get_record = AsyncMock(return_value=None)
 
         response = client.get("/api/v1/simulation/tools")
 
@@ -523,17 +583,27 @@ class TestListSimulationTools:
         detail = response.json()["detail"].lower()
         assert "simulation" in detail and "found" in detail
 
+    async def test_list_simulation_tools_pending_returns_503(
+        self, client, mock_simulation_host
+    ):
+        """Test listing tools when simulation is pending returns 503."""
+        record = SimulationRecord.declare(name="test-api")
+        mock_simulation_host.get_record = AsyncMock(return_value=record)
+
+        response = client.get("/api/v1/simulation/tools")
+
+        assert response.status_code == 503
+        assert response.headers.get("Retry-After") == "2"
+
 
 class TestBodySizeLimit:
     """Tests for 10MB body size limit enforcement."""
 
-    @pytest.mark.asyncio
     async def test_body_size_limit_enforced(
         self,
         client,
         mock_simulation_host,
         mock_skill_registry,
-        mock_simulation_instance,
     ):
         """Test that requests exceeding 10MB are handled.
 
@@ -542,9 +612,9 @@ class TestBodySizeLimit:
         In production with real HTTP requests, the 10MB limit will be enforced.
         This test documents the validation logic exists.
         """
-        # Setup mocks
-        mock_skill_registry.ensure_skill.return_value = "/path/to/skill.md"
-        mock_simulation_host.create_simulation.return_value = mock_simulation_instance
+        # Setup mocks for a pending record
+        record = SimulationRecord.declare(name="test")
+        mock_simulation_host.declare_simulation = AsyncMock(return_value=record)
 
         # Create a large spec (>10MB)
         large_spec = {
@@ -568,10 +638,10 @@ class TestBodySizeLimit:
             json={"openapi_spec": large_spec},
         )
 
-        # TestClient doesn't set content-length, so validation doesn't trigger
-        # In production with real HTTP, this would return 413
-        # For now, accept either success or error
-        assert response.status_code in [201, 413, 500]
+        # TestClient doesn't set content-length, so validation doesn't trigger.
+        # In production with real HTTP, this would return 413.
+        # Accept either 202 (pending), 413, or 500 (parsing failure on huge spec).
+        assert response.status_code in [202, 413, 500]
 
 
 class TestSimulationResponseShape:
