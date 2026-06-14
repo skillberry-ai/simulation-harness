@@ -74,6 +74,7 @@ def apply_env_overrides(config: HarnessConfig) -> HarnessConfig:
     # Replace the cached singleton so get_config() returns the overridden values
     # everywhere (skill registry, dependency injection, etc.).
     from . import settings as _settings
+
     _settings._global_config = overridden
 
     return overridden

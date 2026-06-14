@@ -104,7 +104,9 @@ class SimulationRecord:
         details: dict[str, Any] | None = None,
     ) -> None:
         self.transition(SimulationStatus.FAILED)  # raises ValueError on terminal state
-        self.error = SimulationError(code=code, message=message, details=dict(details or {}))
+        self.error = SimulationError(
+            code=code, message=message, details=dict(details or {})
+        )
 
 
 # Made with Bob

@@ -725,10 +725,14 @@ class TestBaseURLWiring:
         mock_secrets.llm_api_key = SecretStr("test-key")
         mock_secrets.llm_api_base = "https://custom.api.com/v1"
 
-        with patch(
-            "simulation_harness.api.dependencies.get_config", return_value=config
-        ), patch(
-            "simulation_harness.api.dependencies.get_secrets", return_value=mock_secrets
+        with (
+            patch(
+                "simulation_harness.api.dependencies.get_config", return_value=config
+            ),
+            patch(
+                "simulation_harness.api.dependencies.get_secrets",
+                return_value=mock_secrets,
+            ),
         ):
             # Reset the global registry to force recreation
             deps._skill_registry = None
@@ -773,10 +777,14 @@ class TestBaseURLWiring:
         mock_secrets.llm_api_key = SecretStr("test-key")
         mock_secrets.llm_api_base = None
 
-        with patch(
-            "simulation_harness.api.dependencies.get_config", return_value=config
-        ), patch(
-            "simulation_harness.api.dependencies.get_secrets", return_value=mock_secrets
+        with (
+            patch(
+                "simulation_harness.api.dependencies.get_config", return_value=config
+            ),
+            patch(
+                "simulation_harness.api.dependencies.get_secrets",
+                return_value=mock_secrets,
+            ),
         ):
             # Reset the global registry
             deps._skill_registry = None
@@ -786,7 +794,6 @@ class TestBaseURLWiring:
 
             # Verify base_url is None (will use OpenAI default)
             assert registry.generator.base_url is None
-
 
 
 class TestSkillRegistryInvalidation:

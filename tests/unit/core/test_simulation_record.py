@@ -1,13 +1,9 @@
 # tests/unit/core/test_simulation_record.py
 """Tests for SimulationRecord status machine."""
 
-from datetime import datetime, timezone
-
 import pytest
 
 from simulation_harness.core.simulation_record import (
-    SimulationError,
-    SimulationProgress,
     SimulationRecord,
     SimulationStatus,
 )
@@ -41,7 +37,9 @@ def test_record_transitions_advance_updated_at():
 
 def test_record_fail_sets_error_and_status():
     record = SimulationRecord.declare(name="test-api")
-    record.fail(code="creation_timeout", message="exceeded 120s", details={"limit": 120})
+    record.fail(
+        code="creation_timeout", message="exceeded 120s", details={"limit": 120}
+    )
     assert record.status == SimulationStatus.FAILED
     assert record.error is not None
     assert record.error.code == "creation_timeout"
@@ -64,6 +62,7 @@ def test_terminal_status_cannot_transition():
 
 def test_mark_ready_sets_instance_and_clears_phase():
     from unittest.mock import MagicMock
+
     record = SimulationRecord.declare(name="test-api")
     record.transition(SimulationStatus.INITIALIZING, phase="agent_init")
     instance = MagicMock()

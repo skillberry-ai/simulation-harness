@@ -10,7 +10,6 @@ import pytest
 from simulation_harness.config.settings import load_config, load_secrets
 from simulation_harness.core.simulation_host import SimulationHost
 from simulation_harness.core.simulation_record import SimulationStatus
-from simulation_harness.models.domain import SimulationSpec
 from simulation_harness.utils.errors import SimulationAlreadyExistsError
 
 
@@ -91,7 +90,10 @@ async def test_declare_simulation_returns_pending_record_immediately(
     host = SimulationHost()
     record = await host.declare_simulation(
         name="test-api",
-        openapi_spec={"openapi": "3.0.0", "info": {"title": "test-api", "version": "1"}},
+        openapi_spec={
+            "openapi": "3.0.0",
+            "info": {"title": "test-api", "version": "1"},
+        },
         regenerate=False,
         mcp_port=None,
         skill_registry=fake_skill_registry,
@@ -122,7 +124,10 @@ async def test_declare_simulation_when_record_exists_raises(
         with pytest.raises(SimulationAlreadyExistsError):
             await host.declare_simulation(
                 name="b",
-                openapi_spec={"openapi": "3.0.0", "info": {"title": "b", "version": "1"}},
+                openapi_spec={
+                    "openapi": "3.0.0",
+                    "info": {"title": "b", "version": "1"},
+                },
                 regenerate=False,
                 mcp_port=None,
                 skill_registry=fake_skill_registry,
@@ -140,7 +145,10 @@ async def test_record_progresses_to_ready_in_background(
     host = SimulationHost()
     record = await host.declare_simulation(
         name="test-api",
-        openapi_spec={"openapi": "3.0.0", "info": {"title": "test-api", "version": "1"}},
+        openapi_spec={
+            "openapi": "3.0.0",
+            "info": {"title": "test-api", "version": "1"},
+        },
         regenerate=False,
         mcp_port=None,
         skill_registry=fake_skill_registry,
@@ -159,12 +167,17 @@ async def test_record_progresses_to_ready_in_background(
         await host.delete_simulation()
 
 
-async def test_delete_during_pending_cancels_creation(fake_skill_registry, fake_instance_factory):
+async def test_delete_during_pending_cancels_creation(
+    fake_skill_registry, fake_instance_factory
+):
     factory, _ = fake_instance_factory
     host = SimulationHost()
     await host.declare_simulation(
         name="test-api",
-        openapi_spec={"openapi": "3.0.0", "info": {"title": "test-api", "version": "1"}},
+        openapi_spec={
+            "openapi": "3.0.0",
+            "info": {"title": "test-api", "version": "1"},
+        },
         regenerate=False,
         mcp_port=None,
         skill_registry=fake_skill_registry,
@@ -209,7 +222,9 @@ async def test_create_simulation_success(fake_skill_registry, fake_instance_fact
         await host.delete_simulation()
 
 
-async def test_create_simulation_rejects_duplicate(fake_skill_registry, fake_instance_factory):
+async def test_create_simulation_rejects_duplicate(
+    fake_skill_registry, fake_instance_factory
+):
     """Test that declaring a simulation when one exists raises error."""
     factory, _ = fake_instance_factory
     host = SimulationHost()
@@ -286,7 +301,9 @@ async def test_delete_simulation_when_none_exists():
     assert await host.get_simulation() is None
 
 
-async def test_lifecycle_lock_serializes_operations(fake_skill_registry, fake_instance_factory):
+async def test_lifecycle_lock_serializes_operations(
+    fake_skill_registry, fake_instance_factory
+):
     """Test that lifecycle operations are serialized."""
     factory, _ = fake_instance_factory
     host = SimulationHost()
@@ -361,7 +378,9 @@ async def test_create_simulation_passes_mcp_port_to_instance(fake_skill_registry
         await host.delete_simulation()
 
 
-async def test_create_simulation_starts_sidecar_when_mcp_port_provided(fake_skill_registry):
+async def test_create_simulation_starts_sidecar_when_mcp_port_provided(
+    fake_skill_registry,
+):
     """When mcp_port is set, _run_creation starts a SidecarMCPServer after READY."""
     from unittest.mock import patch
 
@@ -376,12 +395,13 @@ async def test_create_simulation_starts_sidecar_when_mcp_port_provided(fake_skil
         return mock_inst
 
     host = SimulationHost()
-    with patch(
-        "simulation_harness.core.simulation_host.SidecarMCPServer",
-        return_value=mock_sidecar,
-    ) as MockSidecar, patch(
-        "simulation_harness.core.simulation_host.get_config"
-    ) as mock_cfg:
+    with (
+        patch(
+            "simulation_harness.core.simulation_host.SidecarMCPServer",
+            return_value=mock_sidecar,
+        ) as _,
+        patch("simulation_harness.core.simulation_host.get_config") as mock_cfg,
+    ):
         mock_cfg.return_value.mcp = MagicMock()
         mock_cfg.return_value.creation.max_duration_seconds = 30
 
@@ -418,12 +438,13 @@ async def test_create_simulation_cleans_up_instance_on_port_in_use(fake_skill_re
         return mock_inst
 
     host = SimulationHost()
-    with patch(
-        "simulation_harness.core.simulation_host.SidecarMCPServer",
-        return_value=mock_sidecar,
-    ), patch(
-        "simulation_harness.core.simulation_host.get_config"
-    ) as mock_cfg:
+    with (
+        patch(
+            "simulation_harness.core.simulation_host.SidecarMCPServer",
+            return_value=mock_sidecar,
+        ),
+        patch("simulation_harness.core.simulation_host.get_config") as mock_cfg,
+    ):
         mock_cfg.return_value.mcp = MagicMock()
         mock_cfg.return_value.creation.max_duration_seconds = 30
 

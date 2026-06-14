@@ -2,7 +2,7 @@
 
 import asyncio
 import socket
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -46,6 +46,7 @@ class TestSidecarMCPServer:
     @pytest.fixture
     def mock_instance(self):
         from simulation_harness.core.simulation_instance import SimulationInstance
+
         return MagicMock(spec=SimulationInstance)
 
     @pytest.fixture
@@ -77,11 +78,14 @@ class TestSidecarMCPServer:
 
         mock_server.serve = fake_serve
 
-        with patch(
-            "simulation_harness.mcp_integration.sidecar_server._check_port_available"
-        ), patch(
-            "simulation_harness.mcp_integration.sidecar_server.uvicorn.Server",
-            return_value=mock_server,
+        with (
+            patch(
+                "simulation_harness.mcp_integration.sidecar_server._check_port_available"
+            ),
+            patch(
+                "simulation_harness.mcp_integration.sidecar_server.uvicorn.Server",
+                return_value=mock_server,
+            ),
         ):
             await sidecar.start()
 
@@ -103,11 +107,14 @@ class TestSidecarMCPServer:
 
         mock_server.serve = fake_serve
 
-        with patch(
-            "simulation_harness.mcp_integration.sidecar_server._check_port_available"
-        ), patch(
-            "simulation_harness.mcp_integration.sidecar_server.uvicorn.Server",
-            return_value=mock_server,
+        with (
+            patch(
+                "simulation_harness.mcp_integration.sidecar_server._check_port_available"
+            ),
+            patch(
+                "simulation_harness.mcp_integration.sidecar_server.uvicorn.Server",
+                return_value=mock_server,
+            ),
         ):
             await sidecar.start()
 

@@ -137,7 +137,10 @@ class TestCreateSimulationRequest:
         """Test that mcp_port rejects port 0."""
         with pytest.raises(ValidationError):
             CreateSimulationRequest(
-                openapi_spec={"openapi": "3.0.0", "info": {"title": "T", "version": "1"}},
+                openapi_spec={
+                    "openapi": "3.0.0",
+                    "info": {"title": "T", "version": "1"},
+                },
                 mcp_port=0,
             )
 
@@ -145,7 +148,10 @@ class TestCreateSimulationRequest:
         """Test that mcp_port rejects port > 65535."""
         with pytest.raises(ValidationError):
             CreateSimulationRequest(
-                openapi_spec={"openapi": "3.0.0", "info": {"title": "T", "version": "1"}},
+                openapi_spec={
+                    "openapi": "3.0.0",
+                    "info": {"title": "T", "version": "1"},
+                },
                 mcp_port=65536,
             )
 

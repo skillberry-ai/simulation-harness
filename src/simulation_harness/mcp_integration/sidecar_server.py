@@ -74,8 +74,14 @@ class SidecarMCPServer:
                 exc = self._server_task.exception()
                 if exc:
                     import errno as _errno
-                    if isinstance(exc, OSError) and exc.errno in (_errno.EADDRINUSE, _errno.EACCES):
-                        raise PortInUseError(f"Port {self._port} is already in use") from exc
+
+                    if isinstance(exc, OSError) and exc.errno in (
+                        _errno.EADDRINUSE,
+                        _errno.EACCES,
+                    ):
+                        raise PortInUseError(
+                            f"Port {self._port} is already in use"
+                        ) from exc
                     raise exc
                 break
             if asyncio.get_running_loop().time() > deadline:
@@ -144,6 +150,7 @@ class SidecarMCPServer:
 
         elif self._mcp_config.transport == TransportType.STREAMABLE_HTTP:
             from mcp.server.streamable_http import StreamableHTTPServerTransport
+
             instance = self._instance
 
             @app.post("/mcp")

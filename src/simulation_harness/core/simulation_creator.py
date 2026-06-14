@@ -65,9 +65,7 @@ class SimulationCreator:
                 details={"limit_seconds": self._max_duration_seconds},
             )
         except asyncio.CancelledError:
-            logger.info(
-                "Simulation creation cancelled for %s", self._record.name
-            )
+            logger.info("Simulation creation cancelled for %s", self._record.name)
             raise
         except Exception as e:
             logger.exception("Simulation creation failed for %s", self._record.name)

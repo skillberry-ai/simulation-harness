@@ -35,6 +35,7 @@ from simulation_harness.utils.logging import get_logger
 # Read HARNESS_CONFIG_PATH from .env if not already in the process env.
 # Use dotenv_values (no side-effects) rather than load_dotenv (mutates os.environ).
 from dotenv import dotenv_values as _dotenv_values
+
 _dotenv_file_vars = _dotenv_values(".env")
 config_path = os.getenv(
     "HARNESS_CONFIG_PATH",
@@ -292,8 +293,6 @@ try:
                 raise SimulationNotReadyError(
                     name=record.name, status=record.status.value
                 )
-            instance = record.instance
-
             # Capture the ASGI messages written by handle_post_message so we can
             # return them as a proper FastAPI Response.  Without this, FastAPI
             # tries to send a second response after the handler returns, causing
@@ -392,9 +391,7 @@ async def simulation_already_exists_handler(
 
 
 @app.exception_handler(PortInUseError)
-async def port_in_use_handler(
-    request: Request, exc: PortInUseError
-) -> JSONResponse:
+async def port_in_use_handler(request: Request, exc: PortInUseError) -> JSONResponse:
     """Handle PortInUseError with 409 Conflict."""
     logger.warning(f"MCP port already in use: {exc}")
     return JSONResponse(

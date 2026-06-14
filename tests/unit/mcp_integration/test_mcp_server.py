@@ -166,7 +166,6 @@ async def test_call_tool_with_arguments(mock_simulation_instance):
     assert result["isError"] is False
 
 
-
 @pytest.mark.asyncio
 async def test_handle_call_tool_session_expired_includes_structured_reason(
     mock_simulation_instance,

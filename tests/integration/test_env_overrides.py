@@ -38,6 +38,7 @@ def test_env_overrides_applied_at_startup(monkeypatch, tmp_path):
     monkeypatch.setenv("LLM_API_KEY", "test-key")
 
     import simulation_harness.main as m
+
     importlib.reload(m)
 
     assert m.config.server.port == 9999

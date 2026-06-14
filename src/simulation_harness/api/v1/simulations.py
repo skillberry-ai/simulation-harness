@@ -136,7 +136,8 @@ async def create_simulation(
         simulation_name = body.name.lower().replace(" ", "-")
     else:
         simulation_name = (
-            body.openapi_spec.get("info", {}).get("title", "simulation")
+            body.openapi_spec.get("info", {})
+            .get("title", "simulation")
             .lower()
             .replace(" ", "-")
         )

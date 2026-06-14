@@ -473,10 +473,13 @@ class TestMCPPortConfiguration:
         """POST /simulation with mcp_port returns fully-qualified sidecar URL when ready."""
         from simulation_harness.mcp_integration.sidecar_server import SidecarMCPServer
 
-        with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
-            new_callable=AsyncMock,
-        ) as mock_gen, patch.object(SidecarMCPServer, "start", new_callable=AsyncMock):
+        with (
+            patch(
+                "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+                new_callable=AsyncMock,
+            ) as mock_gen,
+            patch.object(SidecarMCPServer, "start", new_callable=AsyncMock),
+        ):
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
             response = app_client.post(
@@ -523,10 +526,13 @@ class TestMCPPortConfiguration:
         """GET /simulation returns the same mcp_url as the ready status."""
         from simulation_harness.mcp_integration.sidecar_server import SidecarMCPServer
 
-        with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
-            new_callable=AsyncMock,
-        ) as mock_gen, patch.object(SidecarMCPServer, "start", new_callable=AsyncMock):
+        with (
+            patch(
+                "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+                new_callable=AsyncMock,
+            ) as mock_gen,
+            patch.object(SidecarMCPServer, "start", new_callable=AsyncMock),
+        ):
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
             create_response = app_client.post(
@@ -583,9 +589,7 @@ class TestMCPPortConfiguration:
         assert final["status"] == "failed", f"expected failed, got: {final}"
         assert str(taken_port) in str(final.get("error", {}))
 
-    def test_delete_simulation_tears_down_sidecar(
-        self, app_client, valid_openapi_spec
-    ):
+    def test_delete_simulation_tears_down_sidecar(self, app_client, valid_openapi_spec):
         """DELETE /simulation stops the sidecar server if one was started."""
         from simulation_harness.mcp_integration.sidecar_server import SidecarMCPServer
 
@@ -594,12 +598,14 @@ class TestMCPPortConfiguration:
         async def fake_stop(self):
             stop_calls.append(True)
 
-        with patch(
-            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
-            new_callable=AsyncMock,
-        ) as mock_gen, patch.object(
-            SidecarMCPServer, "start", new_callable=AsyncMock
-        ), patch.object(SidecarMCPServer, "stop", fake_stop):
+        with (
+            patch(
+                "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+                new_callable=AsyncMock,
+            ) as mock_gen,
+            patch.object(SidecarMCPServer, "start", new_callable=AsyncMock),
+            patch.object(SidecarMCPServer, "stop", fake_stop),
+        ):
             mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
 
             create_response = app_client.post(

@@ -3,7 +3,7 @@ import io
 import json
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -33,7 +33,11 @@ def test_get_server_url_defaults():
     assert simulate.get_server_url({}) == "http://localhost:8086"
 
 
-SAMPLE_SPEC = {"openapi": "3.0.0", "info": {"title": "Test", "version": "1.0"}, "paths": {}}
+SAMPLE_SPEC = {
+    "openapi": "3.0.0",
+    "info": {"title": "Test", "version": "1.0"},
+    "paths": {},
+}
 
 SAMPLE_RESPONSE = {
     "name": "test",
@@ -77,7 +81,9 @@ def test_main_passes_name_flag(tmp_path):
         captured_request["body"] = json.loads(req.data.decode())
         return mock_response
 
-    with patch("sys.argv", ["simulate.py"] + _make_args(tmp_path, ["--name", "my-sim"])):
+    with patch(
+        "sys.argv", ["simulate.py"] + _make_args(tmp_path, ["--name", "my-sim"])
+    ):
         with patch("simulate.urlopen", fake_urlopen):
             simulate.main()
 
@@ -96,7 +102,9 @@ def test_main_passes_regenerate_skill_flag(tmp_path):
         captured_request["body"] = json.loads(req.data.decode())
         return mock_response
 
-    with patch("sys.argv", ["simulate.py"] + _make_args(tmp_path, ["--regenerate-skill"])):
+    with patch(
+        "sys.argv", ["simulate.py"] + _make_args(tmp_path, ["--regenerate-skill"])
+    ):
         with patch("simulate.urlopen", fake_urlopen):
             simulate.main()
 
@@ -106,7 +114,13 @@ def test_main_passes_regenerate_skill_flag(tmp_path):
 def test_main_http_error_exits_nonzero(tmp_path, capsys):
     from urllib.error import HTTPError
 
-    err = HTTPError(url="http://x", code=409, msg="Conflict", hdrs={}, fp=io.BytesIO(b"already exists"))
+    err = HTTPError(
+        url="http://x",
+        code=409,
+        msg="Conflict",
+        hdrs={},
+        fp=io.BytesIO(b"already exists"),
+    )
 
     with patch("sys.argv", ["simulate.py"] + _make_args(tmp_path)):
         with patch("simulate.urlopen", side_effect=err):

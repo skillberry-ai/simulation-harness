@@ -109,6 +109,7 @@ def load_secrets(env_file: str | None = ".env") -> "Secrets":
     # with the old key and will be rebuilt on next get_skill_registry() call.
     try:
         from simulation_harness.api.dependencies import reset_skill_registry as _reset
+
         _reset()
     except ImportError:
         pass  # dependencies module not yet imported — nothing to invalidate

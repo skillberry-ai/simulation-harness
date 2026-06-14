@@ -36,6 +36,7 @@ def client(monkeypatch):
     # Re-import main with fresh env
     import importlib
     import simulation_harness.main as m
+
     importlib.reload(m)
     with TestClient(m.app) as c:
         yield c, m

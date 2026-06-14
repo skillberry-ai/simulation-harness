@@ -34,6 +34,7 @@ def test_readyz_flips_to_503_after_lifespan_shutdown(monkeypatch, tmp_path):
     monkeypatch.setenv("LLM_API_KEY", "test-key")
 
     import simulation_harness.main as m
+
     importlib.reload(m)
 
     # While the lifespan is active, /readyz returns 200.

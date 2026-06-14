@@ -3,8 +3,7 @@
 import logging
 import pytest
 from pathlib import Path
-from unittest.mock import Mock, patch, call, AsyncMock
-from fastapi.testclient import TestClient
+from unittest.mock import Mock, patch
 
 
 class TestMainModule:

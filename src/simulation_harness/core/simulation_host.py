@@ -135,7 +135,9 @@ class SimulationHost:
                     try:
                         await record.instance.shutdown()
                     except Exception:
-                        logger.exception("Instance shutdown after sidecar failure failed")
+                        logger.exception(
+                            "Instance shutdown after sidecar failure failed"
+                        )
                 replacement = SimulationRecord.declare(name=record.name)
                 replacement.fail(
                     code="sidecar_start_failed",

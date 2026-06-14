@@ -14,8 +14,12 @@ def test_uvicorn_respects_logging_config():
     our file handler, causing API request logs to not be written to the log file.
     """
     with patch("simulation_harness.__main__.uvicorn.run") as mock_run:
-        with patch("simulation_harness.__main__.load_config") as mock_load, patch(
-            "simulation_harness.__main__.apply_env_overrides", side_effect=lambda c: c
+        with (
+            patch("simulation_harness.__main__.load_config") as mock_load,
+            patch(
+                "simulation_harness.__main__.apply_env_overrides",
+                side_effect=lambda c: c,
+            ),
         ):
             mock_config = MagicMock()
             mock_config.server.host = "0.0.0.0"
@@ -26,7 +30,7 @@ def test_uvicorn_respects_logging_config():
 
             main()
 
-        # Verify uvicorn.run was called with log_config=None
+            # Verify uvicorn.run was called with log_config=None
             mock_run.assert_called_once()
             call_kwargs = mock_run.call_args.kwargs
 
@@ -51,7 +55,10 @@ def test_logging_configured_before_uvicorn():
     # This test verifies the module-level logging setup in main.py
     # by checking that the logger is configured when the module is imported
 
-    with patch.dict(os.environ, {"HARNESS_CONFIG_PATH": "config/harness.yaml", "LLM_API_KEY": "test-key"}):
+    with patch.dict(
+        os.environ,
+        {"HARNESS_CONFIG_PATH": "config/harness.yaml", "LLM_API_KEY": "test-key"},
+    ):
         # Import main.py (this triggers module-level logging setup)
         import simulation_harness.main as main_module
 

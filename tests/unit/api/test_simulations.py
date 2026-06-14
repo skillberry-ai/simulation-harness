@@ -2,7 +2,6 @@
 
 import pytest
 from datetime import datetime, timezone
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -682,8 +681,12 @@ class TestSimulationResponseShape:
             session_state=None,
             mcp_url=None,
             created_at=now,
-            progress=ProgressPayload(phase="skill_generation", started_at=now, updated_at=now),
-            error=ErrorPayload(code="creation_timeout", message="exceeded 120s", details={}),
+            progress=ProgressPayload(
+                phase="skill_generation", started_at=now, updated_at=now
+            ),
+            error=ErrorPayload(
+                code="creation_timeout", message="exceeded 120s", details={}
+            ),
         )
         assert resp.error is not None
         assert resp.error.code == "creation_timeout"
