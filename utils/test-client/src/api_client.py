@@ -224,6 +224,81 @@ class HarnessAPIClient:
                 duration_ms=duration_ms,
             )
     
+    async def get_simulation_schema(self) -> APIResponse:
+        """Get JSON Schema for the active skill's database.
+
+        Returns:
+            APIResponse with schema dict
+        """
+        start = time.time()
+        try:
+            response = await self.client.get(f"{self.base_url}/api/v1/simulation/schema")
+            duration_ms = (time.time() - start) * 1000
+            return APIResponse(
+                success=response.status_code == 200,
+                status_code=response.status_code,
+                data=response.json() if response.status_code == 200 else None,
+                error=None if response.status_code == 200 else response.text,
+                duration_ms=duration_ms,
+            )
+        except Exception as e:
+            duration_ms = (time.time() - start) * 1000
+            return APIResponse(
+                success=False, status_code=0, data=None, error=str(e), duration_ms=duration_ms
+            )
+
+    async def get_simulation_database(self) -> APIResponse:
+        """Get on-disk database (db.json) for the active skill.
+
+        Returns:
+            APIResponse with database dict
+        """
+        start = time.time()
+        try:
+            response = await self.client.get(f"{self.base_url}/api/v1/simulation/database")
+            duration_ms = (time.time() - start) * 1000
+            return APIResponse(
+                success=response.status_code == 200,
+                status_code=response.status_code,
+                data=response.json() if response.status_code == 200 else None,
+                error=None if response.status_code == 200 else response.text,
+                duration_ms=duration_ms,
+            )
+        except Exception as e:
+            duration_ms = (time.time() - start) * 1000
+            return APIResponse(
+                success=False, status_code=0, data=None, error=str(e), duration_ms=duration_ms
+            )
+
+    async def put_simulation_database(self, data: dict) -> APIResponse:
+        """Replace on-disk database (db.json) and reset the simulation.
+
+        Args:
+            data: New database content; must validate against the skill's schema.json
+
+        Returns:
+            APIResponse with confirmation message
+        """
+        start = time.time()
+        try:
+            response = await self.client.put(
+                f"{self.base_url}/api/v1/simulation/database",
+                json=data,
+            )
+            duration_ms = (time.time() - start) * 1000
+            return APIResponse(
+                success=response.status_code == 200,
+                status_code=response.status_code,
+                data=response.json() if response.status_code == 200 else None,
+                error=None if response.status_code == 200 else response.text,
+                duration_ms=duration_ms,
+            )
+        except Exception as e:
+            duration_ms = (time.time() - start) * 1000
+            return APIResponse(
+                success=False, status_code=0, data=None, error=str(e), duration_ms=duration_ms
+            )
+
     async def poll_until_ready(self, timeout: float = 60.0) -> APIResponse:
         """Poll GET /simulation until status is ready or failed.
 

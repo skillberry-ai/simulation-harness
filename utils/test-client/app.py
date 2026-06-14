@@ -314,9 +314,124 @@ with tab2:
             st.error(f"Error: {response.error}")
     
     st.divider()
-    
+
+    # Get Schema
+    st.subheader("5️⃣ Get Database Schema")
+
+    if st.button("Get Schema"):
+        async def get_schema():
+            client = HarnessAPIClient(state.harness_url)
+            response = await client.get_simulation_schema()
+            await client.close()
+            return response
+
+        response = asyncio.run(get_schema())
+
+        state.add_request(
+            "GET",
+            "/api/v1/simulation/schema",
+            None,
+            response.status_code,
+            response.data,
+            response.duration_ms,
+            response.error,
+        )
+
+        render_response_metrics(response.status_code, response.duration_ms, response.success)
+
+        if response.success and response.data is not None:
+            render_json_viewer(response.data, "Database Schema")
+        elif response.error:
+            st.error(f"Error: {response.error}")
+
+    st.divider()
+
+    # Get Database
+    st.subheader("6️⃣ Get Database")
+
+    if st.button("Get Database"):
+        async def get_db():
+            client = HarnessAPIClient(state.harness_url)
+            response = await client.get_simulation_database()
+            await client.close()
+            return response
+
+        response = asyncio.run(get_db())
+
+        state.add_request(
+            "GET",
+            "/api/v1/simulation/database",
+            None,
+            response.status_code,
+            response.data,
+            response.duration_ms,
+            response.error,
+        )
+
+        render_response_metrics(response.status_code, response.duration_ms, response.success)
+
+        if response.success and response.data is not None:
+            render_json_viewer(response.data, "Database Contents")
+        elif response.error:
+            st.error(f"Error: {response.error}")
+
+    st.divider()
+
+    # Replace Database
+    st.subheader("7️⃣ Replace Database")
+    st.caption(
+        "Fetch the schema first (section 5️⃣) to learn the expected shape. "
+        "The body is validated against schema.json before writing; on success the simulation is reset."
+    )
+
+    db_json_input = st.text_area(
+        "New database JSON",
+        height=200,
+        placeholder='{"items": [...]}',
+        help="Paste a JSON object matching the skill's schema.json",
+    )
+
+    if st.button("Replace Database", type="primary", disabled=not db_json_input):
+        import json as _json
+
+        try:
+            db_payload = _json.loads(db_json_input)
+        except _json.JSONDecodeError as exc:
+            st.error(f"Invalid JSON: {exc}")
+            db_payload = None
+
+        if db_payload is not None:
+            async def replace_db():
+                client = HarnessAPIClient(state.harness_url)
+                response = await client.put_simulation_database(db_payload)
+                await client.close()
+                return response
+
+            response = asyncio.run(replace_db())
+
+            state.add_request(
+                "PUT",
+                "/api/v1/simulation/database",
+                db_payload,
+                response.status_code,
+                response.data,
+                response.duration_ms,
+                response.error,
+            )
+
+            render_response_metrics(response.status_code, response.duration_ms, response.success)
+
+            if response.success:
+                st.success("Database replaced and simulation reset")
+                if response.data:
+                    render_json_viewer(response.data, "Replace Response")
+            elif response.error:
+                st.error(f"Error: {response.error}")
+
+    st.divider()
+
     # Delete Simulation
-    st.subheader("5️⃣ Delete Simulation")
+    st.subheader("8️⃣ Delete Simulation")
     
     if st.button("Delete Simulation", type="secondary"):
         async def delete_sim():
