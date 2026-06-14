@@ -251,4 +251,31 @@ class TestCreationTimeoutError:
         assert isinstance(err, Exception)
 
 
+class TestDatabaseValidationError:
+    def test_database_validation_error_carries_message_and_path(self):
+        from simulation_harness.utils.errors import DatabaseValidationError
+
+        err = DatabaseValidationError(
+            message="'name' is a required property",
+            json_path="restaurants.0",
+        )
+        assert "name" in str(err)
+        assert err.json_path == "restaurants.0"
+
+    def test_database_validation_error_default_path_is_root(self):
+        from simulation_harness.utils.errors import DatabaseValidationError
+
+        err = DatabaseValidationError(message="not a valid object")
+        assert err.json_path == "<root>"
+
+
+class TestSimulationBusyError:
+    def test_simulation_busy_error_carries_queue_depth(self):
+        from simulation_harness.utils.errors import SimulationBusyError
+
+        err = SimulationBusyError(queue_depth=2)
+        assert err.queue_depth == 2
+        assert "in-flight" in str(err).lower() or "busy" in str(err).lower()
+
+
 # Made with Bob

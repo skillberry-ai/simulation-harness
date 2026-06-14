@@ -96,4 +96,23 @@ class CreationTimeoutError(Exception):
         )
 
 
+class DatabaseValidationError(Exception):
+    """Raised when a proposed db.json fails schema validation."""
+
+    def __init__(self, *, message: str, json_path: str = "<root>") -> None:
+        self.message = message
+        self.json_path = json_path
+        super().__init__(f"db.json validation failed at {json_path}: {message}")
+
+
+class SimulationBusyError(Exception):
+    """Raised when a destructive lifecycle op is attempted while tool-calls are in flight."""
+
+    def __init__(self, *, queue_depth: int) -> None:
+        self.queue_depth = queue_depth
+        super().__init__(
+            f"Simulation has {queue_depth} in-flight tool call(s); retry once they drain"
+        )
+
+
 # Made with Bob
