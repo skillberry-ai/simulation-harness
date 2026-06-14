@@ -97,12 +97,54 @@ curl -sS -X POST "$BASE/api/v1/simulation" \
   }'
 ```
 
-Response (`201 Created`):
+Response (`202 Accepted`):
 
 ```json
 {
   "name": "petstore",
-  "status": "active",
+  "status": "pending",
+  "session_state": null,
+  "mcp_url": null,
+  "created_at": "2026-06-14T12:34:56.000000+00:00",
+  "progress": {
+    "phase": null,
+    "started_at": "2026-06-14T12:34:56.000000+00:00",
+    "updated_at": "2026-06-14T12:34:56.000000+00:00"
+  },
+  "error": null
+}
+```
+
+Creation runs in the background. `session_state` and `mcp_url` are `null` until
+the simulation is ready.
+
+### 2. Poll until ready
+
+```bash
+curl -sS "$BASE/api/v1/simulation"
+```
+
+Poll this endpoint until `status` becomes `"ready"` (or `"failed"`). Typical
+wait is a few seconds when a cached skill exists, or 10–60 seconds for
+first-time skill generation. The default creation budget is 120 seconds
+(`creation.max_duration_seconds` in `harness.yaml`).
+
+Possible `status` values:
+
+| Value | Meaning |
+|---|---|
+| `pending` | Accepted; background task has not started yet. |
+| `generating_skill` | LLM is generating the skill from the spec. |
+| `initializing` | Skill is ready; agent thread is being set up. |
+| `ready` | Simulation is fully operational; MCP tools are available. |
+| `failed` | Creation failed; see `error` for details. |
+
+Response when ready:
+
+```json
+{
+  "name": "petstore",
+  "status": "ready",
   "session_state": {
     "tool_call_count": 0,
     "max_messages": 100,
@@ -113,14 +155,21 @@ Response (`201 Created`):
     "seconds_since_last_call": null
   },
   "mcp_url": "http://localhost:8086/mcp/petstore",
-  "created_at": "2026-06-14T12:34:56.000000+00:00"
+  "created_at": "2026-06-14T12:34:56.000000+00:00",
+  "progress": {
+    "phase": null,
+    "started_at": "2026-06-14T12:34:56.000000+00:00",
+    "updated_at": "2026-06-14T12:35:03.000000+00:00"
+  },
+  "error": null
 }
 ```
 
-The `mcp_url` field is informational. Where you actually connect depends on the
-configured `mcp.transport` — see [MCP transport](#mcp-transport).
+The `mcp_url` field is only populated when `status == "ready"`. Where you
+actually connect depends on the configured `mcp.transport` — see
+[MCP transport](#mcp-transport).
 
-### 2. List the tools the simulation exposes
+### 4. List the tools the simulation exposes
 
 ```bash
 curl -sS "$BASE/api/v1/simulation/tools"
@@ -142,7 +191,7 @@ curl -sS "$BASE/api/v1/simulation/tools"
 
 Tool names are taken verbatim from each operation's `operationId`.
 
-### 3. Call a tool over MCP
+### 5. Call a tool over MCP
 
 Using SSE (default), with the `mcp` Python SDK:
 
@@ -166,7 +215,7 @@ asyncio.run(main())
 The agent synthesises a schema-valid response from the spec — for example a
 JSON array of two or three pet objects in the `text` content block.
 
-### 4. Reset the session counters
+### 6. Reset the session counters
 
 After a test run, reset counters without tearing the simulation down:
 
@@ -179,7 +228,7 @@ This zeroes `tool_call_count` and `queue_depth` and clears `last_activity`. The
 underlying agent thread is reset as well, so subsequent calls start with a
 fresh context.
 
-### 5. Tear down
+### 7. Tear down
 
 ```bash
 curl -sS -X DELETE "$BASE/api/v1/simulation" -o /dev/null -w "%{http_code}\n"
@@ -209,11 +258,10 @@ Create the active simulation from an OpenAPI 3.x spec.
 
 **Responses**
 
-- `201 Created` — `SimulationResponse` (see [walkthrough §1](#1-create-the-simulation)).
+- `202 Accepted` — `SimulationResponse` with `status: "pending"` (see [walkthrough §1](#1-create-the-simulation)). Creation continues in the background; poll `GET /api/v1/simulation` until `status` is `"ready"` or `"failed"`. The default creation budget is 120 seconds, configurable via `creation.max_duration_seconds` in `harness.yaml`.
 - `409 Conflict` — a simulation is already active, or the requested `mcp_port` is in use.
 - `413 Payload Too Large` — body exceeds 10 MB.
 - `422 Unprocessable Entity` — OpenAPI validation or parsing failed.
-- `500 Internal Server Error` — skill generation failed.
 
 **Example**
 
@@ -225,8 +273,10 @@ curl -sS -X POST "$BASE/api/v1/simulation" \
 
 ### `GET /api/v1/simulation`
 
-Return the active simulation's status and current session counters. Same
-response shape as create.
+Return the active simulation's current record: status, creation progress, and
+session counters. Use this to poll after a `POST` until `status` reaches
+`"ready"` or `"failed"`. The response shape is identical to the `202` response
+from `POST`, with `session_state` and `mcp_url` populated once `status == "ready"`.
 
 ```bash
 curl -sS "$BASE/api/v1/simulation"
@@ -259,6 +309,7 @@ curl -sS -X POST "$BASE/api/v1/simulation/reset"
 
 - `200 OK` — `{"message": "Session reset successfully"}`.
 - `404 Not Found` — no simulation is active.
+- `503 Service Unavailable` with `Retry-After: 2` — simulation exists but is not yet `ready`.
 
 ### `GET /api/v1/simulation/tools`
 
@@ -271,6 +322,7 @@ curl -sS "$BASE/api/v1/simulation/tools"
 
 - `200 OK` — array of `{name, description, inputSchema}` objects.
 - `404 Not Found` — no simulation is active.
+- `503 Service Unavailable` with `Retry-After: 2` — simulation exists but is not yet `ready`.
 
 ### `GET /api/v1/simulation/state`
 
@@ -291,6 +343,7 @@ curl -sS "$BASE/api/v1/simulation/state?thread_id=default"
 
 - `200 OK` — JSON object (possibly empty).
 - `404 Not Found` — no simulation is active.
+- `503 Service Unavailable` with `Retry-After: 2` — simulation exists but is not yet `ready`.
 
 ### Health and probe endpoints
 
@@ -306,8 +359,10 @@ The MCP transport is fixed at startup by `mcp.transport` in `harness.yaml`.
 Both transports expose identical `tools/list` and `tools/call` semantics — the
 choice is purely about how messages are framed on the wire.
 
-All MCP endpoints require an active simulation. Calling them before
-`POST /api/v1/simulation` returns:
+All MCP endpoints require a simulation that is fully `ready`. Calling them
+before `POST /api/v1/simulation`, or while the simulation is still initializing,
+returns HTTP `503 Service Unavailable` with a `Retry-After: 2` header. The body
+shape depends on the failure reason:
 
 ```json
 {
@@ -316,7 +371,14 @@ All MCP endpoints require an active simulation. Calling them before
 }
 ```
 
-with HTTP `503`.
+or, when a simulation exists but has not finished initializing:
+
+```json
+{
+  "error": "Simulation not ready",
+  "message": "Simulation is still initializing. Poll GET /api/v1/simulation until status is 'ready'."
+}
+```
 
 ### SSE transport (default)
 
@@ -374,6 +436,7 @@ exceptions are mapped by handlers in `main.py`:
 | `SimulationAlreadyExistsError` | `409` | `POST /simulation` while one is already active. |
 | `PortInUseError` | `409` | The `mcp_port` requested at create time is bound by another process. |
 | `SimulationNotFoundError` | `404` | Operations on a non-existent simulation. |
+| `SimulationNotReadyError` | `503` | Calling tools/state/reset or MCP transports while simulation status is not yet `ready`. Response includes `Retry-After: 2`. |
 | `OpenAPIValidationError` | `422` | The submitted spec failed OpenAPI 3.x validation. |
 | `SessionExpiredError` | `410` | Session exceeded `max_messages` or `idle_timeout_seconds`. |
 | `ConcurrentQueueFullError` | `503` | Too many concurrent tool calls (`>= max_queue_depth` already queued). |

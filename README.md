@@ -143,15 +143,16 @@ A short tour:
 ```bash
 BASE=http://localhost:8086
 
-# Create a simulation from an OpenAPI spec
+# 1. Start creation — returns 202 Accepted with status "pending"
 curl -sS -X POST "$BASE/api/v1/simulation" \
   -H 'content-type: application/json' \
   -d @path/to/openapi.json
 
-# Inspect the active simulation and its session counters
+# 2. Poll until status becomes "ready" (or "failed")
+#    Typical wait: a few seconds for skill reuse, ~10–60s for first-time generation
 curl -sS "$BASE/api/v1/simulation"
 
-# List the MCP tools the simulation exposes (no MCP client required)
+# 3. Once ready: list the MCP tools the simulation exposes (no MCP client required)
 curl -sS "$BASE/api/v1/simulation/tools"
 
 # Reset session counters without tearing the simulation down
@@ -161,7 +162,7 @@ curl -sS -X POST "$BASE/api/v1/simulation/reset"
 curl -sS -X DELETE "$BASE/api/v1/simulation"
 ```
 
-Once a simulation is active, MCP clients connect according to the configured
+Once a simulation is ready, MCP clients connect according to the configured
 transport:
 
 - **SSE** — `GET /mcp/sse` paired with `POST /mcp/messages` (default).
@@ -215,8 +216,10 @@ uv run python utils/simulate.py path/to/openapi.json
 | `--config PATH` | Path to `harness.yaml` (default: `config/harness.yaml`). |
 
 The utility reads the server host and port from `harness.yaml` and POSTs the
-spec to `POST /api/v1/simulation`. On success it prints the response JSON; on
-failure it exits non-zero and writes the error to stderr.
+spec to `POST /api/v1/simulation`. The endpoint returns `202 Accepted`
+immediately; the utility then polls `GET /api/v1/simulation` until the status
+reaches `ready` (or `failed`) and prints the final response JSON. On failure it
+exits non-zero and writes the error to stderr.
 
 ## Test client
 
