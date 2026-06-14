@@ -20,6 +20,7 @@ from simulation_harness.config.settings import (
     load_secrets,
 )
 from simulation_harness.mcp_integration.mcp_server import MCPServerWrapper
+from simulation_harness.core.simulation_record import SimulationStatus
 from simulation_harness.utils.errors import (
     ConcurrentQueueFullError,
     OpenAPIValidationError,
@@ -27,6 +28,7 @@ from simulation_harness.utils.errors import (
     SessionExpiredError,
     SimulationAlreadyExistsError,
     SimulationNotFoundError,
+    SimulationNotReadyError,
 )
 from simulation_harness.utils.logging import get_logger
 
@@ -125,9 +127,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Cleanup simulation if exists
     try:
-        instance = await simulation_host.get_simulation()
-        if instance is not None:
-            logger.info(f"Cleaning up simulation: {instance.spec.name}")
+        record = await simulation_host.get_record()
+        if record is not None:
+            logger.info(f"Cleaning up simulation: {record.name}")
             await simulation_host.delete_simulation()
             logger.info("Simulation cleaned up successfully")
     except Exception as e:
@@ -223,22 +225,28 @@ try:
                 "Requires an active simulation (created via `POST /api/v1/simulation`)."
             ),
             responses={
-                503: {"description": "No simulation is currently active"},
+                404: {"description": "No simulation has been declared"},
+                503: {"description": "Simulation exists but is not ready yet"},
             },
         )
         async def mcp_sse_endpoint(
             request: Request, host: SimulationHost = Depends(get_simulation_host)
         ):
             """MCP SSE transport endpoint."""
-            instance = await host.get_simulation()
-            if instance is None:
+            record = await host.get_record()
+            if record is None:
                 raise HTTPException(
-                    status_code=503,
+                    status_code=404,
                     detail={
-                        "error": "No simulation active",
+                        "error": "No simulation declared",
                         "message": "Create a simulation via POST /api/v1/simulation first",
                     },
                 )
+            if record.status != SimulationStatus.READY or record.instance is None:
+                raise SimulationNotReadyError(
+                    name=record.name, status=record.status.value
+                )
+            instance = record.instance
 
             mcp_server = MCPServerWrapper(instance)
 
@@ -263,22 +271,28 @@ try:
                 "Requires an open SSE connection established via `GET /mcp/sse`."
             ),
             responses={
-                503: {"description": "No simulation is currently active"},
+                404: {"description": "No simulation has been declared"},
+                503: {"description": "Simulation exists but is not ready yet"},
             },
         )
         async def mcp_messages_endpoint(
             request: Request, host: SimulationHost = Depends(get_simulation_host)
         ):
             """MCP messages endpoint for SSE transport."""
-            instance = await host.get_simulation()
-            if instance is None:
+            record = await host.get_record()
+            if record is None:
                 raise HTTPException(
-                    status_code=503,
+                    status_code=404,
                     detail={
-                        "error": "No simulation active",
+                        "error": "No simulation declared",
                         "message": "Create a simulation via POST /api/v1/simulation first",
                     },
                 )
+            if record.status != SimulationStatus.READY or record.instance is None:
+                raise SimulationNotReadyError(
+                    name=record.name, status=record.status.value
+                )
+            instance = record.instance
 
             # Capture the ASGI messages written by handle_post_message so we can
             # return them as a proper FastAPI Response.  Without this, FastAPI
@@ -317,22 +331,28 @@ try:
                 "Requires an active simulation (created via `POST /api/v1/simulation`)."
             ),
             responses={
-                503: {"description": "No simulation is currently active"},
+                404: {"description": "No simulation has been declared"},
+                503: {"description": "Simulation exists but is not ready yet"},
             },
         )
         async def mcp_streamable_endpoint(
             request: Request, host: SimulationHost = Depends(get_simulation_host)
         ):
             """MCP Streamable HTTP transport endpoint."""
-            instance = await host.get_simulation()
-            if instance is None:
+            record = await host.get_record()
+            if record is None:
                 raise HTTPException(
-                    status_code=503,
+                    status_code=404,
                     detail={
-                        "error": "No simulation active",
+                        "error": "No simulation declared",
                         "message": "Create a simulation via POST /api/v1/simulation first",
                     },
                 )
+            if record.status != SimulationStatus.READY or record.instance is None:
+                raise SimulationNotReadyError(
+                    name=record.name, status=record.status.value
+                )
+            instance = record.instance
 
             # Create MCP server wrapper and handle streamable HTTP
             from simulation_harness.mcp_integration.mcp_server import MCPServerWrapper
@@ -392,6 +412,23 @@ async def simulation_not_found_handler(
     return JSONResponse(
         status_code=status.HTTP_404_NOT_FOUND,
         content={"detail": str(exc)},
+    )
+
+
+@app.exception_handler(SimulationNotReadyError)
+async def simulation_not_ready_handler(
+    request: Request, exc: SimulationNotReadyError
+) -> JSONResponse:
+    """Handle SimulationNotReadyError with 503 + Retry-After."""
+    logger.info(f"Simulation not ready: {exc.name} status={exc.status}")
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={
+            "detail": str(exc),
+            "name": exc.name,
+            "status": exc.status,
+        },
+        headers={"Retry-After": str(exc.retry_after_seconds)},
     )
 
 
