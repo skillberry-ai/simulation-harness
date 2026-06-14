@@ -334,39 +334,11 @@ kubectl apply -k deploy/k8s/
 See [`deploy/README.md`](deploy/README.md) for the full env-var reference,
 probe semantics, and rollout commands.
 
-## Deployment
-
-### Docker
-
-```bash
-# Build image
-docker build -t simulation-harness:latest .
-
-# Run container
-docker run -p 8000:8000 \
-  -e OPENAI_API_KEY=your-key \
-  -v $(pwd)/config:/app/config \
-  -v $(pwd)/skills:/app/skills \
-  simulation-harness:latest
-```
-
-### Kubernetes
-
-```bash
-# Apply manifests
-kubectl apply -f k8s/
-
-# Check status
-kubectl get pods -l app=simulation-harness
-```
-
 **Deployment Notes:**
 - Each instance hosts exactly one simulation (one OpenAPI spec → one skill → one MCP endpoint)
 - Multi-service orchestration is handled at the deployment layer (multiple instances)
 - The MCP URL is the simulation identifier
 - Phase 1 is single-tenant per instance; deploy more instances for concurrent users
-
-See [`docs/design/DESIGN.md`](docs/design/DESIGN.md) for detailed deployment configurations.
 
 ## Simulate CLI
 
