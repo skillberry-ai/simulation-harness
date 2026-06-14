@@ -18,6 +18,12 @@ class CreateSimulationRequest(BaseModel):
     regenerate_skill: bool = Field(
         default=False, description="Whether to regenerate the skill even if it exists"
     )
+    mcp_port: int | None = Field(
+        default=None,
+        ge=1,
+        le=65535,
+        description="Port to expose the MCP server on. Defaults to the harness port.",
+    )
 
 
 # Made with Bob

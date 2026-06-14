@@ -102,5 +102,52 @@ class TestCreateSimulationRequest:
         assert request.openapi_spec == complex_spec
         assert request.openapi_spec["paths"]["/users"]["get"]["summary"] == "List users"
 
+    def test_mcp_port_defaults_to_none(self):
+        """Test that mcp_port defaults to None when not provided."""
+        request = CreateSimulationRequest(
+            openapi_spec={"openapi": "3.0.0", "info": {"title": "T", "version": "1"}},
+        )
+        assert request.mcp_port is None
+
+    def test_mcp_port_accepts_valid_port(self):
+        """Test that mcp_port accepts a valid port number."""
+        request = CreateSimulationRequest(
+            openapi_spec={"openapi": "3.0.0", "info": {"title": "T", "version": "1"}},
+            mcp_port=9000,
+        )
+        assert request.mcp_port == 9000
+
+    def test_mcp_port_accepts_min_port(self):
+        """Test that mcp_port accepts port 1."""
+        request = CreateSimulationRequest(
+            openapi_spec={"openapi": "3.0.0", "info": {"title": "T", "version": "1"}},
+            mcp_port=1,
+        )
+        assert request.mcp_port == 1
+
+    def test_mcp_port_accepts_max_port(self):
+        """Test that mcp_port accepts port 65535."""
+        request = CreateSimulationRequest(
+            openapi_spec={"openapi": "3.0.0", "info": {"title": "T", "version": "1"}},
+            mcp_port=65535,
+        )
+        assert request.mcp_port == 65535
+
+    def test_mcp_port_rejects_zero(self):
+        """Test that mcp_port rejects port 0."""
+        with pytest.raises(ValidationError):
+            CreateSimulationRequest(
+                openapi_spec={"openapi": "3.0.0", "info": {"title": "T", "version": "1"}},
+                mcp_port=0,
+            )
+
+    def test_mcp_port_rejects_above_65535(self):
+        """Test that mcp_port rejects port > 65535."""
+        with pytest.raises(ValidationError):
+            CreateSimulationRequest(
+                openapi_spec={"openapi": "3.0.0", "info": {"title": "T", "version": "1"}},
+                mcp_port=65536,
+            )
+
 
 # Made with Bob
