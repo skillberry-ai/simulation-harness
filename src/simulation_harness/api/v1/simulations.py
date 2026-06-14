@@ -321,7 +321,7 @@ async def reset_session(
         "This is a convenience REST endpoint — no MCP/SSE connection is required."
     ),
     responses={
-        503: {"description": "No simulation is currently active"},
+        404: {"description": "No simulation is currently active"},
     },
 )
 async def list_simulation_tools(
@@ -339,13 +339,13 @@ async def list_simulation_tools(
         List of tool schemas
 
     Raises:
-        HTTPException: 503 if no simulation exists
+        HTTPException: 404 if no simulation exists
     """
     instance = await simulation_host.get_simulation()
 
     if instance is None:
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="No simulation found",
         )
 

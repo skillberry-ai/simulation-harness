@@ -507,6 +507,23 @@ class TestGetSimulationState:
         assert data == {}
 
 
+class TestListSimulationTools:
+    """Tests for GET /api/v1/simulation/tools endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_list_simulation_tools_no_simulation_returns_404(
+        self, client, mock_simulation_host
+    ):
+        """Test listing tools when no simulation is active returns 404."""
+        mock_simulation_host.get_simulation.return_value = None
+
+        response = client.get("/api/v1/simulation/tools")
+
+        assert response.status_code == 404
+        detail = response.json()["detail"].lower()
+        assert "simulation" in detail and "found" in detail
+
+
 class TestBodySizeLimit:
     """Tests for 10MB body size limit enforcement."""
 

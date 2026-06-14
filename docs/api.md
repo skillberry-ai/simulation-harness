@@ -270,8 +270,7 @@ curl -sS "$BASE/api/v1/simulation/tools"
 ```
 
 - `200 OK` — array of `{name, description, inputSchema}` objects.
-- `503 Service Unavailable` — no simulation is active. (Note: this endpoint
-  uses `503`, not `404`.)
+- `404 Not Found` — no simulation is active.
 
 ### `GET /api/v1/simulation/state`
 
