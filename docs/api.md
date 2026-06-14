@@ -345,6 +345,74 @@ curl -sS "$BASE/api/v1/simulation/state?thread_id=default"
 - `404 Not Found` — no simulation is active.
 - `503 Service Unavailable` with `Retry-After: 2` — simulation exists but is not yet `ready`.
 
+### `GET /api/v1/simulation/database`
+
+Return the on-disk `db.json` for the active skill. Distinct from
+`/simulation/state`, which returns the in-memory store snapshot.
+
+```bash
+curl -sS "$BASE/api/v1/simulation/database"
+# {"items": [...], "users": [...]}
+```
+
+- `200 OK` — JSON object: the contents of `db.json`.
+- `404 Not Found` — no simulation declared.
+- `500 Internal Server Error` — skill bundle incomplete (`db.json` missing).
+- `503 Service Unavailable` — simulation exists but isn't ready yet.
+
+### `GET /api/v1/simulation/schema`
+
+Return the active skill's `schema.json` (the JSON Schema that
+`db.json` is validated against). Read-only. Clients producing payloads
+for `PUT /simulation/database` should fetch this first to learn the
+expected shape.
+
+```bash
+curl -sS "$BASE/api/v1/simulation/schema"
+# {"type": "object", "properties": {...}, "$defs": {...}}
+```
+
+- `200 OK` — JSON object: the contents of `schema.json`.
+- `404 Not Found` — no simulation declared.
+- `500 Internal Server Error` — skill bundle incomplete (`schema.json` missing).
+- `503 Service Unavailable` — simulation exists but isn't ready yet.
+
+### `PUT /api/v1/simulation/database`
+
+Atomically replace the active skill's `db.json` with the request body
+and reset the running simulation so the next `tools/call` reloads
+from the new seed.
+
+**Request body** — the full `db.json` document, e.g.
+`{"items": [...], "users": [...]}`.
+
+**Behavior**
+
+- Validated against the active skill's `schema.json` before the write.
+  Validation failures return `422` and the file on disk is unchanged.
+- The write is atomic (temp file + rename).
+- On success, the agent thread and in-memory stores are reset. The
+  conversation history is dropped.
+- Refuses with `409` while tool calls are in flight; retry once they drain.
+
+**Out-of-band edits.** While a simulation is active the harness owns
+`skills-store/<name>/db.json`. Editing the file directly is not supported —
+changes will not be picked up until a `PUT` (which replaces the file and
+triggers a reset) or a delete-and-recreate cycle.
+
+```bash
+curl -sS -X PUT "$BASE/api/v1/simulation/database" \
+  -H "Content-Type: application/json" \
+  -d '{"items": [{"id": "1", "name": "Bistro"}]}'
+# {"message": "Database replaced; simulation reset"}
+```
+
+- `200 OK` — `{"message": "Database replaced; simulation reset"}`.
+- `404 Not Found` — no simulation declared.
+- `409 Conflict` — tool calls in flight (`{"detail": ..., "queue_depth": N}`).
+- `422 Unprocessable Content` — body does not validate (`{"detail": ..., "json_path": "..."}`).
+- `503 Service Unavailable` — simulation exists but isn't ready yet.
+
 ### Health and probe endpoints
 
 | Path | Purpose | Response |
