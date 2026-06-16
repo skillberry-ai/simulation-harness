@@ -39,6 +39,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN groupadd -r harness --gid=1000 \
  && useradd -r -g harness --uid=1000 --home-dir=/app --shell=/sbin/nologin harness
 
+# gosu for entrypoint privilege drop (chown volume dirs then exec as harness)
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends gosu \
+ && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Copy resolved venv from builder.
@@ -52,7 +57,8 @@ COPY --chown=harness:harness config /app/config
 RUN mkdir -p /app/logs /app/skills-store \
  && chown -R harness:harness /app
 
-USER harness
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 8086
 
@@ -61,4 +67,6 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD python -c "import urllib.request,sys; \
 sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8086/healthz', timeout=3).status==200 else 1)"
 
-ENTRYPOINT ["python", "-m", "simulation_harness"]
+# Entrypoint runs as root to fix volume dir ownership, then drops to harness.
+ENTRYPOINT ["docker-entrypoint.sh"]
+CMD ["python", "-m", "simulation_harness"]
