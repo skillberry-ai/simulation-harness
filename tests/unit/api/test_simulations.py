@@ -316,7 +316,7 @@ class TestGetSimulation:
         assert data["session_state"]["tool_call_count"] == 0
         assert data["session_state"]["max_messages"] == 100
         assert data["session_state"]["queue_depth"] == 0
-        assert data["mcp_url"] == "http://testserver/mcp/test-api"
+        assert data["mcp_url"] == "http://testserver/mcp/sse"
         assert "created_at" in data
 
     async def test_get_simulation_ready_with_mcp_port_returns_sidecar_url(
@@ -335,7 +335,7 @@ class TestGetSimulation:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["mcp_url"] == "http://testserver:9000/mcp/test-api"
+        assert data["mcp_url"] == "http://testserver:9000/mcp/sse"
 
     async def test_get_simulation_created_at_consistent(
         self, client, mock_simulation_host, mock_simulation_instance

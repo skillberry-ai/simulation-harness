@@ -5,6 +5,8 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
 from simulation_harness.api.dependencies import SimulationHostDep, SkillRegistryDep
+from simulation_harness.config.models import TransportType
+from simulation_harness.config.settings import get_config
 from simulation_harness.core.simulation_record import (
     SimulationRecord,
     SimulationStatus,
@@ -27,13 +29,18 @@ from simulation_harness.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-def _build_mcp_url(request: Request, simulation_name: str, mcp_port: int | None) -> str:
+def _build_mcp_url(request: Request, mcp_port: int | None) -> str:
+    try:
+        transport = get_config().mcp.transport
+        mcp_path = "/mcp/sse" if transport == TransportType.SSE else "/mcp"
+    except RuntimeError:
+        mcp_path = "/mcp/sse"
     if mcp_port is not None:
         host = request.url.hostname
         scheme = request.url.scheme
-        return f"{scheme}://{host}:{mcp_port}/mcp/{simulation_name}"
+        return f"{scheme}://{host}:{mcp_port}{mcp_path}"
     base_url = str(request.base_url).rstrip("/")
-    return f"{base_url}/mcp/{simulation_name}"
+    return f"{base_url}{mcp_path}"
 
 
 def _record_to_response(
@@ -59,7 +66,7 @@ def _record_to_response(
             name=record.name,
             status=record.status.value,
             session_state=record.instance.get_session_state(),
-            mcp_url=_build_mcp_url(request, record.name, record.instance.mcp_port),
+            mcp_url=_build_mcp_url(request, record.instance.mcp_port),
             created_at=record.created_at,
             progress=progress,
             error=error,

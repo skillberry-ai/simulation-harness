@@ -77,10 +77,15 @@ class SimulationCreator:
                 in (SimulationStatus.PENDING, SimulationStatus.GENERATING_SKILL)
                 else "instance_init_failed"
             )
+            cause = e.__cause__
             self._record.fail(
                 code=code,
                 message=str(e),
-                details={"exception": type(e).__name__},
+                details={
+                    "exception": type(e).__name__,
+                    "cause": str(cause) if cause else None,
+                    "cause_type": type(cause).__name__ if cause else None,
+                },
             )
 
     async def _pipeline(self) -> None:
