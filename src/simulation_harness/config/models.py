@@ -54,7 +54,7 @@ class CreationConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     max_duration_seconds: int = Field(
-        120,
+        600,
         gt=0,
         description="Wall-clock budget for async simulation creation; "
         "exceeded creations transition to failed with code 'creation_timeout'.",

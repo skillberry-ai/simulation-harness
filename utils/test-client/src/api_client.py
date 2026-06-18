@@ -20,12 +20,12 @@ class APIResponse(BaseModel):
 class HarnessAPIClient:
     """Client for harness REST API."""
     
-    def __init__(self, base_url: str, timeout: float = 120.0):
+    def __init__(self, base_url: str, timeout: float = 600.0):
         """Initialize API client.
-        
+
         Args:
             base_url: Base URL of harness (e.g., http://localhost:8086)
-            timeout: Request timeout in seconds (default: 120.0 for skill generation)
+            timeout: Request timeout in seconds (default: 600.0 for skill generation)
         """
         self.base_url = base_url.rstrip("/")
         self.client = httpx.AsyncClient(timeout=timeout)
