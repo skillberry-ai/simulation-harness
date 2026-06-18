@@ -1,4 +1,8 @@
-.PHONY: help install dev-install start stop restart test test-unit test-integration test-cov lint format check clean
+.PHONY: help install dev-install start stop restart test test-unit test-integration test-cov lint format check clean \
+        docker-build docker-build-dev docker-clean docker-clean-dev
+
+IMAGE_NAME ?= simulation-harness
+IMAGE_TAG  ?= latest
 
 # Default target
 help:
@@ -26,6 +30,12 @@ help:
 	@echo ""
 	@echo "  Cleanup:"
 	@echo "    clean            Remove generated files and caches"
+	@echo ""
+	@echo "  Docker:"
+	@echo "    docker-build     Build production image (IMAGE_NAME:IMAGE_TAG)"
+	@echo "    docker-build-dev Build dev image via docker compose (IMAGE_NAME:dev)"
+	@echo "    docker-clean     Remove production image"
+	@echo "    docker-clean-dev Remove dev image and compose artefacts"
 
 # Installation targets
 install:
@@ -101,5 +111,19 @@ clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete
 	@echo "Cleanup complete"
+
+# Docker targets
+docker-build:
+	docker build -t $(IMAGE_NAME):$(IMAGE_TAG) .
+
+docker-build-dev:
+	docker compose build
+
+docker-clean:
+	docker rmi $(IMAGE_NAME):$(IMAGE_TAG) 2>/dev/null || echo "Image $(IMAGE_NAME):$(IMAGE_TAG) not found"
+
+docker-clean-dev:
+	docker compose down --rmi local 2>/dev/null || true
+	docker rmi $(IMAGE_NAME):dev 2>/dev/null || echo "Image $(IMAGE_NAME):dev not found"
 
 # Made with Bob
