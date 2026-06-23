@@ -25,6 +25,12 @@ class LLMConfig(BaseModel):
 
     provider: str = Field(..., description="LLM provider (e.g., 'openai')")
     skill_generation_model: str = Field(..., description="Model for skill generation")
+    skill_generation_max_tokens: int = Field(
+        20000,
+        gt=0,
+        description="Maximum output tokens for skill generation; raise for "
+        "large specs whose generated skill package would otherwise be truncated.",
+    )
     simulation_model: str = Field(..., description="Model for simulation runtime")
     temperature: float = Field(0, ge=0, le=2, description="Sampling temperature")
     max_tokens: Optional[int] = Field(

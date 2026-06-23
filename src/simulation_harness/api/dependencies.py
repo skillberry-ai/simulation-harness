@@ -41,6 +41,7 @@ def get_skill_registry() -> SkillRegistry:
         generator = SkillGenerator(
             api_key=secrets.llm_api_key,
             model=config.llm.skill_generation_model,
+            max_tokens=config.llm.skill_generation_max_tokens,
             base_url=secrets.llm_api_base,
         )
         _skill_registry = SkillRegistry(
