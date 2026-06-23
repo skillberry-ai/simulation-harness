@@ -1,8 +1,16 @@
+# Node / workspace
+node_modules/
+client/dist/
+server/dist/
+*.tsbuildinfo
+.test-client.pid
+logs/
+*.log
+.env
+
+# Legacy Python client (removed at PatternFly cutover)
 __pycache__/
 *.pyc
 .streamlit/
-*.log
 .venv/
 .python-version
-
-# Made with Bob

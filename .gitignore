@@ -23,6 +23,9 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+# Node
+node_modules/
+
 # Virtual environments
 .venv/
 venv/

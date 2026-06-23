@@ -223,19 +223,21 @@ exits non-zero and writes the error to stderr.
 
 ## Test client
 
-An interactive test client lives in [`utils/test-client/`](utils/test-client/) with its own Makefile:
+An interactive PatternFly + React test client lives in [`utils/test-client/`](utils/test-client/) with its own Makefile:
 
 ```bash
 cd utils/test-client
 make setup
-make run
+make dev      # client on :5173, proxy on :3000
 ```
 
 Features:
-- Create simulations from OpenAPI specs
-- List and call MCP tools
-- Monitor session state
-- Test both SSE and Streamable HTTP transports
+- Create simulations from OpenAPI specs (Monaco editor + example loader)
+- List and call MCP tools (schema-driven forms)
+- Inspect session state, schema, and database
+- Browse and export request history
+
+See [`utils/test-client/README.md`](utils/test-client/README.md) for production run and configuration.
 
 ## Development
 
