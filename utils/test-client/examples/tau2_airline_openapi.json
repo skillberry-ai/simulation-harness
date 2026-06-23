@@ -1,0 +1,2715 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "tau2-airline",
+    "version": "1.0.0",
+    "description": "tau2-bench 'airline' domain tools, exported as OpenAPI so the simulation-harness can simulate them. Responses are LLM-faked by the harness, not tau2's real logic."
+  },
+  "paths": {
+    "/book_reservation": {
+      "post": {
+        "operationId": "book_reservation",
+        "summary": "Book a reservation.",
+        "description": "Book a reservation.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "user_id": {
+                    "description": "The ID of the user to book the reservation such as 'sara_doe_496'`.",
+                    "title": "User Id",
+                    "type": "string"
+                  },
+                  "origin": {
+                    "description": "The IATA code for the origin city such as 'SFO'.",
+                    "title": "Origin",
+                    "type": "string"
+                  },
+                  "destination": {
+                    "description": "The IATA code for the destination city such as 'JFK'.",
+                    "title": "Destination",
+                    "type": "string"
+                  },
+                  "flight_type": {
+                    "description": "The type of flight such as 'one_way' or 'round_trip'.",
+                    "enum": [
+                      "round_trip",
+                      "one_way"
+                    ],
+                    "title": "Flight Type",
+                    "type": "string"
+                  },
+                  "cabin": {
+                    "description": "The cabin class such as 'basic_economy', 'economy', or 'business'.",
+                    "enum": [
+                      "business",
+                      "economy",
+                      "basic_economy"
+                    ],
+                    "title": "Cabin",
+                    "type": "string"
+                  },
+                  "flights": {
+                    "description": "An array of objects containing details about each piece of flight.",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "flight_number": {
+                              "description": "Flight number, such as 'HAT001'.",
+                              "title": "Flight Number",
+                              "type": "string"
+                            },
+                            "date": {
+                              "description": "The date for the flight in the format 'YYYY-MM-DD', such as '2024-05-01'.",
+                              "title": "Date",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "flight_number",
+                            "date"
+                          ],
+                          "title": "FlightInfo",
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": true,
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "title": "Flights",
+                    "type": "array"
+                  },
+                  "passengers": {
+                    "description": "An array of objects containing details about each passenger.",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "first_name": {
+                              "description": "Passenger's first name",
+                              "title": "First Name",
+                              "type": "string"
+                            },
+                            "last_name": {
+                              "description": "Passenger's last name",
+                              "title": "Last Name",
+                              "type": "string"
+                            },
+                            "dob": {
+                              "description": "Date of birth in YYYY-MM-DD format",
+                              "title": "Dob",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "first_name",
+                            "last_name",
+                            "dob"
+                          ],
+                          "title": "Passenger",
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": true,
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "title": "Passengers",
+                    "type": "array"
+                  },
+                  "payment_methods": {
+                    "description": "An array of objects containing details about each payment method.",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "payment_id": {
+                              "description": "Unique identifier for the payment",
+                              "title": "Payment Id",
+                              "type": "string"
+                            },
+                            "amount": {
+                              "description": "Payment amount in dollars",
+                              "title": "Amount",
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "payment_id",
+                            "amount"
+                          ],
+                          "title": "Payment",
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": true,
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "title": "Payment Methods",
+                    "type": "array"
+                  },
+                  "total_baggages": {
+                    "description": "The total number of baggage items to book the reservation.",
+                    "title": "Total Baggages",
+                    "type": "integer"
+                  },
+                  "nonfree_baggages": {
+                    "description": "The number of non-free baggage items to book the reservation.",
+                    "title": "Nonfree Baggages",
+                    "type": "integer"
+                  },
+                  "insurance": {
+                    "description": "Whether the reservation has insurance.",
+                    "enum": [
+                      "yes",
+                      "no"
+                    ],
+                    "title": "Insurance",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "user_id",
+                  "origin",
+                  "destination",
+                  "flight_type",
+                  "cabin",
+                  "flights",
+                  "passengers",
+                  "payment_methods",
+                  "total_baggages",
+                  "nonfree_baggages",
+                  "insurance"
+                ],
+                "title": "parameters",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "returns": {
+                      "properties": {
+                        "reservation_id": {
+                          "description": "Unique identifier for the reservation",
+                          "title": "Reservation Id",
+                          "type": "string"
+                        },
+                        "user_id": {
+                          "description": "ID of the user who made the reservation",
+                          "title": "User Id",
+                          "type": "string"
+                        },
+                        "origin": {
+                          "description": "IATA code for trip origin",
+                          "title": "Origin",
+                          "type": "string"
+                        },
+                        "destination": {
+                          "description": "IATA code for trip destination",
+                          "title": "Destination",
+                          "type": "string"
+                        },
+                        "flight_type": {
+                          "description": "Type of trip",
+                          "enum": [
+                            "round_trip",
+                            "one_way"
+                          ],
+                          "title": "Flight Type",
+                          "type": "string"
+                        },
+                        "cabin": {
+                          "description": "Selected cabin class",
+                          "enum": [
+                            "business",
+                            "economy",
+                            "basic_economy"
+                          ],
+                          "title": "Cabin",
+                          "type": "string"
+                        },
+                        "flights": {
+                          "description": "List of flights in the reservation",
+                          "items": {
+                            "properties": {
+                              "flight_number": {
+                                "description": "Unique flight identifier",
+                                "title": "Flight Number",
+                                "type": "string"
+                              },
+                              "origin": {
+                                "description": "IATA code for origin airport",
+                                "title": "Origin",
+                                "type": "string"
+                              },
+                              "destination": {
+                                "description": "IATA code for destination airport",
+                                "title": "Destination",
+                                "type": "string"
+                              },
+                              "date": {
+                                "description": "Flight date in YYYY-MM-DD format",
+                                "title": "Date",
+                                "type": "string"
+                              },
+                              "price": {
+                                "description": "Flight price in dollars.",
+                                "title": "Price",
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "flight_number",
+                              "origin",
+                              "destination",
+                              "date",
+                              "price"
+                            ],
+                            "title": "ReservationFlight",
+                            "type": "object"
+                          },
+                          "title": "Flights",
+                          "type": "array"
+                        },
+                        "passengers": {
+                          "description": "List of passengers on the reservation",
+                          "items": {
+                            "properties": {
+                              "first_name": {
+                                "description": "Passenger's first name",
+                                "title": "First Name",
+                                "type": "string"
+                              },
+                              "last_name": {
+                                "description": "Passenger's last name",
+                                "title": "Last Name",
+                                "type": "string"
+                              },
+                              "dob": {
+                                "description": "Date of birth in YYYY-MM-DD format",
+                                "title": "Dob",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "first_name",
+                              "last_name",
+                              "dob"
+                            ],
+                            "title": "Passenger",
+                            "type": "object"
+                          },
+                          "title": "Passengers",
+                          "type": "array"
+                        },
+                        "payment_history": {
+                          "description": "History of payments for this reservation",
+                          "items": {
+                            "properties": {
+                              "payment_id": {
+                                "description": "Unique identifier for the payment",
+                                "title": "Payment Id",
+                                "type": "string"
+                              },
+                              "amount": {
+                                "description": "Payment amount in dollars",
+                                "title": "Amount",
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "payment_id",
+                              "amount"
+                            ],
+                            "title": "Payment",
+                            "type": "object"
+                          },
+                          "title": "Payment History",
+                          "type": "array"
+                        },
+                        "created_at": {
+                          "description": "Timestamp when reservation was created in the format YYYY-MM-DDTHH:MM:SS",
+                          "title": "Created At",
+                          "type": "string"
+                        },
+                        "total_baggages": {
+                          "description": "Total number of bags in reservation",
+                          "title": "Total Baggages",
+                          "type": "integer"
+                        },
+                        "nonfree_baggages": {
+                          "description": "Number of paid bags in reservation",
+                          "title": "Nonfree Baggages",
+                          "type": "integer"
+                        },
+                        "insurance": {
+                          "description": "Whether travel insurance was purchased",
+                          "enum": [
+                            "yes",
+                            "no"
+                          ],
+                          "title": "Insurance",
+                          "type": "string"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "cancelled",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Status of the reservation",
+                          "title": "Status"
+                        }
+                      },
+                      "required": [
+                        "reservation_id",
+                        "user_id",
+                        "origin",
+                        "destination",
+                        "flight_type",
+                        "cabin",
+                        "flights",
+                        "passengers",
+                        "payment_history",
+                        "created_at",
+                        "total_baggages",
+                        "nonfree_baggages",
+                        "insurance"
+                      ],
+                      "title": "Reservation",
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "returns"
+                  ],
+                  "title": "returns",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/calculate": {
+      "post": {
+        "operationId": "calculate",
+        "summary": "Calculate the result of a mathematical expression.",
+        "description": "Calculate the result of a mathematical expression.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "expression": {
+                    "description": "The mathematical expression to calculate, such as '2 + 2'. The expression can contain numbers, operators (+, -, *, /), parentheses, and spaces.",
+                    "title": "Expression",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "expression"
+                ],
+                "title": "parameters",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "returns": {
+                      "description": "The result of the mathematical expression.",
+                      "title": "Returns",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "returns"
+                  ],
+                  "title": "returns",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cancel_reservation": {
+      "post": {
+        "operationId": "cancel_reservation",
+        "summary": "Cancel the whole reservation.",
+        "description": "Cancel the whole reservation.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "reservation_id": {
+                    "description": "The reservation ID, such as 'ZFA04Y'.",
+                    "title": "Reservation Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "reservation_id"
+                ],
+                "title": "parameters",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "returns": {
+                      "properties": {
+                        "reservation_id": {
+                          "description": "Unique identifier for the reservation",
+                          "title": "Reservation Id",
+                          "type": "string"
+                        },
+                        "user_id": {
+                          "description": "ID of the user who made the reservation",
+                          "title": "User Id",
+                          "type": "string"
+                        },
+                        "origin": {
+                          "description": "IATA code for trip origin",
+                          "title": "Origin",
+                          "type": "string"
+                        },
+                        "destination": {
+                          "description": "IATA code for trip destination",
+                          "title": "Destination",
+                          "type": "string"
+                        },
+                        "flight_type": {
+                          "description": "Type of trip",
+                          "enum": [
+                            "round_trip",
+                            "one_way"
+                          ],
+                          "title": "Flight Type",
+                          "type": "string"
+                        },
+                        "cabin": {
+                          "description": "Selected cabin class",
+                          "enum": [
+                            "business",
+                            "economy",
+                            "basic_economy"
+                          ],
+                          "title": "Cabin",
+                          "type": "string"
+                        },
+                        "flights": {
+                          "description": "List of flights in the reservation",
+                          "items": {
+                            "properties": {
+                              "flight_number": {
+                                "description": "Unique flight identifier",
+                                "title": "Flight Number",
+                                "type": "string"
+                              },
+                              "origin": {
+                                "description": "IATA code for origin airport",
+                                "title": "Origin",
+                                "type": "string"
+                              },
+                              "destination": {
+                                "description": "IATA code for destination airport",
+                                "title": "Destination",
+                                "type": "string"
+                              },
+                              "date": {
+                                "description": "Flight date in YYYY-MM-DD format",
+                                "title": "Date",
+                                "type": "string"
+                              },
+                              "price": {
+                                "description": "Flight price in dollars.",
+                                "title": "Price",
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "flight_number",
+                              "origin",
+                              "destination",
+                              "date",
+                              "price"
+                            ],
+                            "title": "ReservationFlight",
+                            "type": "object"
+                          },
+                          "title": "Flights",
+                          "type": "array"
+                        },
+                        "passengers": {
+                          "description": "List of passengers on the reservation",
+                          "items": {
+                            "properties": {
+                              "first_name": {
+                                "description": "Passenger's first name",
+                                "title": "First Name",
+                                "type": "string"
+                              },
+                              "last_name": {
+                                "description": "Passenger's last name",
+                                "title": "Last Name",
+                                "type": "string"
+                              },
+                              "dob": {
+                                "description": "Date of birth in YYYY-MM-DD format",
+                                "title": "Dob",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "first_name",
+                              "last_name",
+                              "dob"
+                            ],
+                            "title": "Passenger",
+                            "type": "object"
+                          },
+                          "title": "Passengers",
+                          "type": "array"
+                        },
+                        "payment_history": {
+                          "description": "History of payments for this reservation",
+                          "items": {
+                            "properties": {
+                              "payment_id": {
+                                "description": "Unique identifier for the payment",
+                                "title": "Payment Id",
+                                "type": "string"
+                              },
+                              "amount": {
+                                "description": "Payment amount in dollars",
+                                "title": "Amount",
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "payment_id",
+                              "amount"
+                            ],
+                            "title": "Payment",
+                            "type": "object"
+                          },
+                          "title": "Payment History",
+                          "type": "array"
+                        },
+                        "created_at": {
+                          "description": "Timestamp when reservation was created in the format YYYY-MM-DDTHH:MM:SS",
+                          "title": "Created At",
+                          "type": "string"
+                        },
+                        "total_baggages": {
+                          "description": "Total number of bags in reservation",
+                          "title": "Total Baggages",
+                          "type": "integer"
+                        },
+                        "nonfree_baggages": {
+                          "description": "Number of paid bags in reservation",
+                          "title": "Nonfree Baggages",
+                          "type": "integer"
+                        },
+                        "insurance": {
+                          "description": "Whether travel insurance was purchased",
+                          "enum": [
+                            "yes",
+                            "no"
+                          ],
+                          "title": "Insurance",
+                          "type": "string"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "cancelled",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Status of the reservation",
+                          "title": "Status"
+                        }
+                      },
+                      "required": [
+                        "reservation_id",
+                        "user_id",
+                        "origin",
+                        "destination",
+                        "flight_type",
+                        "cabin",
+                        "flights",
+                        "passengers",
+                        "payment_history",
+                        "created_at",
+                        "total_baggages",
+                        "nonfree_baggages",
+                        "insurance"
+                      ],
+                      "title": "Reservation",
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "returns"
+                  ],
+                  "title": "returns",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/get_reservation_details": {
+      "post": {
+        "operationId": "get_reservation_details",
+        "summary": "Get the details of a reservation.",
+        "description": "Get the details of a reservation.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "reservation_id": {
+                    "description": "The reservation ID, such as '8JX2WO'.",
+                    "title": "Reservation Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "reservation_id"
+                ],
+                "title": "parameters",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "returns": {
+                      "properties": {
+                        "reservation_id": {
+                          "description": "Unique identifier for the reservation",
+                          "title": "Reservation Id",
+                          "type": "string"
+                        },
+                        "user_id": {
+                          "description": "ID of the user who made the reservation",
+                          "title": "User Id",
+                          "type": "string"
+                        },
+                        "origin": {
+                          "description": "IATA code for trip origin",
+                          "title": "Origin",
+                          "type": "string"
+                        },
+                        "destination": {
+                          "description": "IATA code for trip destination",
+                          "title": "Destination",
+                          "type": "string"
+                        },
+                        "flight_type": {
+                          "description": "Type of trip",
+                          "enum": [
+                            "round_trip",
+                            "one_way"
+                          ],
+                          "title": "Flight Type",
+                          "type": "string"
+                        },
+                        "cabin": {
+                          "description": "Selected cabin class",
+                          "enum": [
+                            "business",
+                            "economy",
+                            "basic_economy"
+                          ],
+                          "title": "Cabin",
+                          "type": "string"
+                        },
+                        "flights": {
+                          "description": "List of flights in the reservation",
+                          "items": {
+                            "properties": {
+                              "flight_number": {
+                                "description": "Unique flight identifier",
+                                "title": "Flight Number",
+                                "type": "string"
+                              },
+                              "origin": {
+                                "description": "IATA code for origin airport",
+                                "title": "Origin",
+                                "type": "string"
+                              },
+                              "destination": {
+                                "description": "IATA code for destination airport",
+                                "title": "Destination",
+                                "type": "string"
+                              },
+                              "date": {
+                                "description": "Flight date in YYYY-MM-DD format",
+                                "title": "Date",
+                                "type": "string"
+                              },
+                              "price": {
+                                "description": "Flight price in dollars.",
+                                "title": "Price",
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "flight_number",
+                              "origin",
+                              "destination",
+                              "date",
+                              "price"
+                            ],
+                            "title": "ReservationFlight",
+                            "type": "object"
+                          },
+                          "title": "Flights",
+                          "type": "array"
+                        },
+                        "passengers": {
+                          "description": "List of passengers on the reservation",
+                          "items": {
+                            "properties": {
+                              "first_name": {
+                                "description": "Passenger's first name",
+                                "title": "First Name",
+                                "type": "string"
+                              },
+                              "last_name": {
+                                "description": "Passenger's last name",
+                                "title": "Last Name",
+                                "type": "string"
+                              },
+                              "dob": {
+                                "description": "Date of birth in YYYY-MM-DD format",
+                                "title": "Dob",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "first_name",
+                              "last_name",
+                              "dob"
+                            ],
+                            "title": "Passenger",
+                            "type": "object"
+                          },
+                          "title": "Passengers",
+                          "type": "array"
+                        },
+                        "payment_history": {
+                          "description": "History of payments for this reservation",
+                          "items": {
+                            "properties": {
+                              "payment_id": {
+                                "description": "Unique identifier for the payment",
+                                "title": "Payment Id",
+                                "type": "string"
+                              },
+                              "amount": {
+                                "description": "Payment amount in dollars",
+                                "title": "Amount",
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "payment_id",
+                              "amount"
+                            ],
+                            "title": "Payment",
+                            "type": "object"
+                          },
+                          "title": "Payment History",
+                          "type": "array"
+                        },
+                        "created_at": {
+                          "description": "Timestamp when reservation was created in the format YYYY-MM-DDTHH:MM:SS",
+                          "title": "Created At",
+                          "type": "string"
+                        },
+                        "total_baggages": {
+                          "description": "Total number of bags in reservation",
+                          "title": "Total Baggages",
+                          "type": "integer"
+                        },
+                        "nonfree_baggages": {
+                          "description": "Number of paid bags in reservation",
+                          "title": "Nonfree Baggages",
+                          "type": "integer"
+                        },
+                        "insurance": {
+                          "description": "Whether travel insurance was purchased",
+                          "enum": [
+                            "yes",
+                            "no"
+                          ],
+                          "title": "Insurance",
+                          "type": "string"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "cancelled",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Status of the reservation",
+                          "title": "Status"
+                        }
+                      },
+                      "required": [
+                        "reservation_id",
+                        "user_id",
+                        "origin",
+                        "destination",
+                        "flight_type",
+                        "cabin",
+                        "flights",
+                        "passengers",
+                        "payment_history",
+                        "created_at",
+                        "total_baggages",
+                        "nonfree_baggages",
+                        "insurance"
+                      ],
+                      "title": "Reservation",
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "returns"
+                  ],
+                  "title": "returns",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/get_user_details": {
+      "post": {
+        "operationId": "get_user_details",
+        "summary": "Get the details of a user, including their reservations.",
+        "description": "Get the details of a user, including their reservations.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "user_id": {
+                    "description": "The user ID, such as 'sara_doe_496'.",
+                    "title": "User Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "user_id"
+                ],
+                "title": "parameters",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "returns": {
+                      "properties": {
+                        "user_id": {
+                          "description": "Unique identifier for the user",
+                          "title": "User Id",
+                          "type": "string"
+                        },
+                        "name": {
+                          "properties": {
+                            "first_name": {
+                              "description": "The person's first name",
+                              "title": "First Name",
+                              "type": "string"
+                            },
+                            "last_name": {
+                              "description": "The person's last name",
+                              "title": "Last Name",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "first_name",
+                            "last_name"
+                          ],
+                          "title": "Name",
+                          "type": "object"
+                        },
+                        "address": {
+                          "properties": {
+                            "address1": {
+                              "description": "Primary address line",
+                              "title": "Address1",
+                              "type": "string"
+                            },
+                            "address2": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Secondary address line (optional)",
+                              "title": "Address2"
+                            },
+                            "city": {
+                              "description": "City name",
+                              "title": "City",
+                              "type": "string"
+                            },
+                            "country": {
+                              "description": "Country name",
+                              "title": "Country",
+                              "type": "string"
+                            },
+                            "state": {
+                              "description": "State or province name",
+                              "title": "State",
+                              "type": "string"
+                            },
+                            "zip": {
+                              "description": "Postal code",
+                              "title": "Zip",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "address1",
+                            "city",
+                            "country",
+                            "state",
+                            "zip"
+                          ],
+                          "title": "Address",
+                          "type": "object"
+                        },
+                        "email": {
+                          "description": "User's email address",
+                          "title": "Email",
+                          "type": "string"
+                        },
+                        "dob": {
+                          "description": "User's date of birth in the format YYYY-MM-DD, e.g 1990-04-05",
+                          "title": "Dob",
+                          "type": "string"
+                        },
+                        "payment_methods": {
+                          "additionalProperties": {
+                            "anyOf": [
+                              {
+                                "properties": {
+                                  "source": {
+                                    "const": "credit_card",
+                                    "description": "Indicates this is a credit card payment method",
+                                    "title": "Source",
+                                    "type": "string"
+                                  },
+                                  "id": {
+                                    "description": "Unique identifier for the payment method",
+                                    "title": "Id",
+                                    "type": "string"
+                                  },
+                                  "brand": {
+                                    "description": "Credit card brand (e.g., visa, mastercard)",
+                                    "title": "Brand",
+                                    "type": "string"
+                                  },
+                                  "last_four": {
+                                    "description": "Last four digits of the credit card",
+                                    "title": "Last Four",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "source",
+                                  "id",
+                                  "brand",
+                                  "last_four"
+                                ],
+                                "title": "CreditCard",
+                                "type": "object"
+                              },
+                              {
+                                "properties": {
+                                  "source": {
+                                    "const": "gift_card",
+                                    "description": "Indicates this is a gift card payment method",
+                                    "title": "Source",
+                                    "type": "string"
+                                  },
+                                  "id": {
+                                    "description": "Unique identifier for the gift card",
+                                    "title": "Id",
+                                    "type": "string"
+                                  },
+                                  "amount": {
+                                    "description": "Gift card value amount",
+                                    "title": "Amount",
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "source",
+                                  "id",
+                                  "amount"
+                                ],
+                                "title": "GiftCard",
+                                "type": "object"
+                              },
+                              {
+                                "properties": {
+                                  "source": {
+                                    "const": "certificate",
+                                    "description": "Indicates this is a certificate payment method",
+                                    "title": "Source",
+                                    "type": "string"
+                                  },
+                                  "id": {
+                                    "description": "Unique identifier for the payment method",
+                                    "title": "Id",
+                                    "type": "string"
+                                  },
+                                  "amount": {
+                                    "description": "Certificate value amount",
+                                    "title": "Amount",
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "source",
+                                  "id",
+                                  "amount"
+                                ],
+                                "title": "Certificate",
+                                "type": "object"
+                              }
+                            ]
+                          },
+                          "description": "User's saved payment methods",
+                          "title": "Payment Methods",
+                          "type": "object"
+                        },
+                        "saved_passengers": {
+                          "description": "User's saved passenger information",
+                          "items": {
+                            "properties": {
+                              "first_name": {
+                                "description": "Passenger's first name",
+                                "title": "First Name",
+                                "type": "string"
+                              },
+                              "last_name": {
+                                "description": "Passenger's last name",
+                                "title": "Last Name",
+                                "type": "string"
+                              },
+                              "dob": {
+                                "description": "Date of birth in YYYY-MM-DD format",
+                                "title": "Dob",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "first_name",
+                              "last_name",
+                              "dob"
+                            ],
+                            "title": "Passenger",
+                            "type": "object"
+                          },
+                          "title": "Saved Passengers",
+                          "type": "array"
+                        },
+                        "membership": {
+                          "description": "User's membership level",
+                          "enum": [
+                            "gold",
+                            "silver",
+                            "regular"
+                          ],
+                          "title": "Membership",
+                          "type": "string"
+                        },
+                        "reservations": {
+                          "description": "List of user's reservation IDs",
+                          "items": {
+                            "type": "string"
+                          },
+                          "title": "Reservations",
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "user_id",
+                        "name",
+                        "address",
+                        "email",
+                        "dob",
+                        "payment_methods",
+                        "saved_passengers",
+                        "membership",
+                        "reservations"
+                      ],
+                      "title": "User",
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "returns"
+                  ],
+                  "title": "returns",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/list_all_airports": {
+      "post": {
+        "operationId": "list_all_airports",
+        "summary": "Returns a list of all available airports.",
+        "description": "Returns a list of all available airports.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {},
+                "title": "parameters",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "returns": {
+                      "description": "A dictionary mapping IATA codes to AirportInfo objects.",
+                      "items": {
+                        "properties": {
+                          "iata": {
+                            "description": "IATA code",
+                            "title": "Iata",
+                            "type": "string"
+                          },
+                          "city": {
+                            "description": "City name",
+                            "title": "City",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "iata",
+                          "city"
+                        ],
+                        "title": "AirportCode",
+                        "type": "object"
+                      },
+                      "title": "Returns",
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "returns"
+                  ],
+                  "title": "returns",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/search_direct_flight": {
+      "post": {
+        "operationId": "search_direct_flight",
+        "summary": "Search for direct flights between two cities on a specific date.",
+        "description": "Search for direct flights between two cities on a specific date.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "origin": {
+                    "description": "The origin city airport in three letters, such as 'JFK'.",
+                    "title": "Origin",
+                    "type": "string"
+                  },
+                  "destination": {
+                    "description": "The destination city airport in three letters, such as 'LAX'.",
+                    "title": "Destination",
+                    "type": "string"
+                  },
+                  "date": {
+                    "description": "The date of the flight in the format 'YYYY-MM-DD', such as '2024-01-01'.",
+                    "title": "Date",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "origin",
+                  "destination",
+                  "date"
+                ],
+                "title": "parameters",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "returns": {
+                      "description": "The direct flights between the two cities on the specific date.",
+                      "items": {
+                        "properties": {
+                          "flight_number": {
+                            "description": "Unique flight identifier",
+                            "title": "Flight Number",
+                            "type": "string"
+                          },
+                          "origin": {
+                            "description": "IATA code for origin airport",
+                            "title": "Origin",
+                            "type": "string"
+                          },
+                          "destination": {
+                            "description": "IATA code for destination airport",
+                            "title": "Destination",
+                            "type": "string"
+                          },
+                          "status": {
+                            "const": "available",
+                            "description": "Indicates flight is available for booking",
+                            "title": "Status",
+                            "type": "string"
+                          },
+                          "scheduled_departure_time_est": {
+                            "description": "Scheduled departure time in EST in the format HH:MM:SS, e.g 06:00:00",
+                            "title": "Scheduled Departure Time Est",
+                            "type": "string"
+                          },
+                          "scheduled_arrival_time_est": {
+                            "description": "Scheduled arrival time in EST in the format HH:MM:SS, e.g 07:00:00",
+                            "title": "Scheduled Arrival Time Est",
+                            "type": "string"
+                          },
+                          "date": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null,
+                            "description": "Flight date in YYYY-MM-DD format",
+                            "title": "Date"
+                          },
+                          "available_seats": {
+                            "additionalProperties": {
+                              "type": "integer"
+                            },
+                            "description": "Available seats by class",
+                            "propertyNames": {
+                              "enum": [
+                                "business",
+                                "economy",
+                                "basic_economy"
+                              ]
+                            },
+                            "title": "Available Seats",
+                            "type": "object"
+                          },
+                          "prices": {
+                            "additionalProperties": {
+                              "type": "integer"
+                            },
+                            "description": "Current prices by class",
+                            "propertyNames": {
+                              "enum": [
+                                "business",
+                                "economy",
+                                "basic_economy"
+                              ]
+                            },
+                            "title": "Prices",
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "flight_number",
+                          "origin",
+                          "destination",
+                          "status",
+                          "scheduled_departure_time_est",
+                          "scheduled_arrival_time_est",
+                          "available_seats",
+                          "prices"
+                        ],
+                        "title": "DirectFlight",
+                        "type": "object"
+                      },
+                      "title": "Returns",
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "returns"
+                  ],
+                  "title": "returns",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/search_onestop_flight": {
+      "post": {
+        "operationId": "search_onestop_flight",
+        "summary": "Search for one-stop flights between two cities on a specific date.",
+        "description": "Search for one-stop flights between two cities on a specific date.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "origin": {
+                    "description": "The origin city airport in three letters, such as 'JFK'.",
+                    "title": "Origin",
+                    "type": "string"
+                  },
+                  "destination": {
+                    "description": "The destination city airport in three letters, such as 'LAX'.",
+                    "title": "Destination",
+                    "type": "string"
+                  },
+                  "date": {
+                    "description": "The date of the flight in the format 'YYYY-MM-DD', such as '2024-05-01'.",
+                    "title": "Date",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "origin",
+                  "destination",
+                  "date"
+                ],
+                "title": "parameters",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "returns": {
+                      "description": "A list of pairs of DirectFlight objects.",
+                      "items": {
+                        "maxItems": 2,
+                        "minItems": 2,
+                        "prefixItems": [
+                          {
+                            "properties": {
+                              "flight_number": {
+                                "description": "Unique flight identifier",
+                                "title": "Flight Number",
+                                "type": "string"
+                              },
+                              "origin": {
+                                "description": "IATA code for origin airport",
+                                "title": "Origin",
+                                "type": "string"
+                              },
+                              "destination": {
+                                "description": "IATA code for destination airport",
+                                "title": "Destination",
+                                "type": "string"
+                              },
+                              "status": {
+                                "const": "available",
+                                "description": "Indicates flight is available for booking",
+                                "title": "Status",
+                                "type": "string"
+                              },
+                              "scheduled_departure_time_est": {
+                                "description": "Scheduled departure time in EST in the format HH:MM:SS, e.g 06:00:00",
+                                "title": "Scheduled Departure Time Est",
+                                "type": "string"
+                              },
+                              "scheduled_arrival_time_est": {
+                                "description": "Scheduled arrival time in EST in the format HH:MM:SS, e.g 07:00:00",
+                                "title": "Scheduled Arrival Time Est",
+                                "type": "string"
+                              },
+                              "date": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "default": null,
+                                "description": "Flight date in YYYY-MM-DD format",
+                                "title": "Date"
+                              },
+                              "available_seats": {
+                                "additionalProperties": {
+                                  "type": "integer"
+                                },
+                                "description": "Available seats by class",
+                                "propertyNames": {
+                                  "enum": [
+                                    "business",
+                                    "economy",
+                                    "basic_economy"
+                                  ]
+                                },
+                                "title": "Available Seats",
+                                "type": "object"
+                              },
+                              "prices": {
+                                "additionalProperties": {
+                                  "type": "integer"
+                                },
+                                "description": "Current prices by class",
+                                "propertyNames": {
+                                  "enum": [
+                                    "business",
+                                    "economy",
+                                    "basic_economy"
+                                  ]
+                                },
+                                "title": "Prices",
+                                "type": "object"
+                              }
+                            },
+                            "required": [
+                              "flight_number",
+                              "origin",
+                              "destination",
+                              "status",
+                              "scheduled_departure_time_est",
+                              "scheduled_arrival_time_est",
+                              "available_seats",
+                              "prices"
+                            ],
+                            "title": "DirectFlight",
+                            "type": "object"
+                          },
+                          {
+                            "properties": {
+                              "flight_number": {
+                                "description": "Unique flight identifier",
+                                "title": "Flight Number",
+                                "type": "string"
+                              },
+                              "origin": {
+                                "description": "IATA code for origin airport",
+                                "title": "Origin",
+                                "type": "string"
+                              },
+                              "destination": {
+                                "description": "IATA code for destination airport",
+                                "title": "Destination",
+                                "type": "string"
+                              },
+                              "status": {
+                                "const": "available",
+                                "description": "Indicates flight is available for booking",
+                                "title": "Status",
+                                "type": "string"
+                              },
+                              "scheduled_departure_time_est": {
+                                "description": "Scheduled departure time in EST in the format HH:MM:SS, e.g 06:00:00",
+                                "title": "Scheduled Departure Time Est",
+                                "type": "string"
+                              },
+                              "scheduled_arrival_time_est": {
+                                "description": "Scheduled arrival time in EST in the format HH:MM:SS, e.g 07:00:00",
+                                "title": "Scheduled Arrival Time Est",
+                                "type": "string"
+                              },
+                              "date": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "default": null,
+                                "description": "Flight date in YYYY-MM-DD format",
+                                "title": "Date"
+                              },
+                              "available_seats": {
+                                "additionalProperties": {
+                                  "type": "integer"
+                                },
+                                "description": "Available seats by class",
+                                "propertyNames": {
+                                  "enum": [
+                                    "business",
+                                    "economy",
+                                    "basic_economy"
+                                  ]
+                                },
+                                "title": "Available Seats",
+                                "type": "object"
+                              },
+                              "prices": {
+                                "additionalProperties": {
+                                  "type": "integer"
+                                },
+                                "description": "Current prices by class",
+                                "propertyNames": {
+                                  "enum": [
+                                    "business",
+                                    "economy",
+                                    "basic_economy"
+                                  ]
+                                },
+                                "title": "Prices",
+                                "type": "object"
+                              }
+                            },
+                            "required": [
+                              "flight_number",
+                              "origin",
+                              "destination",
+                              "status",
+                              "scheduled_departure_time_est",
+                              "scheduled_arrival_time_est",
+                              "available_seats",
+                              "prices"
+                            ],
+                            "title": "DirectFlight",
+                            "type": "object"
+                          }
+                        ],
+                        "type": "array"
+                      },
+                      "title": "Returns",
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "returns"
+                  ],
+                  "title": "returns",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/send_certificate": {
+      "post": {
+        "operationId": "send_certificate",
+        "summary": "Send a certificate to a user. Be careful!",
+        "description": "Send a certificate to a user. Be careful!",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "user_id": {
+                    "description": "The ID of the user to book the reservation, such as 'sara_doe_496'.",
+                    "title": "User Id",
+                    "type": "string"
+                  },
+                  "amount": {
+                    "description": "The amount of the certificate to send.",
+                    "title": "Amount",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "user_id",
+                  "amount"
+                ],
+                "title": "parameters",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "returns": {
+                      "description": "A message indicating the certificate was sent.",
+                      "title": "Returns",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "returns"
+                  ],
+                  "title": "returns",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/transfer_to_human_agents": {
+      "post": {
+        "operationId": "transfer_to_human_agents",
+        "summary": "Transfer the user to a human agent, with a summary of the user's issue.",
+        "description": "Transfer the user to a human agent, with a summary of the user's issue.\n\nOnly transfer if\n -  the user explicitly asks for a human agent\n -  given the policy and the available tools, you cannot solve the user's issue.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "summary": {
+                    "description": "A summary of the user's issue.",
+                    "title": "Summary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "summary"
+                ],
+                "title": "parameters",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "returns": {
+                      "description": "A message indicating the user has been transferred to a human agent.",
+                      "title": "Returns",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "returns"
+                  ],
+                  "title": "returns",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/update_reservation_baggages": {
+      "post": {
+        "operationId": "update_reservation_baggages",
+        "summary": "Update the baggage information of a reservation.",
+        "description": "Update the baggage information of a reservation.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "reservation_id": {
+                    "description": "The reservation ID, such as 'ZFA04Y'",
+                    "title": "Reservation Id",
+                    "type": "string"
+                  },
+                  "total_baggages": {
+                    "description": "The updated total number of baggage items included in the reservation.",
+                    "title": "Total Baggages",
+                    "type": "integer"
+                  },
+                  "nonfree_baggages": {
+                    "description": "The updated number of non-free baggage items included in the reservation.",
+                    "title": "Nonfree Baggages",
+                    "type": "integer"
+                  },
+                  "payment_id": {
+                    "description": "The payment id stored in user profile, such as 'credit_card_7815826', 'gift_card_7815826', 'certificate_7815826'.",
+                    "title": "Payment Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "reservation_id",
+                  "total_baggages",
+                  "nonfree_baggages",
+                  "payment_id"
+                ],
+                "title": "parameters",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "returns": {
+                      "properties": {
+                        "reservation_id": {
+                          "description": "Unique identifier for the reservation",
+                          "title": "Reservation Id",
+                          "type": "string"
+                        },
+                        "user_id": {
+                          "description": "ID of the user who made the reservation",
+                          "title": "User Id",
+                          "type": "string"
+                        },
+                        "origin": {
+                          "description": "IATA code for trip origin",
+                          "title": "Origin",
+                          "type": "string"
+                        },
+                        "destination": {
+                          "description": "IATA code for trip destination",
+                          "title": "Destination",
+                          "type": "string"
+                        },
+                        "flight_type": {
+                          "description": "Type of trip",
+                          "enum": [
+                            "round_trip",
+                            "one_way"
+                          ],
+                          "title": "Flight Type",
+                          "type": "string"
+                        },
+                        "cabin": {
+                          "description": "Selected cabin class",
+                          "enum": [
+                            "business",
+                            "economy",
+                            "basic_economy"
+                          ],
+                          "title": "Cabin",
+                          "type": "string"
+                        },
+                        "flights": {
+                          "description": "List of flights in the reservation",
+                          "items": {
+                            "properties": {
+                              "flight_number": {
+                                "description": "Unique flight identifier",
+                                "title": "Flight Number",
+                                "type": "string"
+                              },
+                              "origin": {
+                                "description": "IATA code for origin airport",
+                                "title": "Origin",
+                                "type": "string"
+                              },
+                              "destination": {
+                                "description": "IATA code for destination airport",
+                                "title": "Destination",
+                                "type": "string"
+                              },
+                              "date": {
+                                "description": "Flight date in YYYY-MM-DD format",
+                                "title": "Date",
+                                "type": "string"
+                              },
+                              "price": {
+                                "description": "Flight price in dollars.",
+                                "title": "Price",
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "flight_number",
+                              "origin",
+                              "destination",
+                              "date",
+                              "price"
+                            ],
+                            "title": "ReservationFlight",
+                            "type": "object"
+                          },
+                          "title": "Flights",
+                          "type": "array"
+                        },
+                        "passengers": {
+                          "description": "List of passengers on the reservation",
+                          "items": {
+                            "properties": {
+                              "first_name": {
+                                "description": "Passenger's first name",
+                                "title": "First Name",
+                                "type": "string"
+                              },
+                              "last_name": {
+                                "description": "Passenger's last name",
+                                "title": "Last Name",
+                                "type": "string"
+                              },
+                              "dob": {
+                                "description": "Date of birth in YYYY-MM-DD format",
+                                "title": "Dob",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "first_name",
+                              "last_name",
+                              "dob"
+                            ],
+                            "title": "Passenger",
+                            "type": "object"
+                          },
+                          "title": "Passengers",
+                          "type": "array"
+                        },
+                        "payment_history": {
+                          "description": "History of payments for this reservation",
+                          "items": {
+                            "properties": {
+                              "payment_id": {
+                                "description": "Unique identifier for the payment",
+                                "title": "Payment Id",
+                                "type": "string"
+                              },
+                              "amount": {
+                                "description": "Payment amount in dollars",
+                                "title": "Amount",
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "payment_id",
+                              "amount"
+                            ],
+                            "title": "Payment",
+                            "type": "object"
+                          },
+                          "title": "Payment History",
+                          "type": "array"
+                        },
+                        "created_at": {
+                          "description": "Timestamp when reservation was created in the format YYYY-MM-DDTHH:MM:SS",
+                          "title": "Created At",
+                          "type": "string"
+                        },
+                        "total_baggages": {
+                          "description": "Total number of bags in reservation",
+                          "title": "Total Baggages",
+                          "type": "integer"
+                        },
+                        "nonfree_baggages": {
+                          "description": "Number of paid bags in reservation",
+                          "title": "Nonfree Baggages",
+                          "type": "integer"
+                        },
+                        "insurance": {
+                          "description": "Whether travel insurance was purchased",
+                          "enum": [
+                            "yes",
+                            "no"
+                          ],
+                          "title": "Insurance",
+                          "type": "string"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "cancelled",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Status of the reservation",
+                          "title": "Status"
+                        }
+                      },
+                      "required": [
+                        "reservation_id",
+                        "user_id",
+                        "origin",
+                        "destination",
+                        "flight_type",
+                        "cabin",
+                        "flights",
+                        "passengers",
+                        "payment_history",
+                        "created_at",
+                        "total_baggages",
+                        "nonfree_baggages",
+                        "insurance"
+                      ],
+                      "title": "Reservation",
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "returns"
+                  ],
+                  "title": "returns",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/update_reservation_flights": {
+      "post": {
+        "operationId": "update_reservation_flights",
+        "summary": "Update the flight information of a reservation.",
+        "description": "Update the flight information of a reservation.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "reservation_id": {
+                    "description": "The reservation ID, such as 'ZFA04Y'.",
+                    "title": "Reservation Id",
+                    "type": "string"
+                  },
+                  "cabin": {
+                    "description": "The cabin class of the reservation",
+                    "enum": [
+                      "business",
+                      "economy",
+                      "basic_economy"
+                    ],
+                    "title": "Cabin",
+                    "type": "string"
+                  },
+                  "flights": {
+                    "description": "An array of objects containing details about each piece of flight in the ENTIRE new reservation. Even if the a flight segment is not changed, it should still be included in the array.",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "flight_number": {
+                              "description": "Flight number, such as 'HAT001'.",
+                              "title": "Flight Number",
+                              "type": "string"
+                            },
+                            "date": {
+                              "description": "The date for the flight in the format 'YYYY-MM-DD', such as '2024-05-01'.",
+                              "title": "Date",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "flight_number",
+                            "date"
+                          ],
+                          "title": "FlightInfo",
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": true,
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "title": "Flights",
+                    "type": "array"
+                  },
+                  "payment_id": {
+                    "description": "The payment id stored in user profile, such as 'credit_card_7815826', 'gift_card_7815826', 'certificate_7815826'.",
+                    "title": "Payment Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "reservation_id",
+                  "cabin",
+                  "flights",
+                  "payment_id"
+                ],
+                "title": "parameters",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "returns": {
+                      "properties": {
+                        "reservation_id": {
+                          "description": "Unique identifier for the reservation",
+                          "title": "Reservation Id",
+                          "type": "string"
+                        },
+                        "user_id": {
+                          "description": "ID of the user who made the reservation",
+                          "title": "User Id",
+                          "type": "string"
+                        },
+                        "origin": {
+                          "description": "IATA code for trip origin",
+                          "title": "Origin",
+                          "type": "string"
+                        },
+                        "destination": {
+                          "description": "IATA code for trip destination",
+                          "title": "Destination",
+                          "type": "string"
+                        },
+                        "flight_type": {
+                          "description": "Type of trip",
+                          "enum": [
+                            "round_trip",
+                            "one_way"
+                          ],
+                          "title": "Flight Type",
+                          "type": "string"
+                        },
+                        "cabin": {
+                          "description": "Selected cabin class",
+                          "enum": [
+                            "business",
+                            "economy",
+                            "basic_economy"
+                          ],
+                          "title": "Cabin",
+                          "type": "string"
+                        },
+                        "flights": {
+                          "description": "List of flights in the reservation",
+                          "items": {
+                            "properties": {
+                              "flight_number": {
+                                "description": "Unique flight identifier",
+                                "title": "Flight Number",
+                                "type": "string"
+                              },
+                              "origin": {
+                                "description": "IATA code for origin airport",
+                                "title": "Origin",
+                                "type": "string"
+                              },
+                              "destination": {
+                                "description": "IATA code for destination airport",
+                                "title": "Destination",
+                                "type": "string"
+                              },
+                              "date": {
+                                "description": "Flight date in YYYY-MM-DD format",
+                                "title": "Date",
+                                "type": "string"
+                              },
+                              "price": {
+                                "description": "Flight price in dollars.",
+                                "title": "Price",
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "flight_number",
+                              "origin",
+                              "destination",
+                              "date",
+                              "price"
+                            ],
+                            "title": "ReservationFlight",
+                            "type": "object"
+                          },
+                          "title": "Flights",
+                          "type": "array"
+                        },
+                        "passengers": {
+                          "description": "List of passengers on the reservation",
+                          "items": {
+                            "properties": {
+                              "first_name": {
+                                "description": "Passenger's first name",
+                                "title": "First Name",
+                                "type": "string"
+                              },
+                              "last_name": {
+                                "description": "Passenger's last name",
+                                "title": "Last Name",
+                                "type": "string"
+                              },
+                              "dob": {
+                                "description": "Date of birth in YYYY-MM-DD format",
+                                "title": "Dob",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "first_name",
+                              "last_name",
+                              "dob"
+                            ],
+                            "title": "Passenger",
+                            "type": "object"
+                          },
+                          "title": "Passengers",
+                          "type": "array"
+                        },
+                        "payment_history": {
+                          "description": "History of payments for this reservation",
+                          "items": {
+                            "properties": {
+                              "payment_id": {
+                                "description": "Unique identifier for the payment",
+                                "title": "Payment Id",
+                                "type": "string"
+                              },
+                              "amount": {
+                                "description": "Payment amount in dollars",
+                                "title": "Amount",
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "payment_id",
+                              "amount"
+                            ],
+                            "title": "Payment",
+                            "type": "object"
+                          },
+                          "title": "Payment History",
+                          "type": "array"
+                        },
+                        "created_at": {
+                          "description": "Timestamp when reservation was created in the format YYYY-MM-DDTHH:MM:SS",
+                          "title": "Created At",
+                          "type": "string"
+                        },
+                        "total_baggages": {
+                          "description": "Total number of bags in reservation",
+                          "title": "Total Baggages",
+                          "type": "integer"
+                        },
+                        "nonfree_baggages": {
+                          "description": "Number of paid bags in reservation",
+                          "title": "Nonfree Baggages",
+                          "type": "integer"
+                        },
+                        "insurance": {
+                          "description": "Whether travel insurance was purchased",
+                          "enum": [
+                            "yes",
+                            "no"
+                          ],
+                          "title": "Insurance",
+                          "type": "string"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "cancelled",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Status of the reservation",
+                          "title": "Status"
+                        }
+                      },
+                      "required": [
+                        "reservation_id",
+                        "user_id",
+                        "origin",
+                        "destination",
+                        "flight_type",
+                        "cabin",
+                        "flights",
+                        "passengers",
+                        "payment_history",
+                        "created_at",
+                        "total_baggages",
+                        "nonfree_baggages",
+                        "insurance"
+                      ],
+                      "title": "Reservation",
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "returns"
+                  ],
+                  "title": "returns",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/update_reservation_passengers": {
+      "post": {
+        "operationId": "update_reservation_passengers",
+        "summary": "Update the passenger information of a reservation.",
+        "description": "Update the passenger information of a reservation.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "reservation_id": {
+                    "description": "The reservation ID, such as 'ZFA04Y'.",
+                    "title": "Reservation Id",
+                    "type": "string"
+                  },
+                  "passengers": {
+                    "description": "An array of objects containing details about each passenger.",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "first_name": {
+                              "description": "Passenger's first name",
+                              "title": "First Name",
+                              "type": "string"
+                            },
+                            "last_name": {
+                              "description": "Passenger's last name",
+                              "title": "Last Name",
+                              "type": "string"
+                            },
+                            "dob": {
+                              "description": "Date of birth in YYYY-MM-DD format",
+                              "title": "Dob",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "first_name",
+                            "last_name",
+                            "dob"
+                          ],
+                          "title": "Passenger",
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": true,
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "title": "Passengers",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "reservation_id",
+                  "passengers"
+                ],
+                "title": "parameters",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "returns": {
+                      "properties": {
+                        "reservation_id": {
+                          "description": "Unique identifier for the reservation",
+                          "title": "Reservation Id",
+                          "type": "string"
+                        },
+                        "user_id": {
+                          "description": "ID of the user who made the reservation",
+                          "title": "User Id",
+                          "type": "string"
+                        },
+                        "origin": {
+                          "description": "IATA code for trip origin",
+                          "title": "Origin",
+                          "type": "string"
+                        },
+                        "destination": {
+                          "description": "IATA code for trip destination",
+                          "title": "Destination",
+                          "type": "string"
+                        },
+                        "flight_type": {
+                          "description": "Type of trip",
+                          "enum": [
+                            "round_trip",
+                            "one_way"
+                          ],
+                          "title": "Flight Type",
+                          "type": "string"
+                        },
+                        "cabin": {
+                          "description": "Selected cabin class",
+                          "enum": [
+                            "business",
+                            "economy",
+                            "basic_economy"
+                          ],
+                          "title": "Cabin",
+                          "type": "string"
+                        },
+                        "flights": {
+                          "description": "List of flights in the reservation",
+                          "items": {
+                            "properties": {
+                              "flight_number": {
+                                "description": "Unique flight identifier",
+                                "title": "Flight Number",
+                                "type": "string"
+                              },
+                              "origin": {
+                                "description": "IATA code for origin airport",
+                                "title": "Origin",
+                                "type": "string"
+                              },
+                              "destination": {
+                                "description": "IATA code for destination airport",
+                                "title": "Destination",
+                                "type": "string"
+                              },
+                              "date": {
+                                "description": "Flight date in YYYY-MM-DD format",
+                                "title": "Date",
+                                "type": "string"
+                              },
+                              "price": {
+                                "description": "Flight price in dollars.",
+                                "title": "Price",
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "flight_number",
+                              "origin",
+                              "destination",
+                              "date",
+                              "price"
+                            ],
+                            "title": "ReservationFlight",
+                            "type": "object"
+                          },
+                          "title": "Flights",
+                          "type": "array"
+                        },
+                        "passengers": {
+                          "description": "List of passengers on the reservation",
+                          "items": {
+                            "properties": {
+                              "first_name": {
+                                "description": "Passenger's first name",
+                                "title": "First Name",
+                                "type": "string"
+                              },
+                              "last_name": {
+                                "description": "Passenger's last name",
+                                "title": "Last Name",
+                                "type": "string"
+                              },
+                              "dob": {
+                                "description": "Date of birth in YYYY-MM-DD format",
+                                "title": "Dob",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "first_name",
+                              "last_name",
+                              "dob"
+                            ],
+                            "title": "Passenger",
+                            "type": "object"
+                          },
+                          "title": "Passengers",
+                          "type": "array"
+                        },
+                        "payment_history": {
+                          "description": "History of payments for this reservation",
+                          "items": {
+                            "properties": {
+                              "payment_id": {
+                                "description": "Unique identifier for the payment",
+                                "title": "Payment Id",
+                                "type": "string"
+                              },
+                              "amount": {
+                                "description": "Payment amount in dollars",
+                                "title": "Amount",
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "payment_id",
+                              "amount"
+                            ],
+                            "title": "Payment",
+                            "type": "object"
+                          },
+                          "title": "Payment History",
+                          "type": "array"
+                        },
+                        "created_at": {
+                          "description": "Timestamp when reservation was created in the format YYYY-MM-DDTHH:MM:SS",
+                          "title": "Created At",
+                          "type": "string"
+                        },
+                        "total_baggages": {
+                          "description": "Total number of bags in reservation",
+                          "title": "Total Baggages",
+                          "type": "integer"
+                        },
+                        "nonfree_baggages": {
+                          "description": "Number of paid bags in reservation",
+                          "title": "Nonfree Baggages",
+                          "type": "integer"
+                        },
+                        "insurance": {
+                          "description": "Whether travel insurance was purchased",
+                          "enum": [
+                            "yes",
+                            "no"
+                          ],
+                          "title": "Insurance",
+                          "type": "string"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "cancelled",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Status of the reservation",
+                          "title": "Status"
+                        }
+                      },
+                      "required": [
+                        "reservation_id",
+                        "user_id",
+                        "origin",
+                        "destination",
+                        "flight_type",
+                        "cabin",
+                        "flights",
+                        "passengers",
+                        "payment_history",
+                        "created_at",
+                        "total_baggages",
+                        "nonfree_baggages",
+                        "insurance"
+                      ],
+                      "title": "Reservation",
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "returns"
+                  ],
+                  "title": "returns",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/get_flight_status": {
+      "post": {
+        "operationId": "get_flight_status",
+        "summary": "Get the status of a flight.",
+        "description": "Get the status of a flight.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "flight_number": {
+                    "description": "The flight number.",
+                    "title": "Flight Number",
+                    "type": "string"
+                  },
+                  "date": {
+                    "description": "The date of the flight.",
+                    "title": "Date",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "flight_number",
+                  "date"
+                ],
+                "title": "parameters",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "returns": {
+                      "description": "The status of the flight.",
+                      "title": "Returns",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "returns"
+                  ],
+                  "title": "returns",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
