@@ -76,7 +76,7 @@ class DeepAgent:
         self.llm = ChatOpenAI(**llm_kwargs)
 
         # Render system prompt
-        self.system_prompt = render_system_prompt(spec, operations)
+        self.system_prompt = render_system_prompt(spec)
 
         logger.debug(
             f"Rendered system prompt: length={len(self.system_prompt)}, "
