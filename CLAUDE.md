@@ -44,7 +44,7 @@ The harness is a FastAPI service that, given an OpenAPI spec, spins up an LLM-dr
 2. `SimulationHost` (`core/simulation_host.py`) is a singleton with a lifecycle lock — it enforces the one-simulation-at-a-time invariant and optionally starts a `SidecarMCPServer` on a separate port (`mcp_port`).
 3. `SimulationInstance` (`core/simulation_instance.py`) wraps a `DeepAgent` (LangChain + LangGraph) plus session bookkeeping: tool-call count, idle timer, and a bounded FIFO queue (`asyncio.Lock` + depth counter).
 4. MCP requests arrive on either the in-process transport mounted by `main.py` (SSE at `/mcp/sse` + `/mcp/messages`, or streamable HTTP at `/mcp`) or the sidecar server. Both paths construct a `MCPServerWrapper` per request that delegates `tools/call` to the active `SimulationInstance`.
-5. The agent uses the generated skill (in `skills-store/<name>/SKILL.md`) plus operation schemas to synthesize a plausible response, advancing session state on success.
+5. The agent loads the generated skill dynamically: `SKILL.md` is exposed via deepagents `SkillsMiddleware` over a `FilesystemBackend` rooted at `skills-store/<name>` (progressive disclosure — the agent reads the skill on demand for the called operation). State is kept in the `schema.json`/`db.json`-backed store via the `state_*` tools. The runtime system prompt carries the state mechanism and JSON contract; per-operation detail lives in the skill.
 
 ### Session model invariants
 - A single agent thread accumulates context across all `tools/call` invocations for the simulation's lifetime.

@@ -18,7 +18,10 @@ from langgraph.graph.state import CompiledStateGraph
 from pydantic import SecretStr
 from deepagents.backends.filesystem import FilesystemBackend
 from deepagents.middleware.filesystem import FilesystemMiddleware
-from deepagents.middleware.permissions import FilesystemPermission, _PermissionMiddleware
+from deepagents.middleware.permissions import (
+    FilesystemPermission,
+    _PermissionMiddleware,
+)
 from deepagents.middleware.skills import SkillsMiddleware
 
 from simulation_harness.openapi.parser import OpenAPIOperation, OpenAPISpec

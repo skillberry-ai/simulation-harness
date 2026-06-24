@@ -1,10 +1,8 @@
 """Tests for DeepAgent."""
 
-from pathlib import Path
 import pytest
 from pydantic import SecretStr
 from unittest.mock import Mock, AsyncMock, patch
-from langchain_core.messages import SystemMessage
 from simulation_harness.agent.deep_agent import DeepAgent
 from simulation_harness.openapi.parser import OpenAPISpec, OpenAPIOperation
 
@@ -240,7 +238,9 @@ async def test_shutdown(mock_spec, mock_operation):
     assert agent.session_manager._running is False
 
 
-def test_stateful_branch_wires_lean_create_agent_with_skills(tmp_path, mock_spec, mock_operation):
+def test_stateful_branch_wires_lean_create_agent_with_skills(
+    tmp_path, mock_spec, mock_operation
+):
     """skill_dir present -> create_agent with skills/filesystem/permission middleware."""
     skill_dir = tmp_path / "petstore"
     skill_dir.mkdir()
@@ -251,7 +251,9 @@ def test_stateful_branch_wires_lean_create_agent_with_skills(tmp_path, mock_spec
     with (
         patch("simulation_harness.agent.deep_agent.ChatOpenAI") as mock_chat_openai,
         patch("simulation_harness.agent.deep_agent.StoreRegistry"),
-        patch("simulation_harness.agent.deep_agent.create_state_tools", return_value=[]),
+        patch(
+            "simulation_harness.agent.deep_agent.create_state_tools", return_value=[]
+        ),
         patch(
             "simulation_harness.agent.deep_agent.create_agent",
             return_value=Mock(),
