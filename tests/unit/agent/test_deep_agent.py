@@ -240,44 +240,48 @@ async def test_shutdown(mock_spec, mock_operation):
     assert agent.session_manager._running is False
 
 
-def test_deep_agent_uses_prompt_for_stateful_react_agent(mock_spec, mock_operation):
-    """Test stateful agent creation passes system prompt via supported prompt kwarg."""
-    mock_react_agent = Mock()
+def test_stateful_branch_wires_lean_create_agent_with_skills(tmp_path, mock_spec, mock_operation):
+    """skill_dir present -> create_agent with skills/filesystem/permission middleware."""
+    skill_dir = tmp_path / "petstore"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: petstore\ndescription: Simulate the Pet Store API.\n---\n# Pet Store\n"
+    )
 
     with (
         patch("simulation_harness.agent.deep_agent.ChatOpenAI") as mock_chat_openai,
         patch("simulation_harness.agent.deep_agent.StoreRegistry"),
+        patch("simulation_harness.agent.deep_agent.create_state_tools", return_value=[]),
         patch(
-            "simulation_harness.agent.deep_agent.create_state_tools", return_value=[]
-        ),
-        patch(
-            "simulation_harness.agent.deep_agent.create_react_agent",
-            return_value=mock_react_agent,
-        ) as mock_create_react_agent,
+            "simulation_harness.agent.deep_agent.create_agent",
+            return_value=Mock(),
+        ) as mock_create_agent,
     ):
-        mock_llm = Mock()
-        mock_llm.bind_tools.return_value = mock_llm
-        mock_chat_openai.return_value = mock_llm
-
+        mock_chat_openai.return_value = Mock()
         agent = DeepAgent(
             api_key=SecretStr("test-key"),
             model="gpt-4",
-            temperature=0.7,
+            temperature=0.0,
             max_tokens=1000,
             base_url=None,
             spec=mock_spec,
             operations=[mock_operation],
-            skill_dir=Path("/tmp/test-skill"),
+            skill_dir=skill_dir,
         )
 
-    assert agent.agent is mock_react_agent
-    mock_create_react_agent.assert_called_once()
-    kwargs = mock_create_react_agent.call_args.kwargs
+    # The per-simulation skills root was assembled.
+    assert (skill_dir / ".skills" / "petstore").is_symlink()
+
+    # create_agent was called with the expected wiring.
+    kwargs = mock_create_agent.call_args.kwargs
     assert kwargs["checkpointer"] is agent.checkpointer
-    assert "prompt" in kwargs
-    assert "state_modifier" not in kwargs
-    assert isinstance(kwargs["prompt"], SystemMessage)
-    assert kwargs["prompt"].content == agent.system_prompt
+    assert kwargs["system_prompt"] == agent.system_prompt
+    middleware_types = [type(m).__name__ for m in kwargs["middleware"]]
+    assert middleware_types == [
+        "SkillsMiddleware",
+        "FilesystemMiddleware",
+        "_PermissionMiddleware",
+    ]
 
 
 def test_empty_string_base_url_is_forwarded_not_silently_dropped(

@@ -8,14 +8,18 @@ import json
 from pathlib import Path
 from typing import Any
 
+from langchain.agents import create_agent
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.prebuilt import create_react_agent
 from pydantic import SecretStr
+from deepagents.backends.filesystem import FilesystemBackend
+from deepagents.middleware.filesystem import FilesystemMiddleware
+from deepagents.middleware.permissions import FilesystemPermission, _PermissionMiddleware
+from deepagents.middleware.skills import SkillsMiddleware
 
 from simulation_harness.openapi.parser import OpenAPIOperation, OpenAPISpec
 from simulation_harness.state.registry import StoreRegistry
@@ -23,6 +27,7 @@ from simulation_harness.state.tools import create_state_tools
 from simulation_harness.utils.logging import get_logger
 from simulation_harness.agent.prompts import render_system_prompt
 from simulation_harness.agent.session_manager import SessionManager
+from simulation_harness.agent.skill_backend import build_skill_sources
 
 logger = get_logger(__name__)
 
@@ -122,48 +127,57 @@ class DeepAgent:
         self.session_manager.start()
 
     def _create_agent(self) -> CompiledStateGraph:
-        """Create LangGraph agent with state management.
+        """Create the runtime agent.
 
-        Returns:
-            Compiled state graph
+        With a skill directory, build a lean ``create_agent`` graph that loads
+        the per-API skill dynamically (progressive disclosure) and exposes the
+        state tools. Without one, fall back to the legacy stateless agent.
         """
-        # If state store is enabled, use ReAct agent with tools
-        if self.store_registry:
+        if self.store_registry and self.skill_dir:
             tools = create_state_tools()
-            model_with_tools = self.llm.bind_tools(tools)
 
-            # Create ReAct agent with tools
-            agent = create_react_agent(
-                model=model_with_tools,
+            root_dir, sources = build_skill_sources(self.skill_dir)
+            backend = FilesystemBackend(root_dir=root_dir, virtual_mode=True)
+
+            middleware = [
+                SkillsMiddleware(backend=backend, sources=sources),
+                FilesystemMiddleware(backend=backend),
+                _PermissionMiddleware(
+                    rules=[
+                        FilesystemPermission(
+                            operations=["write"], paths=["/**"], mode="deny"
+                        )
+                    ],
+                    backend=backend,
+                ),
+            ]
+
+            agent = create_agent(
+                self.llm,
+                system_prompt=self.system_prompt,
                 tools=tools,
+                middleware=middleware,
                 checkpointer=self.checkpointer,
-                prompt=SystemMessage(content=self.system_prompt),
             )
 
-            logger.info(f"Created ReAct agent with {len(tools)} state tools")
+            logger.info(
+                f"Created lean skill-loading agent: {len(tools)} state tools, "
+                f"skill sources={sources}"
+            )
             return agent
 
-        # Otherwise, use simple stateless agent (legacy mode)
+        # Legacy stateless agent (no skill_dir): unchanged.
         def agent_node(state: MessagesState) -> MessagesState:
-            """Process messages and generate response."""
             messages = state["messages"]
-
-            # Add system message if not present
             if not messages or not isinstance(messages[0], SystemMessage):
                 messages = [SystemMessage(content=self.system_prompt)] + list(messages)
-
-            # Invoke LLM
             response = self.llm.invoke(messages)
-
             return {"messages": messages + [response]}
 
-        # Build graph
         workflow = StateGraph(MessagesState)
         workflow.add_node("agent", agent_node)
         workflow.add_edge(START, "agent")
         workflow.add_edge("agent", END)
-
-        # Compile with checkpointer
         return workflow.compile(checkpointer=self.checkpointer)
 
     async def generate_response(
