@@ -5,6 +5,7 @@ LangChain and LangGraph directly (without the deepagents library).
 """
 
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -68,7 +69,7 @@ class DeepAgent:
         operations: list[OpenAPIOperation],
         session_timeout_seconds: int = 3600,
         skill_dir: Path | None = None,
-        agent_recursion_limit: int = 10,
+        agent_recursion_limit: int = 50,
     ):
         """Initialize Deep Agent.
 
@@ -89,6 +90,10 @@ class DeepAgent:
         self.session_timeout_seconds = session_timeout_seconds
         self.skill_dir = skill_dir
         self.agent_recursion_limit = agent_recursion_limit
+
+        # Per-simulation staging dir for the skills backend, created lazily in
+        # _create_agent and removed in shutdown().
+        self._skill_staging_dir: Path | None = None
 
         # Initialize LLM
         llm_kwargs = {
@@ -159,6 +164,7 @@ class DeepAgent:
             tools = create_state_tools()
 
             root_dir, sources = build_skill_sources(self.skill_dir)
+            self._skill_staging_dir = Path(root_dir)
             backend = FilesystemBackend(root_dir=root_dir, virtual_mode=True)
 
             middleware = [
@@ -388,6 +394,11 @@ class DeepAgent:
         # Drop all stores if registry exists
         if self.store_registry:
             self.store_registry.drop_all()
+
+        # Remove the per-simulation skills staging dir, if one was created.
+        if self._skill_staging_dir is not None:
+            shutil.rmtree(self._skill_staging_dir, ignore_errors=True)
+            self._skill_staging_dir = None
 
         logger.info("Agent shutdown complete")
 

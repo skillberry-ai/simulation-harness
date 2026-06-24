@@ -298,8 +298,13 @@ def test_stateful_branch_wires_lean_create_agent_with_skills(
             skill_dir=skill_dir,
         )
 
-    # The per-simulation skills root was assembled.
-    assert (skill_dir / ".skills" / "petstore").is_symlink()
+    # The per-simulation skills root was assembled in a throwaway staging dir,
+    # leaving the published skill directory untouched (no self-referential
+    # `.skills` cycle inside it).
+    assert not (skill_dir / ".skills").exists()
+    staging = agent._skill_staging_dir
+    assert staging is not None
+    assert (staging / ".skills" / "petstore" / "SKILL.md").exists()
 
     # create_agent was called with the expected wiring.
     kwargs = mock_create_agent.call_args.kwargs
@@ -317,6 +322,45 @@ def test_stateful_branch_wires_lean_create_agent_with_skills(
     mock_chat_openai.return_value.bind_tools.assert_not_called()
     # First positional arg to create_agent is the (unbound) llm instance.
     assert mock_create_agent.call_args.args[0] is mock_chat_openai.return_value
+
+
+@pytest.mark.asyncio
+async def test_shutdown_removes_skill_staging_dir(tmp_path, mock_spec, mock_operation):
+    """The per-simulation staging dir is created on init and removed on shutdown."""
+    skill_dir = tmp_path / "petstore"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: petstore\ndescription: Simulate the Pet Store API.\n---\n# Pet Store\n"
+    )
+
+    with (
+        patch("simulation_harness.agent.deep_agent.ChatOpenAI", return_value=Mock()),
+        patch("simulation_harness.agent.deep_agent.StoreRegistry"),
+        patch(
+            "simulation_harness.agent.deep_agent.create_state_tools", return_value=[]
+        ),
+        patch(
+            "simulation_harness.agent.deep_agent.create_agent", return_value=Mock()
+        ),
+    ):
+        agent = DeepAgent(
+            api_key=SecretStr("test-key"),
+            model="gpt-4",
+            temperature=0.0,
+            max_tokens=1000,
+            base_url=None,
+            spec=mock_spec,
+            operations=[mock_operation],
+            skill_dir=skill_dir,
+        )
+
+    staging = agent._skill_staging_dir
+    assert staging is not None and staging.exists()
+
+    await agent.shutdown()
+
+    assert not staging.exists()
+    assert agent._skill_staging_dir is None
 
 
 def test_empty_string_base_url_is_forwarded_not_silently_dropped(
