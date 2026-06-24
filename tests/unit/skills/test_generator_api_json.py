@@ -3,12 +3,24 @@
 import json
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from pydantic import SecretStr
 
+from simulation_harness.skills import generator as G
 from simulation_harness.skills.generator import SkillGenerator
+from simulation_harness.skills.generation.pipeline import SkillBundle
+
+BUNDLE = SkillBundle(
+    skill_md="---\nname: test-simulation\n---\n# Test\n",
+    schema={
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {},
+    },
+    db={"items": []},
+)
 
 
 class TestApiJsonStorage:
@@ -35,22 +47,7 @@ class TestApiJsonStorage:
                     "get": {
                         "operationId": "getTest",
                         "summary": "Get test data",
-                        "responses": {
-                            "200": {
-                                "description": "Success",
-                                "content": {
-                                    "application/json": {
-                                        "schema": {
-                                            "type": "object",
-                                            "properties": {
-                                                "id": {"type": "string"},
-                                                "name": {"type": "string"},
-                                            },
-                                        }
-                                    }
-                                },
-                            }
-                        },
+                        "responses": {"200": {"description": "Success"}},
                     }
                 }
             },
@@ -62,62 +59,20 @@ class TestApiJsonStorage:
         temp_skills_dir: Path,
         sample_openapi_spec: dict[str, Any],
     ) -> None:
-        """Test that generate_skill creates api.json file."""
+        """Test that generate_skill creates api.json file matching the spec."""
         generator = SkillGenerator(api_key=SecretStr("test-key"))
 
-        # Mock the LLM response with 3-file JSON structure
-        mock_response = MagicMock()
-        mock_response.content = """{
-  "skill_md": "---\\nname: test-simulation\\ndescription: Test simulation\\n---\\n\\n# Test Simulation\\n\\nTest content",
-  "schema_json": {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "title": "Test API Simulator State",
-    "type": "object",
-    "required": ["items"],
-    "properties": {
-      "items": {
-        "type": "array",
-        "items": {"$ref": "#/$defs/Item"}
-      }
-    },
-    "$defs": {
-      "Item": {
-        "type": "object",
-        "required": ["id", "name"],
-        "properties": {
-          "id": {"type": "string"},
-          "name": {"type": "string"}
-        },
-        "additionalProperties": false
-      }
-    }
-  },
-  "db_json": {
-    "items": [
-      {"id": "item_001", "name": "Test Item"}
-    ]
-  }
-}"""
-
-        with patch("simulation_harness.skills.generator.ChatOpenAI") as mock_llm_class:
-            mock_llm = AsyncMock()
-            mock_llm.ainvoke = AsyncMock(return_value=mock_response)
-            mock_llm_class.return_value = mock_llm
-
+        with patch.object(G, "run_pipeline", AsyncMock(return_value=BUNDLE)):
             await generator.generate_skill(
                 openapi_spec=sample_openapi_spec,
                 simulation_name="test-simulation",
                 skills_folder=temp_skills_dir,
             )
 
-        # Verify api.json was created
         skill_dir = temp_skills_dir / "test-simulation"
         api_json_path = skill_dir / "api.json"
         assert api_json_path.exists(), "api.json file should be created"
-
-        # Verify api.json content matches input spec
-        api_json_content = json.loads(api_json_path.read_text())
-        assert api_json_content == sample_openapi_spec
+        assert json.loads(api_json_path.read_text()) == sample_openapi_spec
 
     @pytest.mark.asyncio
     async def test_api_json_is_valid_json_format(
@@ -125,29 +80,18 @@ class TestApiJsonStorage:
         temp_skills_dir: Path,
         sample_openapi_spec: dict[str, Any],
     ) -> None:
-        """Test that api.json is always in JSON format, even if input was YAML."""
+        """Test that api.json is always in JSON format."""
         generator = SkillGenerator(api_key=SecretStr("test-key"))
 
-        mock_response = MagicMock()
-        mock_response.content = '{"skill_md": "---\\nname: test\\n---\\n# Test", "schema_json": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "properties": {"items": {"type": "array", "items": {"type": "object"}}}}, "db_json": {"items": []}}'
-
-        with patch("simulation_harness.skills.generator.ChatOpenAI") as mock_llm_class:
-            mock_llm = AsyncMock()
-            mock_llm.ainvoke = AsyncMock(return_value=mock_response)
-            mock_llm_class.return_value = mock_llm
-
+        with patch.object(G, "run_pipeline", AsyncMock(return_value=BUNDLE)):
             await generator.generate_skill(
                 openapi_spec=sample_openapi_spec,
                 simulation_name="test-simulation",
                 skills_folder=temp_skills_dir,
             )
 
-        # Verify api.json is valid JSON
         skill_dir = temp_skills_dir / "test-simulation"
-        api_json_path = skill_dir / "api.json"
-
-        # Should be able to parse as JSON
-        api_json_content = json.loads(api_json_path.read_text())
+        api_json_content = json.loads((skill_dir / "api.json").read_text())
         assert isinstance(api_json_content, dict)
         assert api_json_content["openapi"] == "3.0.0"
 
@@ -160,11 +104,9 @@ class TestApiJsonStorage:
         """Test that api.json is cleaned up if skill generation fails."""
         generator = SkillGenerator(api_key=SecretStr("test-key"))
 
-        with patch("simulation_harness.skills.generator.ChatOpenAI") as mock_llm_class:
-            mock_llm = AsyncMock()
-            mock_llm.ainvoke = AsyncMock(side_effect=Exception("LLM error"))
-            mock_llm_class.return_value = mock_llm
-
+        with patch.object(
+            G, "run_pipeline", AsyncMock(side_effect=RuntimeError("pipeline error"))
+        ):
             with pytest.raises(
                 RuntimeError, match="Skill generation failed for 'test-simulation'"
             ):
@@ -174,11 +116,8 @@ class TestApiJsonStorage:
                     skills_folder=temp_skills_dir,
                 )
 
-        # Verify api.json was cleaned up (no temp dirs or final dir)
         skill_dir = temp_skills_dir / "test-simulation"
         assert not skill_dir.exists(), "Skill directory should not exist after failure"
-
-        # Check that temp directories were cleaned up
         temp_dirs = [d for d in temp_skills_dir.iterdir() if d.name.startswith(".")]
         assert len(temp_dirs) == 0, f"Temp directories not cleaned up: {temp_dirs}"
 
@@ -190,7 +129,6 @@ class TestApiJsonStorage:
         """Test that api.json preserves complex OpenAPI spec structure."""
         generator = SkillGenerator(api_key=SecretStr("test-key"))
 
-        # Complex spec with nested schemas, security, servers, etc.
         complex_spec = {
             "openapi": "3.0.0",
             "info": {
@@ -230,30 +168,18 @@ class TestApiJsonStorage:
             },
         }
 
-        mock_response = MagicMock()
-        mock_response.content = '{"skill_md": "---\\nname: test\\n---\\n# Test", "schema_json": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "properties": {"items": {"type": "array", "items": {"type": "object"}}}}, "db_json": {"items": []}}'
-
-        with patch("simulation_harness.skills.generator.ChatOpenAI") as mock_llm_class:
-            mock_llm = AsyncMock()
-            mock_llm.ainvoke = AsyncMock(return_value=mock_response)
-            mock_llm_class.return_value = mock_llm
-
+        with patch.object(G, "run_pipeline", AsyncMock(return_value=BUNDLE)):
             await generator.generate_skill(
                 openapi_spec=complex_spec,
                 simulation_name="test-simulation",
                 skills_folder=temp_skills_dir,
             )
 
-        # Verify api.json preserves all structure
         skill_dir = temp_skills_dir / "test-simulation"
-        api_json_path = skill_dir / "api.json"
-        api_json_content = json.loads(api_json_path.read_text())
+        api_json_content = json.loads((skill_dir / "api.json").read_text())
 
         assert api_json_content == complex_spec
         assert "servers" in api_json_content
         assert len(api_json_content["servers"]) == 2
         assert "security" in api_json_content
         assert "components" in api_json_content
-
-
-# Made with Bob
