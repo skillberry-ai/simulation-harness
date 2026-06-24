@@ -1,6 +1,7 @@
 """Skill generator - creates simulation skills from OpenAPI specs."""
 
 import json
+import re
 import shutil
 import uuid
 from pathlib import Path
@@ -29,6 +30,38 @@ def _load_system_prompt() -> str:
     assets = files("simulation_harness.skills.assets")
     prompt_file = assets / "skill_generator_prompt.md"
     return prompt_file.read_text()
+
+
+# Leading YAML frontmatter block: opening `---`, body, closing `---`.
+_FRONTMATTER_RE = re.compile(r"(?s)\A(---[ \t]*\n)(.*?)(\n---[ \t]*(?:\n|\Z))")
+# A top-level (unindented) `name:` key within the frontmatter body.
+_NAME_LINE_RE = re.compile(r"(?m)^name[ \t]*:.*$")
+
+
+def _force_skill_name(skill_md: str, name: str) -> str:
+    """Force the SKILL.md frontmatter ``name`` to equal ``name``.
+
+    The Agent Skills spec requires the frontmatter ``name`` to match the skill's
+    containing directory name (here the simulation name). The generation LLM
+    does not reliably emit that — it tends to coin a ``<api>-simulation``
+    variant — which triggers a spec-compliance warning when the skill is loaded.
+
+    Rewrite the leading YAML frontmatter deterministically: replace the
+    ``name:`` line if present, insert it if the frontmatter lacks one, or add a
+    frontmatter block if the document has none. Only the first frontmatter block
+    and its first top-level ``name:`` key are touched; the body is left intact.
+    """
+    name_line = f"name: {name}"
+    match = _FRONTMATTER_RE.match(skill_md)
+    if match is None:
+        return f"---\n{name_line}\n---\n\n{skill_md}"
+
+    head, body, tail = match.group(1), match.group(2), match.group(3)
+    if _NAME_LINE_RE.search(body):
+        body = _NAME_LINE_RE.sub(name_line, body, count=1)
+    else:
+        body = f"{name_line}\n{body}" if body else name_line
+    return f"{head}{body}{tail}{skill_md[match.end():]}"
 
 
 class SkillGenerator:
@@ -177,6 +210,10 @@ Do not include any explanations or commentary outside the JSON object.
             # Validate types
             if not isinstance(skill_md, str):
                 raise RuntimeError(f"skill_md must be a string, got {type(skill_md)}")
+
+            # Agent Skills spec requires the frontmatter name to match the skill
+            # directory (= simulation_name); the LLM is not reliable about this.
+            skill_md = _force_skill_name(skill_md, simulation_name)
             if not isinstance(schema_json, dict):
                 raise RuntimeError(
                     f"schema_json must be an object, got {type(schema_json)}"

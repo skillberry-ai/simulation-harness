@@ -823,3 +823,113 @@ class TestSkillRegistryInvalidation:
         deps._skill_registry = MagicMock()
         reset_skill_registry()
         assert deps._skill_registry is None
+
+
+class TestForceSkillName:
+    """The SKILL.md frontmatter name must match the skill directory name.
+
+    The Agent Skills spec requires `name:` to equal the containing directory's
+    name. The generation LLM does not reliably emit that — it tends to coin a
+    `<api>-simulation` variant — so generation forces it deterministically.
+    """
+
+    def test_replaces_mismatched_name(self):
+        from simulation_harness.skills.generator import _force_skill_name
+
+        skill_md = (
+            "---\nname: widget-simulation\n"
+            "description: Simulate the Widget API.\n---\n\n# Widget\n"
+        )
+        out = _force_skill_name(skill_md, "widget-api")
+        assert "name: widget-api" in out
+        assert "widget-simulation" not in out
+
+    def test_preserves_other_frontmatter_and_body(self):
+        from simulation_harness.skills.generator import _force_skill_name
+
+        skill_md = (
+            "---\nname: widget-simulation\n"
+            "description: Simulate the Widget API.\n---\n\n# Widget\n\nBody.\n"
+        )
+        out = _force_skill_name(skill_md, "widget-api")
+        assert "description: Simulate the Widget API." in out
+        assert "# Widget" in out
+        assert "Body." in out
+
+    def test_inserts_name_when_absent_from_frontmatter(self):
+        from simulation_harness.skills.generator import _force_skill_name
+
+        skill_md = "---\ndescription: Simulate the Widget API.\n---\n\n# Widget\n"
+        out = _force_skill_name(skill_md, "widget-api")
+        assert "name: widget-api" in out
+        assert "description: Simulate the Widget API." in out
+
+    def test_adds_frontmatter_when_missing(self):
+        from simulation_harness.skills.generator import _force_skill_name
+
+        skill_md = "# Widget\n\nNo frontmatter here.\n"
+        out = _force_skill_name(skill_md, "widget-api")
+        assert out.startswith("---\nname: widget-api\n---\n")
+        assert "No frontmatter here." in out
+
+    def test_only_first_name_in_frontmatter_is_rewritten(self):
+        """A `name:` mention in the body must not be touched."""
+        from simulation_harness.skills.generator import _force_skill_name
+
+        skill_md = (
+            "---\nname: widget-simulation\n---\n\n"
+            "# Widget\n\nThe `name:` field identifies the entity.\n"
+        )
+        out = _force_skill_name(skill_md, "widget-api")
+        assert "name: widget-api" in out
+        assert "The `name:` field identifies the entity." in out
+
+
+class TestGeneratedSkillNameCompliance:
+    """generate_skill must persist a spec-compliant SKILL.md name."""
+
+    @pytest.fixture
+    def temp_skills_dir(self, tmp_path: Path) -> Path:
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        return skills_dir
+
+    @pytest.fixture
+    def sample_openapi_spec(self) -> dict[str, Any]:
+        return {
+            "openapi": "3.0.0",
+            "info": {"title": "Widget API", "version": "1.0.0"},
+            "paths": {},
+        }
+
+    @pytest.mark.asyncio
+    async def test_frontmatter_name_matches_directory_when_llm_diverges(
+        self,
+        temp_skills_dir: Path,
+        sample_openapi_spec: dict[str, Any],
+    ) -> None:
+        generator = SkillGenerator(api_key=SecretStr("test-key"))
+
+        mock_response = MagicMock()
+        # LLM emits a non-matching name (the real-world failure mode).
+        mock_response.content = (
+            '{"skill_md": "---\\nname: widget-simulation\\n'
+            'description: Simulate the Widget API.\\n---\\n\\n# Widget\\n",'
+            '"schema_json": {"type": "object", "properties": {}},'
+            '"db_json": {}}'
+        )
+
+        with patch("simulation_harness.skills.generator.ChatOpenAI") as mock_llm_class:
+            mock_llm = AsyncMock()
+            mock_llm.ainvoke = AsyncMock(return_value=mock_response)
+            mock_llm_class.return_value = mock_llm
+
+            result_path = await generator.generate_skill(
+                openapi_spec=sample_openapi_spec,
+                simulation_name="widget-api",
+                skills_folder=temp_skills_dir,
+            )
+
+        content = result_path.read_text()
+        assert "name: widget-api" in content
+        assert "widget-simulation" not in content
