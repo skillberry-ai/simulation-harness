@@ -44,6 +44,8 @@ where = ["src"]
 [tool.setuptools.package-data]
 simulation_harness = [
     "skills/assets/*.md",
+    "skills/assets/generation/*.md",
+    "skills/assets/generation/*.jinja2",
     "agent/templates/*.jinja2"
 ]
 
