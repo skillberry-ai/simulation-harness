@@ -1,0 +1,43 @@
+import pytest
+
+from simulation_harness.config.models import GenerationConfig, HarnessConfig
+
+
+@pytest.fixture
+def minimal_harness_dict():
+    return {
+        "llm": {
+            "provider": "openai",
+            "skill_generation_model": "m",
+            "simulation_model": "m",
+        },
+        "skills": {"folder": "./skills-store"},
+        "sessions": {"max_messages": 100, "idle_timeout_seconds": 3600},
+        "mcp": {"transport": "sse"},
+    }
+
+
+def test_generation_defaults():
+    cfg = GenerationConfig()
+    assert cfg.concurrency == 5
+    assert cfg.chunk_threshold == 40
+    assert cfg.repair_retries == 2
+    assert cfg.stage_timeout_seconds == 120
+    assert cfg.operation.temperature == 0.2
+    assert cfg.operation.max_tokens == 4000
+
+
+def test_generation_overrides_and_extra_forbidden():
+    cfg = GenerationConfig(concurrency=8, analyze={"max_tokens": 9000})
+    assert cfg.concurrency == 8
+    assert cfg.analyze.max_tokens == 9000
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        GenerationConfig(unknown_field=1)
+
+
+def test_harness_config_defaults_generation(minimal_harness_dict):
+    cfg = HarnessConfig(**minimal_harness_dict)
+    assert isinstance(cfg.generation, GenerationConfig)
+    assert cfg.generation.concurrency == 5
