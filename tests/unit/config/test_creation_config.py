@@ -8,7 +8,7 @@ from simulation_harness.config.models import CreationConfig, HarnessConfig
 
 def test_creation_config_default():
     cfg = CreationConfig()
-    assert cfg.max_duration_seconds == 120
+    assert cfg.max_duration_seconds == 600
 
 
 def test_creation_config_must_be_positive():
@@ -18,7 +18,7 @@ def test_creation_config_must_be_positive():
 
 def test_harness_config_includes_creation_default(minimal_harness_kwargs):
     cfg = HarnessConfig(**minimal_harness_kwargs)
-    assert cfg.creation.max_duration_seconds == 120
+    assert cfg.creation.max_duration_seconds == 600
 
 
 @pytest.fixture

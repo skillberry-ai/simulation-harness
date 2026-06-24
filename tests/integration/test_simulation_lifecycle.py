@@ -167,7 +167,7 @@ class TestSimulationCreation:
         assert final["status"] == "ready", f"expected ready, got: {final}"
         assert "session_state" in final
         assert final["session_state"]["tool_call_count"] == 0
-        assert final["mcp_url"] == "http://testserver/mcp/test-api"
+        assert final["mcp_url"] == "http://testserver/mcp/sse"
         assert "created_at" in final
 
     def test_create_simulation_openapi_31_accepted(
@@ -496,7 +496,7 @@ class TestMCPPortConfiguration:
             final = poll_until_ready(app_client, timeout=30.0)
 
         assert final["status"] == "ready", f"expected ready, got: {final}"
-        assert final["mcp_url"] == "http://testserver:9000/mcp/test-api"
+        assert final["mcp_url"] == "http://testserver:9000/mcp/sse"
 
     def test_create_simulation_without_mcp_port_returns_harness_url(
         self, app_client, valid_openapi_spec
@@ -518,7 +518,7 @@ class TestMCPPortConfiguration:
             final = poll_until_ready(app_client, timeout=30.0)
 
         assert final["status"] == "ready", f"expected ready, got: {final}"
-        assert final["mcp_url"] == "http://testserver/mcp/test-api"
+        assert final["mcp_url"] == "http://testserver/mcp/sse"
 
     def test_get_simulation_preserves_mcp_url_after_creation_with_port(
         self, app_client, valid_openapi_spec
@@ -552,7 +552,7 @@ class TestMCPPortConfiguration:
         get_response = app_client.get("/api/v1/simulation")
         assert get_response.status_code == 200
         assert get_response.json()["mcp_url"] == final["mcp_url"]
-        assert final["mcp_url"] == "http://testserver:9000/mcp/test-api"
+        assert final["mcp_url"] == "http://testserver:9000/mcp/sse"
 
     def test_create_simulation_port_in_use_reaches_failed(
         self, app_client, valid_openapi_spec
