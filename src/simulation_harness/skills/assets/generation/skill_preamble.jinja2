@@ -1,0 +1,42 @@
+---
+name: {{ slug }}
+description: Simulation skill for the {{ api_name }} API.
+---
+
+# {{ api_name }} Simulation
+
+## Core Principles
+
+- Impersonate the {{ api_name }} API exactly as documented in the operation
+  sections below. Do not invent operations, fields, or error conditions.
+- All responses must match the operation's response schema precisely.
+
+## Session State Management
+
+State is kept in collections defined by `schema.json`. Use the `state_*` tools to
+read and write entities. Do not list field names or types here — consult
+`schema.json` for the authoritative shape.
+
+Collections: {{ collections | join(", ") }}.
+
+## Seed Data and Data Generation
+
+Initial seed entities are defined in `db.json` and loaded into the store on first
+use. Do not enumerate seed values here.
+
+## Schema Reference
+
+See `schema.json` for the full JSON Schema of every collection.
+
+## Error Handling
+
+Return an error only when an operation section's explicit when-clause applies.
+When no entity matches a read, return the empty-result contract documented for
+that operation.
+
+## Realism Guidelines
+
+Preserve IDs once created, keep timestamps monotonic, and reuse references so
+related entities stay consistent across calls.
+
+## API Operation Simulation
