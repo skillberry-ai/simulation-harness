@@ -1,5 +1,6 @@
 """Tests for the per-simulation skill-sources helper."""
 
+import pytest
 from pathlib import Path
 
 from simulation_harness.agent.skill_backend import build_skill_sources
@@ -43,3 +44,20 @@ def test_idempotent(tmp_path):
     entries = list((skill_dir / ".skills").iterdir())
     assert len(entries) == 1
     assert entries[0].is_symlink()
+
+
+def test_raises_runtime_error_if_link_path_is_regular_file(tmp_path):
+    """If .skills/<name> already exists as a regular file, raise RuntimeError.
+
+    A bare FileExistsError from symlink_to() is opaque; the guard must produce
+    a descriptive RuntimeError before reaching symlink_to().
+    """
+    skill_dir = _make_skill_dir(tmp_path)
+    skills_root = skill_dir / ".skills"
+    skills_root.mkdir(parents=True, exist_ok=True)
+    # Plant a regular file where the symlink would go.
+    stale_file = skills_root / "petstore"
+    stale_file.write_text("stale content")
+
+    with pytest.raises(RuntimeError, match="symlink"):
+        build_skill_sources(skill_dir)

@@ -3,8 +3,9 @@
 import pytest
 from pydantic import SecretStr
 from unittest.mock import Mock, AsyncMock, patch
-from simulation_harness.agent.deep_agent import DeepAgent
+from simulation_harness.agent.deep_agent import DeepAgent, _READONLY_FS_RULES
 from simulation_harness.openapi.parser import OpenAPISpec, OpenAPIOperation
+from deepagents.middleware.permissions import _check_fs_permission
 
 
 @pytest.fixture
@@ -238,6 +239,32 @@ async def test_shutdown(mock_spec, mock_operation):
     assert agent.session_manager._running is False
 
 
+def test_readonly_fs_rules_deny_writes_including_dotpaths():
+    """_READONLY_FS_RULES must deny writes to both normal and dot-prefixed paths.
+
+    Approach: call deepagents' internal `_check_fs_permission` helper directly
+    against the module-level `_READONLY_FS_RULES` constant.  This tests the
+    *actual* glob-match behavior (not just the string content of the paths list)
+    and uses the same code path that `_PermissionMiddleware` uses at runtime.
+    """
+    # Writes to dot-prefixed paths (the gap in the old `/**`-only rule)
+    assert (
+        _check_fs_permission(_READONLY_FS_RULES, "write", "/.skills/foo.txt") == "deny"
+    )
+    assert _check_fs_permission(_READONLY_FS_RULES, "write", "/.hidden") == "deny"
+    # dot dir nested deeper: /a/b/.hidden is the dot entry; /a/b/.hidden/c is inside it
+    assert _check_fs_permission(_READONLY_FS_RULES, "write", "/a/b/.hidden") == "deny"
+    assert _check_fs_permission(_READONLY_FS_RULES, "write", "/a/b/.hidden/c") == "deny"
+    # Writes to ordinary paths must also be denied
+    assert _check_fs_permission(_READONLY_FS_RULES, "write", "/foo.txt") == "deny"
+    assert _check_fs_permission(_READONLY_FS_RULES, "write", "/a/b/c.json") == "deny"
+    # Reads must always be allowed (rule only covers 'write')
+    assert (
+        _check_fs_permission(_READONLY_FS_RULES, "read", "/.skills/foo.txt") == "allow"
+    )
+    assert _check_fs_permission(_READONLY_FS_RULES, "read", "/foo.txt") == "allow"
+
+
 def test_stateful_branch_wires_lean_create_agent_with_skills(
     tmp_path, mock_spec, mock_operation
 ):
@@ -284,6 +311,12 @@ def test_stateful_branch_wires_lean_create_agent_with_skills(
         "FilesystemMiddleware",
         "_PermissionMiddleware",
     ]
+
+    # The model must be passed UNBOUND — bind_tools must NOT have been called
+    # before handing the llm to create_agent.
+    mock_chat_openai.return_value.bind_tools.assert_not_called()
+    # First positional arg to create_agent is the (unbound) llm instance.
+    assert mock_create_agent.call_args.args[0] is mock_chat_openai.return_value
 
 
 def test_empty_string_base_url_is_forwarded_not_silently_dropped(

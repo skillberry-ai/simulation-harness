@@ -34,6 +34,25 @@ from simulation_harness.agent.skill_backend import build_skill_sources
 
 logger = get_logger(__name__)
 
+# Deny all write (write_file / edit_file) operations everywhere in the virtual
+# filesystem, including paths whose segments start with a dot.  Without the
+# dotfile patterns `/**` alone is insufficient: wcmatch's GLOBSTAR flag does
+# NOT imply DOTGLOB, so `/**` silently skips segments like `.skills`.
+#
+# Pattern coverage:
+#   /**           — any non-dot path at any depth (the baseline)
+#   /.*           — dot entry at the root (e.g. /.hidden)
+#   /.*/**        — anything inside a root-level dot dir (e.g. /.skills/x)
+#   /**/.*        — dot entry nested at any depth (e.g. /a/b/.hidden)
+#   /**/.*/**     — anything inside a nested dot dir (e.g. /a/b/.hidden/c)
+_READONLY_FS_RULES = [
+    FilesystemPermission(
+        operations=["write"],
+        paths=["/**", "/.*", "/.*/**", "/**/.*", "/**/.*/**"],
+        mode="deny",
+    )
+]
+
 
 class DeepAgent:
     """Simplified agent for generating mock API responses using LangChain/LangGraph."""
@@ -146,11 +165,7 @@ class DeepAgent:
                 SkillsMiddleware(backend=backend, sources=sources),
                 FilesystemMiddleware(backend=backend),
                 _PermissionMiddleware(
-                    rules=[
-                        FilesystemPermission(
-                            operations=["write"], paths=["/**"], mode="deny"
-                        )
-                    ],
+                    rules=_READONLY_FS_RULES,
                     backend=backend,
                 ),
             ]

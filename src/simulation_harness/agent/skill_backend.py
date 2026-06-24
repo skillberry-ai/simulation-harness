@@ -15,10 +15,17 @@ from pathlib import Path
 def build_skill_sources(skill_dir: Path) -> tuple[str, list[str]]:
     """Create the per-simulation skills root and return backend root + sources.
 
-    Creates ``<skill_dir>/.skills/<skill_dir.name>`` as a symlink pointing back
-    to ``skill_dir`` (target ``".."``, relative to the ``.skills/`` directory),
-    so that the skill's SKILL.md and its sibling schema.json/db.json all resolve
-    under one backend root with no data duplication.
+    Creates ``<skill_dir>/.skills/<skill_dir.name>`` as a symlink whose target
+    is ``".."`` (relative to the ``.skills/`` directory).  Because the target is
+    the parent of ``.skills/``, the symlink resolves back to ``skill_dir``
+    itself — so ``SKILL.md`` and its siblings (``schema.json``, ``db.json``,
+    etc.) are read directly from the skill directory.  The ``.skills/<name>``
+    path is an artifact of the SkillsMiddleware's directory-scan convention;
+    it does **not** introduce a separate copy of the files.
+
+    This is an intentional interim arrangement for single-skill-per-session
+    operation.  Exposing multiple independent API skills within a single session
+    is future work.
 
     Args:
         skill_dir: The simulation's skill directory (contains SKILL.md).
@@ -27,6 +34,11 @@ def build_skill_sources(skill_dir: Path) -> tuple[str, list[str]]:
         A tuple ``(root_dir, sources)`` where ``root_dir`` is ``str(skill_dir)``
         for ``FilesystemBackend(root_dir=...)`` and ``sources`` is
         ``["/.skills/"]`` for ``SkillsMiddleware(sources=...)``.
+
+    Raises:
+        RuntimeError: If ``<skill_dir>/.skills/<skill_dir.name>`` already exists
+            as a non-symlink (e.g. a regular file or directory left by a previous
+            failed run).  Remove or relocate the path before retrying.
 
     Note:
         Symlinks are used to avoid duplicating/​drifting the skill files. If a
@@ -37,6 +49,11 @@ def build_skill_sources(skill_dir: Path) -> tuple[str, list[str]]:
     skills_root.mkdir(parents=True, exist_ok=True)
 
     link = skills_root / skill_dir.name
+    if link.exists() and not link.is_symlink():
+        raise RuntimeError(
+            f"Expected '{link}' to be a symlink (or absent) but found a "
+            f"non-symlink filesystem entry.  Remove it before starting the simulation."
+        )
     if not link.is_symlink():
         # Target is relative to the symlink's own directory (.skills/), so
         # ".." resolves to skill_dir.
