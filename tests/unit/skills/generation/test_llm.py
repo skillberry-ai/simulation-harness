@@ -60,3 +60,27 @@ async def test_call_text_returns_content():
     fake = MagicMock()
     fake.ainvoke = AsyncMock(return_value=MagicMock(content="hello"))
     assert await call_text(fake, "sys", "usr") == "hello"
+
+
+async def test_call_json_wraps_length_truncation_as_structured_error():
+    from openai import LengthFinishReasonError
+
+    fake = MagicMock()
+    fake.ainvoke = AsyncMock(
+        side_effect=LengthFinishReasonError(completion=MagicMock())
+    )
+    with pytest.raises(StructuredCallError) as exc:
+        await call_json(fake, "sys", "usr")
+    assert "truncated" in str(exc.value).lower()
+
+
+async def test_call_text_wraps_length_truncation_as_structured_error():
+    from openai import LengthFinishReasonError
+
+    fake = MagicMock()
+    fake.ainvoke = AsyncMock(
+        side_effect=LengthFinishReasonError(completion=MagicMock())
+    )
+    with pytest.raises(StructuredCallError) as exc:
+        await call_text(fake, "sys", "usr")
+    assert "truncated" in str(exc.value).lower()

@@ -7,11 +7,18 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
+from openai import LengthFinishReasonError
 from pydantic import SecretStr
 
 
 class StructuredCallError(RuntimeError):
     """Raised when an LLM response cannot be parsed as the expected structure."""
+
+
+_TRUNCATED_MSG = (
+    "LLM response was truncated before completion (output token limit reached); "
+    "reduce scope or raise max_tokens for this stage"
+)
 
 
 def build_chat(
@@ -38,7 +45,10 @@ def build_chat(
 
 async def call_json(llm: ChatOpenAI, system: str, user: str) -> dict | list:
     messages = [SystemMessage(content=system), HumanMessage(content=user)]
-    response = await llm.ainvoke(messages)
+    try:
+        response = await llm.ainvoke(messages)
+    except LengthFinishReasonError as e:
+        raise StructuredCallError(_TRUNCATED_MSG) from e
     content = str(response.content)
     try:
         return json.loads(content)
@@ -48,5 +58,8 @@ async def call_json(llm: ChatOpenAI, system: str, user: str) -> dict | list:
 
 async def call_text(llm: ChatOpenAI, system: str, user: str) -> str:
     messages = [SystemMessage(content=system), HumanMessage(content=user)]
-    response = await llm.ainvoke(messages)
+    try:
+        response = await llm.ainvoke(messages)
+    except LengthFinishReasonError as e:
+        raise StructuredCallError(_TRUNCATED_MSG) from e
     return str(response.content)
