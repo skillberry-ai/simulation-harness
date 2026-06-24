@@ -20,6 +20,9 @@ sessions:
   max_messages: 100
   idle_timeout_seconds: 3600
   max_concurrent_queue_depth: 8
+  # Super-step budget per tool call for the multi-step skill-loading agent
+  # (progressive disclosure + state tools). ~2 super-steps per round-trip.
+  agent_recursion_limit: 50
 
 creation:
   max_duration_seconds: 600

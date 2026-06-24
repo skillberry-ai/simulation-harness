@@ -52,6 +52,14 @@ class SessionsConfig(BaseModel):
     max_concurrent_queue_depth: int = Field(
         8, gt=0, description="Maximum concurrent queue depth"
     )
+    agent_recursion_limit: int = Field(
+        50,
+        gt=0,
+        description="LangGraph super-step budget per tool call. The skill-loading "
+        "runtime is a multi-step agent (progressive disclosure + state tools), so "
+        "this must exceed the legacy single-call default of 10; ~2 super-steps are "
+        "consumed per model/tool round-trip.",
+    )
 
 
 class CreationConfig(BaseModel):

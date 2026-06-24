@@ -39,7 +39,7 @@ class SimulationInstance:
         max_tokens: int,
         base_url: str | None = None,
         skill_dir: Path | None = None,
-        agent_recursion_limit: int = 10,
+        agent_recursion_limit: int = 50,
         mcp_port: int | None = None,
     ) -> None:
         """Initialize simulation instance.

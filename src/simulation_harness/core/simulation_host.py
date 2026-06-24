@@ -48,7 +48,7 @@ def _default_instance_factory(
         max_tokens=config.llm.max_tokens,
         base_url=secrets.llm_api_base,
         skill_dir=skill_dir,
-        agent_recursion_limit=getattr(config.sessions, "agent_recursion_limit", 10),
+        agent_recursion_limit=config.sessions.agent_recursion_limit,
         mcp_port=mcp_port,
     )
 
