@@ -70,3 +70,13 @@ def test_mark_ready_sets_instance_and_clears_phase():
     assert record.status == SimulationStatus.READY
     assert record.instance is instance
     assert record.progress.phase is None
+
+
+def test_set_phase_updates_phase_without_transition():
+    rec = SimulationRecord.declare(name="aha")
+    rec.transition(SimulationStatus.GENERATING_SKILL, phase="skill_generation")
+    before = rec.progress.updated_at
+    rec.set_phase("generating_ops 3/10")
+    assert rec.progress.phase == "generating_ops 3/10"
+    assert rec.status == SimulationStatus.GENERATING_SKILL
+    assert rec.progress.updated_at >= before

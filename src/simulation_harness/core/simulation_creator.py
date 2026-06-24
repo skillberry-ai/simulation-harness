@@ -103,6 +103,7 @@ class SimulationCreator:
             simulation_name=self._record.name,
             openapi_spec=self._openapi_spec,
             regenerate=self._regenerate,
+            progress_cb=self._record.set_phase,
         )
         skill_dir = skill_file.parent
 
