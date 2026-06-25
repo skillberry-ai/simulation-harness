@@ -14,7 +14,12 @@ from simulation_harness.skills.generation.llm import call_json
 from simulation_harness.skills.generation.repair import with_repair
 
 ALLOWED_PATTERNS = {
-    "crud", "filter", "string_list", "conditional", "idempotent", "temporal"
+    "crud",
+    "filter",
+    "string_list",
+    "conditional",
+    "idempotent",
+    "temporal",
 }
 ALLOWED_KINDS = {k.value for k in OperationKind}
 
@@ -76,13 +81,19 @@ async def classify_batch(
         if not isinstance(payload, list):
             return ["classify payload must be a JSON array of records"]
         errors: list[str] = []
-        seen = {r["operation_id"] for r in payload if isinstance(r, dict) and "operation_id" in r}
+        seen = {
+            r["operation_id"]
+            for r in payload
+            if isinstance(r, dict) and "operation_id" in r
+        }
         missing = expected - seen
         invented = seen - expected
         if missing:
             errors.append(f"missing classifications for: {sorted(missing)}")
         if invented:
-            errors.append(f"invented operation_ids not in this batch: {sorted(invented)}")
+            errors.append(
+                f"invented operation_ids not in this batch: {sorted(invented)}"
+            )
         for r in payload:
             if not isinstance(r, dict):
                 errors.append("each record must be a JSON object")
@@ -94,7 +105,9 @@ async def classify_batch(
             if ent is not None and ent not in entity_names:
                 errors.append(f"op '{oid}': unknown entity '{ent}'")
             pats = r.get("patterns", [])
-            if not isinstance(pats, list) or any(p not in ALLOWED_PATTERNS for p in pats):
+            if not isinstance(pats, list) or any(
+                p not in ALLOWED_PATTERNS for p in pats
+            ):
                 errors.append(f"op '{oid}': invalid patterns {pats}")
         return errors
 

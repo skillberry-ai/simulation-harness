@@ -55,7 +55,9 @@ async def extract_data_model(
     components: dict, slug: str, llm, *, retries: int
 ) -> DataModel:
     prompt = _load_prompt()
-    base_user = f"# Component schemas\n```json\n{json.dumps(components, indent=2)}\n```\n"
+    base_user = (
+        f"# Component schemas\n```json\n{json.dumps(components, indent=2)}\n```\n"
+    )
 
     async def produce(feedback):
         user = base_user + (

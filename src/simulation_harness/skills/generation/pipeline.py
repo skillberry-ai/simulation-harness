@@ -61,16 +61,17 @@ async def run_pipeline(
             json_mode=json_mode,
         )
 
-    # Stage 1 — analyze
-    cb("analyzing")
-    ir = await asyncio.wait_for(
-        analyze(
-            spec_dict,
-            slug,
-            chat(gen_config.extract, True),
-            retries=gen_config.repair_retries,
-        ),
+    # Stage 1 — analyze (extract → classify fan-out → merge; per-call timeouts inside)
+    ir = await analyze(
+        spec_dict,
+        slug,
+        extract_llm=chat(gen_config.extract, True),
+        classify_llm=chat(gen_config.classify, True),
+        retries=gen_config.repair_retries,
+        batch_cap=gen_config.classify_batch_size,
+        concurrency=gen_config.concurrency,
         timeout=timeout,
+        progress_cb=cb,
     )
 
     spec = OpenAPISpec(spec_dict)

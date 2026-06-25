@@ -8,8 +8,13 @@ from simulation_harness.skills.generation.stages.analyze import classify as C
 
 
 def _stub(oid, tag):
-    return {"operation_id": oid, "method": "GET", "path": f"/{oid}",
-            "tag": tag, "summary": None}
+    return {
+        "operation_id": oid,
+        "method": "GET",
+        "path": f"/{oid}",
+        "tag": tag,
+        "summary": None,
+    }
 
 
 def test_plan_packs_tags_without_splitting_when_under_cap():
@@ -35,8 +40,9 @@ def test_plan_splits_only_the_oversized_tag():
     assert all(len(b) <= 40 for b in batches)
     assert sum(len(b) for b in batches) == 96
     # "Small" stays whole in exactly one batch
-    small_batches = {bi for bi, b in enumerate(batches)
-                     for s in b if s["tag"] == "Small"}
+    small_batches = {
+        bi for bi, b in enumerate(batches) for s in b if s["tag"] == "Small"
+    }
     assert len(small_batches) == 1
 
 
@@ -46,8 +52,14 @@ def test_plan_empty():
 
 async def test_classify_batch_returns_records():
     stubs = [_stub("getFeature", "Features")]
-    records = [{"operation_id": "getFeature", "entity": "Feature",
-               "kind": "read", "patterns": ["crud"]}]
+    records = [
+        {
+            "operation_id": "getFeature",
+            "entity": "Feature",
+            "kind": "read",
+            "patterns": ["crud"],
+        }
+    ]
     with patch.object(C, "call_json", AsyncMock(return_value=records)):
         out = await C.classify_batch(stubs, ["Feature"], llm=object(), retries=0)
     assert out == records

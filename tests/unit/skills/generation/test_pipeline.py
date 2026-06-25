@@ -95,6 +95,6 @@ async def test_run_pipeline_produces_bundle_and_reports_phases():
     assert "### /features/{id} GET" in bundle.skill_md
     assert bundle.schema == SCHEMA
     assert bundle.db == {"features": [{"id": "f1"}]}
-    assert "analyzing" in phases
     assert any(p.startswith("generating_ops") for p in phases)
+    assert "designing_schema" in phases
     assert "assembling" in phases

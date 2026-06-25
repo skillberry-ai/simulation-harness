@@ -339,9 +339,7 @@ async def test_shutdown_removes_skill_staging_dir(tmp_path, mock_spec, mock_oper
         patch(
             "simulation_harness.agent.deep_agent.create_state_tools", return_value=[]
         ),
-        patch(
-            "simulation_harness.agent.deep_agent.create_agent", return_value=Mock()
-        ),
+        patch("simulation_harness.agent.deep_agent.create_agent", return_value=Mock()),
     ):
         agent = DeepAgent(
             api_key=SecretStr("test-key"),

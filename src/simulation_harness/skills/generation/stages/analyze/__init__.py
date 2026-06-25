@@ -1,32 +1,29 @@
-"""Stage 1: turn an OpenAPI spec into the IR."""
+"""Stage 1 orchestrator: spec → IR via extract → classify (fan-out) → merge."""
 
 from __future__ import annotations
 
-import json
+import asyncio
 import re
-
-try:
-    from importlib.resources import files
-except ImportError:  # pragma: no cover
-    from importlib_resources import files  # type: ignore[import-not-found]
+from collections.abc import Callable
 
 from simulation_harness.openapi.parser import OpenAPISpec
-from simulation_harness.skills.generation.ir import (
-    Entity,
-    Operation,
-    OperationKind,
-    SpecModel,
-    StoreMetadata,
+from simulation_harness.skills.generation.ir import SpecModel
+from simulation_harness.skills.generation.repair import GenerationStageError
+from simulation_harness.skills.generation.stages.analyze.classify import (
+    classify_batch,
+    plan_classify_batches,
 )
-from simulation_harness.skills.generation.llm import call_json
-from simulation_harness.skills.generation.repair import with_repair
+from simulation_harness.skills.generation.stages.analyze.extract import (
+    extract_data_model,
+)
+from simulation_harness.skills.generation.stages.analyze.merge import (
+    build_spec_model,
+    validate_coverage,
+)
+
+__all__ = ["analyze", "extract_operations"]
 
 _NON_ALNUM = re.compile(r"[^a-zA-Z0-9]+")
-
-
-def _load_prompt() -> str:
-    assets = files("simulation_harness.skills.assets")
-    return (assets / "generation" / "analyze.md").read_text()
 
 
 def extract_operations(spec: OpenAPISpec) -> list[dict]:
@@ -54,72 +51,64 @@ def extract_operations(spec: OpenAPISpec) -> list[dict]:
     return stubs
 
 
-def _merge(slug: str, stubs: list[dict], enrichment: dict) -> SpecModel:
-    semantics = {
-        s["operation_id"]: s for s in enrichment.get("operation_semantics", [])
-    }
-    operations = []
-    for stub in stubs:
-        sem = semantics.get(stub["operation_id"], {})
-        operations.append(
-            Operation(
-                operation_id=stub["operation_id"],
-                method=stub["method"],
-                path=stub["path"],
-                tag=stub["tag"],
-                summary=stub["summary"],
-                entity=sem.get("entity"),
-                kind=OperationKind(sem.get("kind", "action")),
-                patterns=sem.get("patterns", []),
-            )
-        )
-    return SpecModel(
-        api_name=enrichment.get("api_name", slug),
-        slug=slug,
-        entities=[Entity(**e) for e in enrichment.get("entities", [])],
-        operations=operations,
-        store_metadata=StoreMetadata(**enrichment["store_metadata"]),
-    )
+async def _guard(coro, timeout):
+    if timeout is None:
+        return await coro
+    return await asyncio.wait_for(coro, timeout=timeout)
 
 
-class _Invalid:
-    """Carries shape errors when enrichment can't be merged into the IR.
-
-    A malformed enrichment payload raises ``pydantic.ValidationError`` inside
-    ``_merge``. Rather than crash, ``produce`` catches it and returns this
-    sentinel so ``validate`` can report the error and trigger a repair
-    iteration. ``_Invalid`` always yields non-empty errors, so it never
-    validates clean and the final ``with_repair`` result is always a
-    ``SpecModel``.
-    """
-
-    def __init__(self, errors: list[str]) -> None:
-        self.errors = errors
-
-
-async def analyze(spec_dict: dict, slug: str, llm, *, retries: int) -> SpecModel:
+async def analyze(
+    spec_dict: dict,
+    slug: str,
+    *,
+    extract_llm,
+    classify_llm,
+    retries: int,
+    batch_cap: int,
+    concurrency: int,
+    timeout: float | None = None,
+    progress_cb: Callable[[str], None] | None = None,
+) -> SpecModel:
+    cb = progress_cb or (lambda _p: None)
     spec = OpenAPISpec(spec_dict)
     stubs = extract_operations(spec)
     components = spec_dict.get("components", {}).get("schemas", {})
-    prompt = _load_prompt()
-    base_user = (
-        f"# Operations\n```json\n{json.dumps(stubs, indent=2)}\n```\n\n"
-        f"# Component schemas\n```json\n{json.dumps(components, indent=2)}\n```\n"
+
+    # Stage 1a — extract data model
+    cb("extracting_model")
+    dm = await _guard(
+        extract_data_model(components, slug, extract_llm, retries=retries), timeout
     )
+    entity_names = [e.name for e in dm.entities]
 
-    async def produce(feedback):
-        user = base_user + (
-            "\n# feedback\n" + "\n".join(feedback) + "\n" if feedback else ""
-        )
-        enrichment = await call_json(llm, prompt, user)
-        try:
-            return _merge(slug, stubs, enrichment)
-        except Exception as e:  # malformed enrichment shape
-            return _Invalid([f"enrichment shape error: {e}"])
+    # Stage 1b — classify operation semantics (bounded fan-out)
+    batches = plan_classify_batches(stubs, cap=batch_cap)
+    total = len(batches)
+    sem = asyncio.Semaphore(concurrency)
+    done = 0
+    lock = asyncio.Lock()
 
-    def validate(artifact):
-        if isinstance(artifact, _Invalid):
-            return artifact.errors
-        return artifact.validate_consistency()
+    async def run_batch(batch):
+        nonlocal done
+        async with sem:
+            records = await _guard(
+                classify_batch(batch, entity_names, classify_llm, retries=retries),
+                timeout,
+            )
+        async with lock:
+            done += 1
+            cb(f"classifying_ops {done}/{total}")
+        return records
 
-    return await with_repair(produce, validate, stage="analyze", retries=retries)
+    results = await asyncio.gather(*[run_batch(b) for b in batches])
+    semantics = [record for batch in results for record in batch]
+
+    # Merge + validate (global coverage, then IR cross-refs)
+    coverage = validate_coverage(stubs, semantics)
+    if coverage:
+        raise GenerationStageError("classify", coverage)
+    ir = build_spec_model(slug, stubs, dm, semantics)
+    consistency = ir.validate_consistency()
+    if consistency:
+        raise GenerationStageError("analyze", consistency)
+    return ir

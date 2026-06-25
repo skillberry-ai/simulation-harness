@@ -75,7 +75,9 @@ def test_skill_files_are_copied_under_staging(tmp_path, staging_roots):
     staged = Path(root_dir) / ".skills" / "petstore"
     assert (staged / "SKILL.md").read_text() == (skill_dir / "SKILL.md").read_text()
     # Referenced siblings come along so progressive disclosure still resolves.
-    assert (staged / "schema.json").read_text() == (skill_dir / "schema.json").read_text()
+    assert (staged / "schema.json").read_text() == (
+        skill_dir / "schema.json"
+    ).read_text()
     assert (staged / "db.json").exists()
 
 

@@ -4,9 +4,11 @@ from unittest.mock import AsyncMock, patch
 
 from pydantic import SecretStr
 
+from simulation_harness.skills.generation.ir import Entity, StoreMetadata
 from simulation_harness.skills.generation.stages import analyze as A
 from simulation_harness.skills.generation.stages import operations as O
 from simulation_harness.skills.generation.stages import schema_seed as S
+from simulation_harness.skills.generation.stages.analyze.extract import DataModel
 from simulation_harness.skills.generator import SkillGenerator
 
 SPEC = {
@@ -23,26 +25,26 @@ SPEC = {
         }
     },
 }
-ENRICH = {
-    "api_name": "Aha",
-    "entities": [
-        {
-            "name": "Feature",
-            "collection": "features",
-            "primary_key": "id",
-            "fields": [{"name": "id", "type": "string", "required": True}],
-        }
+DATA_MODEL = DataModel(
+    api_name="Aha",
+    entities=[
+        Entity(
+            name="Feature",
+            collection="features",
+            primary_key="id",
+            fields=[{"name": "id", "type": "string", "required": True}],
+        )
     ],
-    "store_metadata": {"collections": ["features"], "pk_map": {"features": "id"}},
-    "operation_semantics": [
-        {
-            "operation_id": "getFeature",
-            "entity": "Feature",
-            "kind": "read",
-            "patterns": ["crud"],
-        }
-    ],
-}
+    store_metadata=StoreMetadata(collections=["features"], pk_map={"features": "id"}),
+)
+CLASSIFY_RECORDS = [
+    {
+        "operation_id": "getFeature",
+        "entity": "Feature",
+        "kind": "read",
+        "patterns": ["crud"],
+    }
+]
 SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
@@ -62,7 +64,8 @@ SCHEMA = {
 async def test_full_generation_writes_valid_bundle(tmp_path: Path):
     phases = []
     with (
-        patch.object(A, "call_json", AsyncMock(return_value=ENRICH)),
+        patch.object(A, "extract_data_model", AsyncMock(return_value=DATA_MODEL)),
+        patch.object(A, "classify_batch", AsyncMock(return_value=CLASSIFY_RECORDS)),
         patch.object(
             S,
             "call_json",
@@ -95,4 +98,6 @@ async def test_full_generation_writes_valid_bundle(tmp_path: Path):
     import jsonschema
 
     jsonschema.validate(db, schema)  # bundle is self-consistent
-    assert "analyzing" in phases and "assembling" in phases
+    assert "extracting_model" in phases
+    assert any(p.startswith("classifying_ops") for p in phases)
+    assert "assembling" in phases
