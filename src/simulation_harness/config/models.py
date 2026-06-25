@@ -93,6 +93,11 @@ class GenerationConfig(BaseModel):
     chunk_threshold: int = Field(
         40, gt=0, description="Ops above this are batched by tag instead of per-op"
     )
+    classify_batch_size: int = Field(
+        40,
+        gt=0,
+        description="Bin capacity (max operations) per stage-1b classify call",
+    )
     repair_retries: int = Field(
         2,
         ge=0,
@@ -101,7 +106,10 @@ class GenerationConfig(BaseModel):
     stage_timeout_seconds: int = Field(
         120, gt=0, description="Per individual LLM call timeout"
     )
-    analyze: StageParams = Field(default_factory=lambda: StageParams(max_tokens=8000))
+    extract: StageParams = Field(default_factory=lambda: StageParams(max_tokens=8000))
+    classify: StageParams = Field(
+        default_factory=lambda: StageParams(max_tokens=4000)
+    )
     schema_seed: StageParams = Field(
         default_factory=lambda: StageParams(max_tokens=12000)
     )
