@@ -31,7 +31,6 @@ node_modules/
 venv/
 ENV/
 env/
-uv.lock
 
 # Testing
 .pytest_cache/
