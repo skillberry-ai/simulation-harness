@@ -1,0 +1,129 @@
+{
+  "restaurants": [
+    {
+      "id": "rest_001",
+      "name": "The Italian Corner",
+      "cuisine": "Italian",
+      "price_tier": 2,
+      "rating": 4.5,
+      "location": {
+        "latitude": 42.3601,
+        "longitude": -71.0589,
+        "address": "123 Hanover St",
+        "city": "Boston",
+        "state": "MA",
+        "postal_code": "02108",
+        "country": "USA"
+      },
+      "phone": "+1-555-987-6543",
+      "description": "Authentic Italian cuisine in the heart of Boston",
+      "accepts_reservations": true
+    },
+    {
+      "id": "rest_002",
+      "name": "Harbor Sushi Bar",
+      "cuisine": "Japanese",
+      "price_tier": 3,
+      "rating": 4.7,
+      "location": {
+        "latitude": 42.3572,
+        "longitude": -71.0517,
+        "address": "88 Atlantic Ave",
+        "city": "Boston",
+        "state": "MA",
+        "postal_code": "02110",
+        "country": "USA"
+      },
+      "phone": "+1-555-222-3344",
+      "description": "Modern sushi and omakase near the waterfront",
+      "accepts_reservations": true
+    },
+    {
+      "id": "rest_003",
+      "name": "Back Bay Grill House",
+      "cuisine": "American",
+      "price_tier": 3,
+      "rating": 4.3,
+      "location": {
+        "latitude": 42.3493,
+        "longitude": -71.081,
+        "address": "400 Boylston St",
+        "city": "Boston",
+        "state": "MA",
+        "postal_code": "02116",
+        "country": "USA"
+      },
+      "phone": "+1-555-333-4455",
+      "description": "Classic grill fare with a polished downtown atmosphere",
+      "accepts_reservations": true
+    },
+    {
+      "id": "rest_004",
+      "name": "Spice Route Kitchen",
+      "cuisine": "Indian",
+      "price_tier": 2,
+      "rating": 4.4,
+      "location": {
+        "latitude": 42.3522,
+        "longitude": -71.0637,
+        "address": "15 Temple Pl",
+        "city": "Boston",
+        "state": "MA",
+        "postal_code": "02111",
+        "country": "USA"
+      },
+      "phone": "+1-555-444-5566",
+      "description": "Regional Indian dishes and warm hospitality",
+      "accepts_reservations": true
+    },
+    {
+      "id": "rest_005",
+      "name": "Quick Bite Cafe",
+      "cuisine": "Cafe",
+      "price_tier": 1,
+      "rating": 4.0,
+      "location": {
+        "latitude": 42.3558,
+        "longitude": -71.0602,
+        "address": "210 Washington St",
+        "city": "Boston",
+        "state": "MA",
+        "postal_code": "02108",
+        "country": "USA"
+      },
+      "phone": "+1-555-555-6677",
+      "description": "Casual sandwiches, coffee, and pastries",
+      "accepts_reservations": false
+    }
+  ],
+  "reservations": [
+    {
+      "id": "reservation_seed_001",
+      "restaurant_id": "rest_001",
+      "restaurant_name": "The Italian Corner",
+      "date_time": "2025-03-15T19:00:00",
+      "party_size": 2,
+      "guest_name": "John Doe",
+      "guest_phone": "+1-555-123-4567",
+      "guest_email": "john.doe@example.com",
+      "notes": "Anniversary dinner",
+      "status": "confirmed",
+      "confirmation_code": "CONF-SEED01",
+      "created_at": "2025-03-10T14:30:00"
+    },
+    {
+      "id": "reservation_seed_002",
+      "restaurant_id": "rest_002",
+      "restaurant_name": "Harbor Sushi Bar",
+      "date_time": "2025-03-20T18:30:00",
+      "party_size": 4,
+      "guest_name": "John Doe",
+      "guest_phone": "+1-555-123-4567",
+      "guest_email": "john.doe@example.com",
+      "status": "confirmed",
+      "confirmation_code": "CONF-SEED02",
+      "created_at": "2025-03-11T09:15:00"
+    }
+  ],
+  "cancellations": []
+}

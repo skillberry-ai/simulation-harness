@@ -1,0 +1,665 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Restaurant Reservation API",
+    "description": "MCP server providing tools for searching restaurants, checking availability, and managing reservations through a provider abstraction layer.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Kaegis Reservation Tool"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "Local development server"
+    }
+  ],
+  "paths": {
+    "/search_restaurants": {
+      "post": {
+        "summary": "Search for restaurants",
+        "description": "Search for restaurants matching the given criteria with optional filters for cuisine, date/time, party size, price tier, and distance.",
+        "operationId": "searchRestaurants",
+        "tags": [
+          "Restaurants"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "city"
+                ],
+                "properties": {
+                  "city": {
+                    "type": "string",
+                    "description": "City name to search in",
+                    "example": "Boston"
+                  },
+                  "cuisine": {
+                    "type": "string",
+                    "description": "Optional cuisine type filter",
+                    "example": "Italian"
+                  },
+                  "date_time": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Optional ISO 8601 datetime for availability-aware search",
+                    "example": "2025-03-15T18:00:00"
+                  },
+                  "party_size": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional number of guests for filtering",
+                    "example": 4
+                  },
+                  "price_tier": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4,
+                    "description": "Optional price tier (1=$, 2=$$, 3=$$$, 4=$$$$)",
+                    "example": 2
+                  },
+                  "distance_km": {
+                    "type": "number",
+                    "format": "float",
+                    "minimum": 0,
+                    "description": "Optional maximum distance from city center in kilometers",
+                    "example": 5.0
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "List of matching restaurants",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Restaurant"
+                      }
+                    },
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/check_availability": {
+      "post": {
+        "summary": "Check restaurant availability",
+        "description": "Check availability for a specific restaurant on a given date and time for a party size.",
+        "operationId": "checkAvailability",
+        "tags": [
+          "Availability"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "restaurant_id",
+                  "date_time",
+                  "party_size"
+                ],
+                "properties": {
+                  "restaurant_id": {
+                    "type": "string",
+                    "description": "Unique restaurant identifier",
+                    "example": "rest_001"
+                  },
+                  "date_time": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "ISO 8601 datetime for the date to check",
+                    "example": "2025-03-15T18:00:00"
+                  },
+                  "party_size": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Number of guests in the party",
+                    "example": 4
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "List of available time slots",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AvailabilitySlot"
+                      }
+                    },
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/place_reservation": {
+      "post": {
+        "summary": "Place a reservation",
+        "description": "Place a reservation at a restaurant. This operation is idempotent - submitting the same reservation details multiple times will return the same confirmation without creating duplicates.",
+        "operationId": "placeReservation",
+        "tags": [
+          "Reservations"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "restaurant_id",
+                  "date_time",
+                  "party_size",
+                  "name",
+                  "phone",
+                  "email"
+                ],
+                "properties": {
+                  "restaurant_id": {
+                    "type": "string",
+                    "description": "Unique restaurant identifier",
+                    "example": "rest_001"
+                  },
+                  "date_time": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "ISO 8601 datetime for the reservation",
+                    "example": "2025-03-15T19:00:00"
+                  },
+                  "party_size": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Number of guests",
+                    "example": 4
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "Guest's full name",
+                    "example": "John Doe"
+                  },
+                  "phone": {
+                    "type": "string",
+                    "description": "Guest's contact phone number",
+                    "example": "+1-555-123-4567"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "description": "Guest's email address",
+                    "example": "john.doe@example.com"
+                  },
+                  "notes": {
+                    "type": "string",
+                    "description": "Optional special requests or dietary restrictions",
+                    "example": "Window seat preferred, vegetarian options needed"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reservation confirmation details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/Reservation"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cancel_reservation": {
+      "post": {
+        "summary": "Cancel a reservation",
+        "description": "Cancel an existing reservation. This is a destructive operation that removes the reservation from the system. However, it is idempotent - cancelling the same reservation multiple times will return an appropriate error message.",
+        "operationId": "cancelReservation",
+        "tags": [
+          "Reservations"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "reservation_id"
+                ],
+                "properties": {
+                  "reservation_id": {
+                    "type": "string",
+                    "description": "Unique reservation identifier",
+                    "example": "reservation_abc123"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "Optional reason for cancellation",
+                    "example": "Change of plans"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cancellation confirmation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/CancellationReceipt"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/list_reservations": {
+      "post": {
+        "summary": "List user reservations",
+        "description": "List all reservations for a user identified by email address or phone number.",
+        "operationId": "listReservations",
+        "tags": [
+          "Reservations"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "user_id"
+                ],
+                "properties": {
+                  "user_id": {
+                    "type": "string",
+                    "description": "User identifier - can be email address or phone number",
+                    "example": "john.doe@example.com"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "List of user's reservations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Reservation"
+                      }
+                    },
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Location": {
+        "type": "object",
+        "description": "Geographic location with coordinates and address",
+        "required": [
+          "latitude",
+          "longitude",
+          "address",
+          "city",
+          "state",
+          "postal_code"
+        ],
+        "properties": {
+          "latitude": {
+            "type": "number",
+            "format": "double",
+            "description": "Latitude coordinate",
+            "example": 42.3601
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double",
+            "description": "Longitude coordinate",
+            "example": -71.0589
+          },
+          "address": {
+            "type": "string",
+            "description": "Street address",
+            "example": "123 Main St"
+          },
+          "city": {
+            "type": "string",
+            "description": "City name",
+            "example": "Boston"
+          },
+          "state": {
+            "type": "string",
+            "description": "State or province",
+            "example": "MA"
+          },
+          "postal_code": {
+            "type": "string",
+            "description": "Postal/ZIP code",
+            "example": "02101"
+          },
+          "country": {
+            "type": "string",
+            "description": "Country",
+            "default": "USA",
+            "example": "USA"
+          }
+        }
+      },
+      "Restaurant": {
+        "type": "object",
+        "description": "Restaurant information",
+        "required": [
+          "id",
+          "name",
+          "cuisine",
+          "price_tier",
+          "rating",
+          "location",
+          "phone"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique restaurant identifier",
+            "example": "rest_001"
+          },
+          "name": {
+            "type": "string",
+            "description": "Restaurant name",
+            "example": "The Italian Corner"
+          },
+          "cuisine": {
+            "type": "string",
+            "description": "Cuisine type",
+            "example": "Italian"
+          },
+          "price_tier": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4,
+            "description": "Price tier (1=$, 2=$$, 3=$$$, 4=$$$$)",
+            "example": 2
+          },
+          "rating": {
+            "type": "number",
+            "format": "float",
+            "minimum": 0,
+            "maximum": 5,
+            "description": "Average rating (0-5)",
+            "example": 4.5
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location"
+          },
+          "phone": {
+            "type": "string",
+            "description": "Contact phone number",
+            "example": "+1-555-987-6543"
+          },
+          "description": {
+            "type": "string",
+            "description": "Restaurant description",
+            "example": "Authentic Italian cuisine in the heart of Boston"
+          },
+          "accepts_reservations": {
+            "type": "boolean",
+            "description": "Whether reservations are accepted",
+            "default": true,
+            "example": true
+          }
+        }
+      },
+      "AvailabilitySlot": {
+        "type": "object",
+        "description": "Available time slot for reservations",
+        "required": [
+          "time",
+          "max_party_size",
+          "available"
+        ],
+        "properties": {
+          "time": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 datetime of the slot",
+            "example": "2025-03-15T18:00:00"
+          },
+          "max_party_size": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Maximum party size for this slot",
+            "example": 8
+          },
+          "available": {
+            "type": "boolean",
+            "description": "Whether the slot is available",
+            "example": true
+          }
+        }
+      },
+      "Reservation": {
+        "type": "object",
+        "description": "Restaurant reservation details",
+        "required": [
+          "id",
+          "restaurant_id",
+          "restaurant_name",
+          "date_time",
+          "party_size",
+          "guest_name",
+          "guest_phone",
+          "guest_email",
+          "confirmation_code",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique reservation identifier",
+            "example": "reservation_abc123"
+          },
+          "restaurant_id": {
+            "type": "string",
+            "description": "Restaurant identifier",
+            "example": "rest_001"
+          },
+          "restaurant_name": {
+            "type": "string",
+            "description": "Restaurant name",
+            "example": "The Italian Corner"
+          },
+          "date_time": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 datetime of reservation",
+            "example": "2025-03-15T19:00:00"
+          },
+          "party_size": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Number of guests",
+            "example": 4
+          },
+          "guest_name": {
+            "type": "string",
+            "description": "Guest name",
+            "example": "John Doe"
+          },
+          "guest_phone": {
+            "type": "string",
+            "description": "Guest phone number",
+            "example": "+1-555-123-4567"
+          },
+          "guest_email": {
+            "type": "string",
+            "format": "email",
+            "description": "Guest email address",
+            "example": "john.doe@example.com"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Special requests or notes",
+            "example": "Window seat preferred"
+          },
+          "status": {
+            "type": "string",
+            "description": "Reservation status",
+            "default": "confirmed",
+            "example": "confirmed"
+          },
+          "confirmation_code": {
+            "type": "string",
+            "description": "Confirmation code",
+            "example": "CONF-ABC123"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 datetime when reservation was created",
+            "example": "2025-03-10T14:30:00"
+          }
+        }
+      },
+      "CancellationReceipt": {
+        "type": "object",
+        "description": "Reservation cancellation confirmation",
+        "required": [
+          "reservation_id",
+          "restaurant_name",
+          "original_date_time",
+          "cancelled_at"
+        ],
+        "properties": {
+          "reservation_id": {
+            "type": "string",
+            "description": "Cancelled reservation identifier",
+            "example": "reservation_abc123"
+          },
+          "restaurant_name": {
+            "type": "string",
+            "description": "Restaurant name",
+            "example": "The Italian Corner"
+          },
+          "original_date_time": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 datetime of original reservation",
+            "example": "2025-03-15T19:00:00"
+          },
+          "cancelled_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 datetime when cancelled",
+            "example": "2025-03-12T10:15:00"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Cancellation reason",
+            "example": "Change of plans"
+          },
+          "refund_policy": {
+            "type": "string",
+            "description": "Refund policy message",
+            "default": "No charge for cancellations",
+            "example": "No charge for cancellations"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "description": "Error response",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Error message",
+            "example": "Restaurant not found"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Restaurants",
+      "description": "Operations for searching and browsing restaurants"
+    },
+    {
+      "name": "Availability",
+      "description": "Operations for checking restaurant availability"
+    },
+    {
+      "name": "Reservations",
+      "description": "Operations for managing reservations"
+    }
+  ]
+}

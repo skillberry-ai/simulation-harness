@@ -1,0 +1,250 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Restaurant Reservation API Simulator State",
+  "type": "object",
+  "required": [
+    "restaurants",
+    "reservations",
+    "cancellations"
+  ],
+  "properties": {
+    "restaurants": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Restaurant"
+      }
+    },
+    "reservations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Reservation"
+      }
+    },
+    "cancellations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/CancellationReceipt"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "Location": {
+      "type": "object",
+      "required": [
+        "latitude",
+        "longitude",
+        "address",
+        "city",
+        "state",
+        "postal_code"
+      ],
+      "properties": {
+        "latitude": {
+          "type": "number",
+          "format": "double"
+        },
+        "longitude": {
+          "type": "number",
+          "format": "double"
+        },
+        "address": {
+          "type": "string"
+        },
+        "city": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string"
+        },
+        "postal_code": {
+          "type": "string"
+        },
+        "country": {
+          "type": "string",
+          "default": "USA"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Restaurant": {
+      "type": "object",
+      "x-primary-key": "id",
+      "required": [
+        "id",
+        "name",
+        "cuisine",
+        "price_tier",
+        "rating",
+        "location",
+        "phone"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "cuisine": {
+          "type": "string"
+        },
+        "price_tier": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4
+        },
+        "rating": {
+          "type": "number",
+          "format": "float",
+          "minimum": 0,
+          "maximum": 5
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        },
+        "phone": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "accepts_reservations": {
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "AvailabilitySlot": {
+      "type": "object",
+      "x-primary-key": "time",
+      "required": [
+        "time",
+        "max_party_size",
+        "available"
+      ],
+      "properties": {
+        "time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "max_party_size": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "available": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Reservation": {
+      "type": "object",
+      "x-primary-key": "id",
+      "required": [
+        "id",
+        "restaurant_id",
+        "restaurant_name",
+        "date_time",
+        "party_size",
+        "guest_name",
+        "guest_phone",
+        "guest_email",
+        "confirmation_code",
+        "created_at"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "restaurant_id": {
+          "type": "string"
+        },
+        "restaurant_name": {
+          "type": "string"
+        },
+        "date_time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "party_size": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "guest_name": {
+          "type": "string"
+        },
+        "guest_phone": {
+          "type": "string"
+        },
+        "guest_email": {
+          "type": "string",
+          "format": "email"
+        },
+        "notes": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "default": "confirmed"
+        },
+        "confirmation_code": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CancellationReceipt": {
+      "type": "object",
+      "x-primary-key": "reservation_id",
+      "required": [
+        "reservation_id",
+        "restaurant_name",
+        "original_date_time",
+        "cancelled_at"
+      ],
+      "properties": {
+        "reservation_id": {
+          "type": "string"
+        },
+        "restaurant_name": {
+          "type": "string"
+        },
+        "original_date_time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "cancelled_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "refund_policy": {
+          "type": "string",
+          "default": "No charge for cancellations"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Error": {
+      "type": "object",
+      "x-primary-key": "error",
+      "required": [
+        "error"
+      ],
+      "properties": {
+        "error": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
