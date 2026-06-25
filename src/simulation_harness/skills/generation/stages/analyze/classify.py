@@ -75,7 +75,12 @@ async def classify_batch(
         user = base_user + (
             "\n# feedback\n" + "\n".join(feedback) + "\n" if feedback else ""
         )
-        return await call_json(llm, prompt, user)
+        payload = await call_json(llm, prompt, user)
+        # json_object response mode forbids a bare top-level array, so the model
+        # wraps the records under a "classifications" key — unwrap it here.
+        if isinstance(payload, dict):
+            payload = payload.get("classifications", payload)
+        return payload
 
     def validate(payload) -> list[str]:
         if not isinstance(payload, list):

@@ -65,6 +65,24 @@ async def test_classify_batch_returns_records():
     assert out == records
 
 
+async def test_classify_batch_unwraps_json_object_payload():
+    # Under OpenAI json_object mode the model cannot emit a bare top-level
+    # array, so it wraps the records in an object. classify_batch must unwrap it.
+    stubs = [_stub("getFeature", "Features")]
+    records = [
+        {
+            "operation_id": "getFeature",
+            "entity": "Feature",
+            "kind": "read",
+            "patterns": ["crud"],
+        }
+    ]
+    wrapped = {"classifications": records}
+    with patch.object(C, "call_json", AsyncMock(return_value=wrapped)):
+        out = await C.classify_batch(stubs, ["Feature"], llm=object(), retries=0)
+    assert out == records
+
+
 async def test_classify_batch_repairs_coverage_gap():
     stubs = [_stub("a", "T"), _stub("b", "T")]
     incomplete = [{"operation_id": "a", "entity": None, "kind": "read", "patterns": []}]
