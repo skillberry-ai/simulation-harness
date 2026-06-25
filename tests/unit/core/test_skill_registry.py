@@ -58,6 +58,7 @@ async def test_ensure_skill_generates_new_skill(
         openapi_spec=sample_openapi_spec,
         simulation_name="test-sim",
         skills_folder=temp_skills_dir,
+        progress_cb=None,
     )
 
 
@@ -500,3 +501,15 @@ class TestWriteDb:
 
 
 # Made with Bob
+
+
+async def test_ensure_skill_forwards_progress_cb(tmp_path):
+    gen = AsyncMock()
+    gen.generate_skill = AsyncMock(return_value=tmp_path / "aha" / "SKILL.md")
+    reg = SkillRegistry(skills_folder=tmp_path, generator=gen)
+
+    def cb(p):
+        return None
+
+    await reg.ensure_skill("aha", {"openapi": "3.0.0"}, regenerate=True, progress_cb=cb)
+    assert gen.generate_skill.call_args.kwargs["progress_cb"] is cb

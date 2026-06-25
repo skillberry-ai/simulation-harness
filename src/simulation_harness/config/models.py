@@ -75,6 +75,47 @@ class CreationConfig(BaseModel):
     )
 
 
+class StageParams(BaseModel):
+    """Per-stage LLM tuning for the generation pipeline."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    temperature: float = Field(0.0, ge=0, le=2)
+    max_tokens: int = Field(8000, gt=0)
+
+
+class GenerationConfig(BaseModel):
+    """Multi-step skill-generation pipeline tuning (non-secret)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    concurrency: int = Field(5, gt=0, description="Max simultaneous op-section calls")
+    chunk_threshold: int = Field(
+        40, gt=0, description="Ops above this are batched by tag instead of per-op"
+    )
+    classify_batch_size: int = Field(
+        40,
+        gt=0,
+        description="Bin capacity (max operations) per stage-1b classify call",
+    )
+    repair_retries: int = Field(
+        2,
+        ge=0,
+        description="Retries per artifact before failing (→ retries+1 attempts)",
+    )
+    stage_timeout_seconds: int = Field(
+        120, gt=0, description="Per individual LLM call timeout"
+    )
+    extract: StageParams = Field(default_factory=lambda: StageParams(max_tokens=8000))
+    classify: StageParams = Field(default_factory=lambda: StageParams(max_tokens=4000))
+    schema_seed: StageParams = Field(
+        default_factory=lambda: StageParams(max_tokens=12000)
+    )
+    operation: StageParams = Field(
+        default_factory=lambda: StageParams(temperature=0.2, max_tokens=4000)
+    )
+
+
 class MCPConfig(BaseModel):
     """MCP transport configuration."""
 
@@ -115,6 +156,10 @@ class HarnessConfig(BaseModel):
     creation: CreationConfig = Field(
         default_factory=CreationConfig,
         description="Async simulation-creation tuning.",
+    )
+    generation: GenerationConfig = Field(
+        default_factory=GenerationConfig,
+        description="Multi-step skill-generation pipeline tuning.",
     )
     mcp: MCPConfig
     server: ServerSettings = Field(

@@ -92,6 +92,11 @@ class SimulationRecord:
         if phase is not None:
             self.progress.phase = phase
 
+    def set_phase(self, phase: str) -> None:
+        """Update the progress phase label without a status transition."""
+        self.progress.phase = phase
+        self.progress.updated_at = datetime.now(timezone.utc)
+
     def mark_ready(self, instance: "SimulationInstance") -> None:
         self.transition(SimulationStatus.READY)
         self.progress.phase = None  # clear phase on completion

@@ -45,7 +45,7 @@ def fake_skill_registry():
     reg = MagicMock()
     started = asyncio.Event()
 
-    async def ensure_skill(simulation_name, openapi_spec, regenerate):
+    async def ensure_skill(simulation_name, openapi_spec, regenerate, progress_cb=None):
         started.set()
         await asyncio.sleep(0.05)
         return Path(f"/tmp/skills/{simulation_name}/SKILL.md")

@@ -33,6 +33,7 @@ class SkillRegistry:
         simulation_name: str,
         openapi_spec: dict[str, Any],
         regenerate: bool = False,
+        progress_cb=None,
     ) -> Path:
         """Ensure a skill exists for the simulation.
 
@@ -109,6 +110,7 @@ class SkillRegistry:
                 openapi_spec=openapi_spec,
                 simulation_name=simulation_name,
                 skills_folder=self.skills_folder,
+                progress_cb=progress_cb,
             )
             logger.info(f"Skill generated successfully: path={result_path}")
             return result_path
