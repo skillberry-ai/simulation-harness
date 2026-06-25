@@ -1,7 +1,6 @@
 """Tests for SimulationStore."""
 
 import pytest
-from pathlib import Path
 
 from simulation_harness.state import (
     load_store_from_skill,
@@ -12,11 +11,12 @@ from simulation_harness.state import (
     BadQueryError,
 )
 
+# ``skill_dir`` is provided by tests/unit/state/conftest.py.
+
 
 @pytest.fixture
-def restaurant_store():
-    """Load the restaurant reservation skill store."""
-    skill_dir = Path("skills-store/restaurant-reservation-api")
+def restaurant_store(skill_dir):
+    """Load the restaurant reservation fixture store."""
     return load_store_from_skill(skill_dir)
 
 

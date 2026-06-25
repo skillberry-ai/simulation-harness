@@ -1,15 +1,10 @@
 """Tests for StoreRegistry."""
 
 import pytest
-from pathlib import Path
 
 from simulation_harness.state import StoreRegistry
 
-
-@pytest.fixture
-def skill_dir():
-    """Path to the restaurant reservation skill."""
-    return Path("skills-store/restaurant-reservation-api")
+# ``skill_dir`` is provided by tests/unit/state/conftest.py.
 
 
 @pytest.fixture
