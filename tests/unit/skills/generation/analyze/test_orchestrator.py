@@ -58,5 +58,5 @@ async def test_analyze_merges_enrichment_into_ir():
     assert ir.slug == "aha"
     assert ir.operations[0].operation_id == "getFeature"
     assert ir.operations[0].kind.value == "read"
-    assert ir.operations[0].path == "/features/{id}"  # mechanical fact preserved
+    assert ir.operations[0].path == "/features/{id}"
     assert ir.validate_consistency() == []

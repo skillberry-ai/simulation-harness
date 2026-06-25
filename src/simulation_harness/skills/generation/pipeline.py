@@ -67,7 +67,7 @@ async def run_pipeline(
         analyze(
             spec_dict,
             slug,
-            chat(gen_config.analyze, True),
+            chat(gen_config.extract, True),
             retries=gen_config.repair_retries,
         ),
         timeout=timeout,
