@@ -67,19 +67,26 @@ def _ir():
     )
 
 
-async def test_run_pipeline_produces_bundle_and_reports_phases():
+async def test_run_pipeline_produces_bundle_with_scenarios():
     phases = []
     with (
         patch.object(P, "analyze", AsyncMock(return_value=_ir())),
+        patch.object(P, "generate_schema", AsyncMock(return_value=SCHEMA)),
         patch.object(
             P,
-            "generate_schema_and_seed",
-            AsyncMock(return_value=(SCHEMA, {"features": [{"id": "f1"}]})),
+            "generate_scenarios",
+            AsyncMock(return_value=[
+                __import__(
+                    "simulation_harness.skills.generation.ir",
+                    fromlist=["Scenario"],
+                ).Scenario(title="Read", intent="Read a feature.", operations=["getFeature"])
+            ]),
         ),
         patch.object(
-            P,
-            "generate_section",
-            AsyncMock(return_value="### /features/{id} GET\nok"),
+            P, "generate_seed", AsyncMock(return_value={"features": [{"id": "f1"}]})
+        ),
+        patch.object(
+            P, "generate_section", AsyncMock(return_value="### /features/{id} GET\nok")
         ),
         patch.object(P, "build_chat"),
     ):
@@ -92,9 +99,42 @@ async def test_run_pipeline_produces_bundle_and_reports_phases():
             model="m",
             progress_cb=phases.append,
         )
-    assert "### /features/{id} GET" in bundle.skill_md
     assert bundle.schema == SCHEMA
     assert bundle.db == {"features": [{"id": "f1"}]}
-    assert any(p.startswith("generating_ops") for p in phases)
+    assert bundle.scenarios == [
+        {"title": "Read", "intent": "Read a feature.", "operations": ["getFeature"]}
+    ]
+    assert "## Example Scenarios" in bundle.skill_md
     assert "designing_schema" in phases
+    assert "imagining_scenarios" in phases
+    assert "seeding_database" in phases
     assert "assembling" in phases
+
+
+async def test_run_pipeline_disabled_scenarios_skips_stage():
+    phases = []
+    with (
+        patch.object(P, "analyze", AsyncMock(return_value=_ir())),
+        patch.object(P, "generate_schema", AsyncMock(return_value=SCHEMA)),
+        patch.object(P, "generate_scenarios", AsyncMock()) as mock_scen,
+        patch.object(
+            P, "generate_seed", AsyncMock(return_value={"features": [{"id": "f1"}]})
+        ),
+        patch.object(
+            P, "generate_section", AsyncMock(return_value="### /features/{id} GET\nok")
+        ),
+        patch.object(P, "build_chat"),
+    ):
+        bundle = await P.run_pipeline(
+            SPEC,
+            "aha",
+            api_key=None,
+            base_url=None,
+            gen_config=GenerationConfig(scenarios_enabled=False),
+            model="m",
+            progress_cb=phases.append,
+        )
+    mock_scen.assert_not_called()
+    assert bundle.scenarios == []
+    assert "## Example Scenarios" not in bundle.skill_md
+    assert "imagining_scenarios" not in phases
