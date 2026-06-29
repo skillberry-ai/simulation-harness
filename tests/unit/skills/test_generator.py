@@ -288,3 +288,30 @@ class TestForceSkillName:
         out = _force_skill_name(skill_md, "widget-api")
         assert "name: widget-api" in out
         assert "The `name:` field identifies the entity." in out
+
+
+class TestScenariosJSON:
+    """Test scenarios.json artifact writing."""
+
+    async def test_generate_skill_writes_scenarios_json_when_present(
+        self, tmp_path: Path
+    ) -> None:
+        bundle = SkillBundle(
+            skill_md="---\nname: aha\n---\n# Aha",
+            schema={"type": "object", "properties": {}},
+            db={"features": []},
+            scenarios=[{"title": "t", "intent": "i", "operations": []}],
+        )
+        with patch.object(G, "run_pipeline", AsyncMock(return_value=bundle)):
+            gen = SkillGenerator(api_key=SecretStr("k"))
+            await gen.generate_skill(SPEC, "aha", tmp_path)
+        scenarios = json.loads((tmp_path / "aha" / "scenarios.json").read_text())
+        assert scenarios == [{"title": "t", "intent": "i", "operations": []}]
+
+    async def test_generate_skill_omits_scenarios_json_when_empty(
+        self, tmp_path: Path
+    ) -> None:
+        with patch.object(G, "run_pipeline", AsyncMock(return_value=BUNDLE)):
+            gen = SkillGenerator(api_key=SecretStr("k"))
+            await gen.generate_skill(SPEC, "aha", tmp_path)
+        assert not (tmp_path / "aha" / "scenarios.json").exists()
