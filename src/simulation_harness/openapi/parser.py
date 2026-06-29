@@ -5,6 +5,7 @@ operations, schemas, and other relevant information.
 """
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,37 @@ from openapi_spec_validator import validate
 from openapi_spec_validator.validation.exceptions import ValidatorDetectError
 
 from simulation_harness.utils.errors import OpenAPIValidationError
+
+# MCP / Anthropic tool names must match ^[a-zA-Z0-9_-]{1,64}$. Some specs use
+# path-style operationIds (e.g. "/accommodations/search") that are invalid as
+# tool names, so the parser sanitizes every operationId into this charset.
+_INVALID_TOOL_NAME_CHARS = re.compile(r"[^a-zA-Z0-9_-]+")
+_MAX_TOOL_NAME_LEN = 64
+
+
+def sanitize_operation_id(raw: str, *, method: str, path: str) -> str:
+    """Sanitize an operationId into a valid MCP tool name.
+
+    Replaces any character outside ``[a-zA-Z0-9_-]`` with ``_``, trims leading
+    and trailing separators, and caps the length at 64. Already-valid ids are
+    returned unchanged. If the result would be empty (missing id, or one made
+    entirely of invalid characters such as ``/``), falls back to a sanitized
+    ``{method}_{path}``.
+
+    Args:
+        raw: The raw operationId from the spec (may be empty).
+        method: HTTP method, used for the fallback name.
+        path: API path, used for the fallback name.
+
+    Returns:
+        A non-empty string matching ``^[a-zA-Z0-9_-]{1,64}$``.
+    """
+    candidate = _INVALID_TOOL_NAME_CHARS.sub("_", raw or "").strip("_-")
+    if not candidate:
+        # Join with "/" (an invalid char) rather than "_" so it collapses into
+        # the path's own separators instead of producing a double underscore.
+        candidate = _INVALID_TOOL_NAME_CHARS.sub("_", f"{method}/{path}").strip("_-")
+    return candidate[:_MAX_TOOL_NAME_LEN].strip("_-")
 
 
 class OpenAPIOperation:
@@ -142,6 +174,7 @@ class OpenAPISpec:
 
     def _parse_operations(self) -> None:
         """Parse all operations from paths."""
+        used_ids: set[str] = set()
         for path, path_item in self.paths.items():
             # Skip non-operation keys
             if not isinstance(path_item, dict):
@@ -156,8 +189,16 @@ class OpenAPISpec:
                 if not isinstance(operation_data, dict):
                     continue
 
-                # Extract operation details
-                operation_id = operation_data.get("operationId", f"{method}_{path}")
+                # Extract operation details. Sanitize the operationId into a
+                # valid MCP tool name and disambiguate collisions so every
+                # operation has a unique, valid identifier.
+                operation_id = sanitize_operation_id(
+                    operation_data.get("operationId", ""),
+                    method=method,
+                    path=path,
+                )
+                operation_id = self._disambiguate_id(operation_id, used_ids)
+                used_ids.add(operation_id)
                 summary = operation_data.get("summary")
                 description = operation_data.get("description")
                 parameters = operation_data.get("parameters", [])
@@ -179,6 +220,25 @@ class OpenAPISpec:
                 )
 
                 self.operations.append(operation)
+
+    @staticmethod
+    def _disambiguate_id(operation_id: str, used_ids: set[str]) -> str:
+        """Append a numeric suffix to keep operation ids unique.
+
+        Sanitization can collapse distinct operationIds to the same string, so
+        on collision we append ``_2``, ``_3``, ... while keeping the result
+        within the tool-name length cap.
+        """
+        if operation_id not in used_ids:
+            return operation_id
+        n = 2
+        while True:
+            suffix = f"_{n}"
+            base = operation_id[: _MAX_TOOL_NAME_LEN - len(suffix)].strip("_-")
+            candidate = f"{base}{suffix}"
+            if candidate not in used_ids:
+                return candidate
+            n += 1
 
     @property
     def title(self) -> str:
