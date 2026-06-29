@@ -114,6 +114,15 @@ class GenerationConfig(BaseModel):
     operation: StageParams = Field(
         default_factory=lambda: StageParams(temperature=0.2, max_tokens=4000)
     )
+    scenarios: StageParams = Field(
+        default_factory=lambda: StageParams(temperature=0.4, max_tokens=3000)
+    )
+    scenarios_enabled: bool = Field(
+        True, description="Generate example user scenarios and seed data to match"
+    )
+    scenarios_count: int = Field(
+        5, gt=0, description="Number of example scenarios to generate"
+    )
 
 
 class MCPConfig(BaseModel):

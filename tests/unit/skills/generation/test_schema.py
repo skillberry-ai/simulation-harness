@@ -6,7 +6,7 @@ from simulation_harness.skills.generation.ir import (
     SpecModel,
     StoreMetadata,
 )
-from simulation_harness.skills.generation.stages import schema_seed as S
+from simulation_harness.skills.generation.stages import schema as S
 
 GOOD_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -43,23 +43,17 @@ def _ir():
     )
 
 
-def test_validate_accepts_consistent_pair():
-    assert S.validate_schema_and_db(GOOD_SCHEMA, {"features": [{"id": "f1"}]}) == []
+def test_validate_schema_accepts_valid_schema():
+    assert S.validate_schema(GOOD_SCHEMA) == []
 
 
-def test_validate_flags_db_not_matching_schema():
-    errs = S.validate_schema_and_db(GOOD_SCHEMA, {"features": [{"id": 123}]})
-    assert errs and any("123" in e or "integer" in e or "string" in e for e in errs)
+def test_validate_schema_flags_invalid_schema():
+    assert S.validate_schema({"type": "not-a-type"})
 
 
-def test_validate_flags_invalid_schema():
-    errs = S.validate_schema_and_db({"type": "not-a-type"}, {})
-    assert errs
-
-
-async def test_generate_returns_validated_pair():
-    payload = {"schema_json": GOOD_SCHEMA, "db_json": {"features": [{"id": "f1"}]}}
-    with patch.object(S, "call_json", AsyncMock(return_value=payload)):
-        schema, db = await S.generate_schema_and_seed(_ir(), llm=object(), retries=2)
+async def test_generate_schema_returns_validated_schema():
+    with patch.object(
+        S, "call_json", AsyncMock(return_value={"schema_json": GOOD_SCHEMA})
+    ):
+        schema = await S.generate_schema(_ir(), llm=object(), retries=2)
     assert schema == GOOD_SCHEMA
-    assert db == {"features": [{"id": "f1"}]}

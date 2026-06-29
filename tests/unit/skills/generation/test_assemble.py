@@ -52,7 +52,7 @@ def _ir():
 
 
 def test_render_preamble_has_frontmatter_and_sections():
-    md = A.render_preamble(_ir())
+    md = A.render_preamble(_ir(), [])
     assert md.startswith("---")
     assert "name: aha" in md
     assert "## Session State Management" in md
@@ -61,19 +61,38 @@ def test_render_preamble_has_frontmatter_and_sections():
 
 def test_assemble_forces_name_and_appends_sections():
     ir = _ir()
-    md = A.assemble_skill(ir, A.render_preamble(ir), ["### /features/{id} GET\nok"])
+    md = A.assemble_skill(ir, A.render_preamble(ir, []), ["### /features/{id} GET\nok"])
     assert "name: aha" in md
     assert "### /features/{id} GET" in md
 
 
 def test_validate_bundle_passes_for_complete_skill():
     ir = _ir()
-    md = A.assemble_skill(ir, A.render_preamble(ir), ["### /features/{id} GET\nok"])
+    md = A.assemble_skill(ir, A.render_preamble(ir, []), ["### /features/{id} GET\nok"])
     assert A.validate_bundle(ir, md, SCHEMA, {"features": [{"id": "f1"}]}) == []
 
 
 def test_validate_bundle_flags_missing_operation_section():
     ir = _ir()
-    md = A.assemble_skill(ir, A.render_preamble(ir), [])  # no sections
+    md = A.assemble_skill(ir, A.render_preamble(ir, []), [])  # no sections
     errs = A.validate_bundle(ir, md, SCHEMA, {"features": [{"id": "f1"}]})
     assert any("getFeature" in e or "/features/{id} GET" in e for e in errs)
+
+
+def test_render_preamble_includes_scenarios_section():
+    scenarios = [
+        {
+            "title": "Read a feature",
+            "intent": "Fetch a feature by id.",
+            "operations": ["getFeature"],
+        }
+    ]
+    out = A.render_preamble(_ir(), scenarios)
+    assert "## Example Scenarios" in out
+    assert "Read a feature" in out
+    assert "getFeature" in out
+
+
+def test_render_preamble_omits_scenarios_section_when_empty():
+    out = A.render_preamble(_ir(), [])
+    assert "## Example Scenarios" not in out

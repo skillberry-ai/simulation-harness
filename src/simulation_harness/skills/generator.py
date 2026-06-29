@@ -59,12 +59,13 @@ class SkillGenerator:
         """Generate a skill from an OpenAPI specification.
 
         Delegates content generation to the multi-step pipeline, then writes
-        the four artifacts via the atomic temp-dir → rename pattern:
+        artifacts via the atomic temp-dir → rename pattern:
         1. Create temp dir: <skills_folder>/.<name>.tmp-<uuid>/
         2. Run the generation pipeline → SkillBundle
         3. Write SKILL.md, schema.json, db.json, api.json to temp dir
-        4. Atomic rename: temp dir → <skills_folder>/<name>/
-        5. On failure: clean up temp dir
+        4. Write scenarios.json to temp dir (if bundle.scenarios is non-empty)
+        5. Atomic rename: temp dir → <skills_folder>/<name>/
+        6. On failure: clean up temp dir
 
         Args:
             openapi_spec: OpenAPI specification dictionary
@@ -95,6 +96,10 @@ class SkillGenerator:
             (temp_dir / "SKILL.md").write_text(bundle.skill_md)
             (temp_dir / "schema.json").write_text(json.dumps(bundle.schema, indent=2))
             (temp_dir / "db.json").write_text(json.dumps(bundle.db, indent=2))
+            if bundle.scenarios:
+                (temp_dir / "scenarios.json").write_text(
+                    json.dumps(bundle.scenarios, indent=2)
+                )
             (temp_dir / "api.json").write_text(json.dumps(openapi_spec, indent=2))
             try:
                 temp_dir.rename(final_dir)

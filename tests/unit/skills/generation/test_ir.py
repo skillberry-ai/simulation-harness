@@ -3,6 +3,7 @@ from simulation_harness.skills.generation.ir import (
     Field,
     Operation,
     OperationKind,
+    Scenario,
     SpecModel,
     StoreMetadata,
 )
@@ -71,3 +72,9 @@ def test_entity_collection_must_appear_in_store_metadata():
     ir = _ir(store_metadata=StoreMetadata(collections=[], pk_map={}))
     errs = ir.validate_consistency()
     assert any("features" in e for e in errs)
+
+
+def test_scenario_defaults_operations_to_empty_list():
+    s = Scenario(title="Book a room", intent="Find and book an available room.")
+    assert s.operations == []
+    assert s.title == "Book a room"

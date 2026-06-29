@@ -34,6 +34,13 @@ class Relationship(BaseModel):
     target_field: str
 
 
+class Scenario(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    title: str
+    intent: str
+    operations: list[str] = []
+
+
 class Entity(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str

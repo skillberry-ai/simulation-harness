@@ -38,5 +38,16 @@ that operation.
 
 Preserve IDs once created, keep timestamps monotonic, and reuse references so
 related entities stay consistent across calls.
+{% if scenarios %}
 
+{%- endif %}
+{%- if scenarios %}
+## Example Scenarios
+
+Representative user stories this simulation can satisfy with the seeded data:
+
+{% for s in scenarios -%}
+{{ loop.index }}. **{{ s.title }}** — {{ s.intent }}{% if s.operations %} (operations: {{ s.operations | join(", ") }}){% endif %}
+{% endfor -%}
+{% endif %}
 ## API Operation Simulation

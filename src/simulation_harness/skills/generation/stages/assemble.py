@@ -12,7 +12,7 @@ from jinja2 import Template
 from simulation_harness.skills.generation.ir import SpecModel
 from simulation_harness.skills.generation.naming import _force_skill_name
 from simulation_harness.skills.generation.stages.operations import section_header
-from simulation_harness.skills.generation.stages.schema_seed import (
+from simulation_harness.skills.generation.stages.seed import (
     validate_schema_and_db,
 )
 
@@ -22,11 +22,12 @@ def _template() -> Template:
     return Template((assets / "generation" / "skill_preamble.jinja2").read_text())
 
 
-def render_preamble(ir: SpecModel) -> str:
+def render_preamble(ir: SpecModel, scenarios: list[dict]) -> str:
     return _template().render(
         slug=ir.slug,
         api_name=ir.api_name,
         collections=ir.store_metadata.collections,
+        scenarios=scenarios,
     )
 
 
