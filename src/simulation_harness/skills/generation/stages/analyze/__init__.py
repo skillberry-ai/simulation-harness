@@ -20,7 +20,7 @@ from simulation_harness.skills.generation.stages.analyze.merge import (
     validate_coverage,
 )
 
-__all__ = ["analyze", "extract_operations"]
+__all__ = ["analyze", "extract_operations", "inline_schema_evidence"]
 
 
 def extract_operations(spec: OpenAPISpec) -> list[dict]:
@@ -36,6 +36,29 @@ def extract_operations(spec: OpenAPISpec) -> list[dict]:
         }
         for op in spec.operations
     ]
+
+
+def inline_schema_evidence(spec: OpenAPISpec) -> dict:
+    """Synthesize a `name -> JSON schema` map from operation request/response
+    bodies, for RPC/tool-style specs that declare no `components.schemas`.
+
+    The output mirrors the shape of `components.schemas` so it can be fed to
+    the extract stage unchanged. Keys are suffixed `__request`/`__response`.
+    The tool-style ``{"returns": {...}}`` response envelope is unwrapped one
+    level so the LLM sees the entity shape directly.
+    """
+    evidence: dict = {}
+    for op in spec.operations:
+        req = op.get_request_schema()
+        if req:
+            evidence[f"{op.operation_id}__request"] = req
+        resp = op.get_response_schema("200")
+        if resp:
+            props = resp.get("properties") if isinstance(resp, dict) else None
+            if isinstance(props, dict) and isinstance(props.get("returns"), dict):
+                resp = props["returns"]
+            evidence[f"{op.operation_id}__response"] = resp
+    return evidence
 
 
 async def _guard(coro, timeout):
@@ -60,12 +83,23 @@ async def analyze(
     spec = OpenAPISpec(spec_dict)
     stubs = extract_operations(spec)
     components = spec_dict.get("components", {}).get("schemas", {})
+    # RPC/tool-style specs declare no components.schemas; fall back to the
+    # schemas carried inline in operation request/response bodies.
+    schema_source = components or inline_schema_evidence(spec)
 
     # Stage 1a — extract data model
     cb("extracting_model")
     dm = await _guard(
-        extract_data_model(components, slug, extract_llm, retries=retries), timeout
+        extract_data_model(schema_source, slug, extract_llm, retries=retries), timeout
     )
+    if not dm.entities:
+        raise GenerationStageError(
+            "extract",
+            [
+                "no entities extracted: the spec declares no components.schemas "
+                "and no usable request/response body schemas were found"
+            ],
+        )
     entity_names = [e.name for e in dm.entities]
 
     # Stage 1b — classify operation semantics (bounded fan-out)

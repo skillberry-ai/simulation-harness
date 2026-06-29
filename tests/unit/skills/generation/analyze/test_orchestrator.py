@@ -23,6 +23,50 @@ SPEC = {
     },
 }
 
+# RPC / tool-style spec: no components.schemas; data shapes live inline in
+# request/response bodies (the tau2-airline shape).
+RPC_SPEC = {
+    "openapi": "3.0.0",
+    "info": {"title": "Booker", "version": "1.0"},
+    "paths": {
+        "/get_user": {
+            "post": {
+                "operationId": "get_user",
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "returns": {
+                                            "type": "object",
+                                            "properties": {
+                                                "user_id": {"type": "string"},
+                                                "name": {"type": "string"},
+                                            },
+                                        }
+                                    },
+                                }
+                            }
+                        }
+                    }
+                },
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {"user_id": {"type": "string"}},
+                            }
+                        }
+                    }
+                },
+            }
+        }
+    },
+}
+
 
 def _dm():
     return DataModel(
@@ -100,6 +144,108 @@ async def test_analyze_orchestrates_extract_classify_merge():
     assert ir.validate_consistency() == []
     assert "extracting_model" in phases
     assert any(p.startswith("classifying_ops") for p in phases)
+
+
+def test_inline_schema_evidence_collects_request_and_response():
+    ev = A.inline_schema_evidence(OpenAPISpec(RPC_SPEC))
+    assert ev["get_user__request"] == {
+        "type": "object",
+        "properties": {"user_id": {"type": "string"}},
+    }
+    # response unwraps the tool-style {"returns": {...}} envelope
+    assert set(ev["get_user__response"]["properties"]) == {"user_id", "name"}
+
+
+def test_inline_schema_evidence_skips_ops_without_bodies():
+    # SPEC has no requestBody and a schema-less 200 response.
+    assert A.inline_schema_evidence(OpenAPISpec(SPEC)) == {}
+
+
+async def test_analyze_falls_back_to_inline_when_no_components():
+    captured: dict = {}
+
+    async def fake_extract(source, slug, llm, *, retries):
+        captured["source"] = source
+        return _dm()
+
+    records = [{"operation_id": "get_user", "kind": "read", "patterns": []}]
+    with (
+        patch.object(A, "extract_data_model", AsyncMock(side_effect=fake_extract)),
+        patch.object(A, "classify_batch", AsyncMock(return_value=records)),
+    ):
+        ir = await A.analyze(
+            RPC_SPEC,
+            "booker",
+            extract_llm=object(),
+            classify_llm=object(),
+            retries=0,
+            batch_cap=40,
+            concurrency=5,
+        )
+    assert "get_user__request" in captured["source"]
+    assert "get_user__response" in captured["source"]
+    assert ir.operations[0].operation_id == "get_user"
+
+
+async def test_analyze_prefers_components_over_inline():
+    spec = {
+        "openapi": "3.0.0",
+        "info": {"title": "Aha", "version": "1.0"},
+        "components": {"schemas": {"Feature": {"type": "object"}}},
+        "paths": {
+            "/get_user": {
+                "post": {
+                    "operationId": "get_user",
+                    "requestBody": {
+                        "content": {"application/json": {"schema": {"type": "object"}}}
+                    },
+                    "responses": {"200": {"description": "ok"}},
+                }
+            }
+        },
+    }
+    captured: dict = {}
+
+    async def fake_extract(source, slug, llm, *, retries):
+        captured["source"] = source
+        return _dm()
+
+    records = [{"operation_id": "get_user", "kind": "read", "patterns": []}]
+    with (
+        patch.object(A, "extract_data_model", AsyncMock(side_effect=fake_extract)),
+        patch.object(A, "classify_batch", AsyncMock(return_value=records)),
+    ):
+        await A.analyze(
+            spec,
+            "aha",
+            extract_llm=object(),
+            classify_llm=object(),
+            retries=0,
+            batch_cap=40,
+            concurrency=5,
+        )
+    # components.schemas wins; inline bodies are ignored.
+    assert captured["source"] == {"Feature": {"type": "object"}}
+
+
+async def test_analyze_raises_when_no_entities_extracted():
+    empty_dm = DataModel(
+        api_name="x",
+        entities=[],
+        store_metadata=StoreMetadata(collections=[], pk_map={}),
+    )
+    with patch.object(A, "extract_data_model", AsyncMock(return_value=empty_dm)):
+        with pytest.raises(GenerationStageError) as exc:
+            await A.analyze(
+                RPC_SPEC,
+                "x",
+                extract_llm=object(),
+                classify_llm=object(),
+                retries=0,
+                batch_cap=40,
+                concurrency=5,
+            )
+    assert exc.value.stage == "extract"
 
 
 async def test_analyze_raises_on_coverage_gap():
