@@ -19,6 +19,7 @@ from simulation_harness.models.responses import (
     SimulationResponse,
 )
 from simulation_harness.openapi.parser import OpenAPISpec, validate_openapi_dict
+from simulation_harness.skills.generation.naming import sanitize_skill_name
 from simulation_harness.utils.errors import (
     OpenAPIValidationError,
     SimulationAlreadyExistsError,
@@ -139,14 +140,13 @@ async def create_simulation(
             detail=f"OpenAPI parsing failed: {e}",
         )
 
+    # The simulation name doubles as the skill directory name and the SKILL.md
+    # frontmatter `name`, both of which must satisfy the Agent Skills spec.
     if body.name:
-        simulation_name = body.name.lower().replace(" ", "-")
+        simulation_name = sanitize_skill_name(body.name)
     else:
-        simulation_name = (
-            body.openapi_spec.get("info", {})
-            .get("title", "simulation")
-            .lower()
-            .replace(" ", "-")
+        simulation_name = sanitize_skill_name(
+            body.openapi_spec.get("info", {}).get("title", "simulation")
         )
 
     try:
