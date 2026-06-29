@@ -83,7 +83,7 @@ def main() -> None:
 
     # Poll until ready or failed
     poll_url = f"{server_url}/api/v1/simulation"
-    deadline = time.monotonic() + 180  # 3 min cap
+    deadline = time.monotonic() + 600  # 3 min cap
     while time.monotonic() < deadline:
         try:
             with urlopen(Request(poll_url, method="GET")) as resp:
