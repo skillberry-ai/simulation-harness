@@ -31,7 +31,8 @@ Let agents rehearse actions with potentially irreversible impacts before executi
 The harness consists of:
 - **Simulation Host** — manages the singleton simulation lifecycle and routing
 - **Simulation Instance** — executes simulated tool calls via LLM (LangChain + LangGraph)
-- **Skill Registry** — manages skill definitions and OpenAPI specs
+- **Skill Registry** — manages skill definitions and OpenAPI specs, gating reuse vs. regeneration
+- **Skill Generation Pipeline** — turns an OpenAPI spec into a simulation skill via staged LLM calls (see [docs/simulation-generation.md](docs/simulation-generation.md))
 - **MCP Integration** — exposes tools through standard MCP protocol (SSE & Streamable HTTP transports)
 - **State Management** — per-session state store the agent uses for cross-call coherence
 
@@ -269,17 +270,27 @@ simulation-harness/
 │   │   ├── deep_agent.py   # LangChain + LangGraph agent
 │   │   ├── prompts.py
 │   │   ├── session_manager.py
+│   │   ├── skill_backend.py        # Filesystem backend for skill loading
 │   │   └── templates/      # Jinja2 prompt templates (packaged)
 │   ├── api/v1/             # FastAPI REST endpoints
 │   ├── config/             # Configuration models
 │   ├── core/               # Core simulation logic
 │   │   ├── simulation_host.py      # Singleton lifecycle
 │   │   ├── simulation_instance.py  # Per-call execution
-│   │   └── skill_registry.py
+│   │   ├── simulation_creator.py   # Async create pipeline
+│   │   ├── simulation_record.py    # Create/status bookkeeping
+│   │   └── skill_registry.py       # Reuse-vs-generate gate
 │   ├── mcp_integration/    # MCP server (SSE + Streamable HTTP, sidecar)
 │   ├── models/             # Domain models and schemas
 │   ├── openapi/            # Spec parsing, validation, tool generation
-│   ├── skills/             # Skill generation (Jinja2 assets packaged)
+│   ├── skills/             # Skill generation (see docs/simulation-generation.md)
+│   │   ├── generator.py    # Atomic skill-bundle writer
+│   │   ├── generation/     # Multi-stage generation pipeline
+│   │   │   ├── pipeline.py # Stage orchestrator
+│   │   │   ├── ir.py       # SpecModel intermediate representation
+│   │   │   ├── repair.py   # Produce → validate → re-prompt loop
+│   │   │   └── stages/     # analyze, operations, schema, scenarios, seed, assemble
+│   │   └── assets/         # Jinja2 + prompt templates (packaged)
 │   ├── state/              # Per-session state store + tools
 │   ├── utils/              # Errors and helpers
 │   ├── main.py             # FastAPI app + error handlers
@@ -291,8 +302,9 @@ simulation-harness/
 ├── deploy/                 # Docker & Kubernetes manifests
 │   └── k8s/                # Kustomize base
 ├── docs/
-│   ├── api.md              # API reference
-│   └── design/             # Design documents
+│   ├── api.md                      # API reference
+│   ├── simulation-generation.md    # Skill-generation pipeline guide
+│   └── design/                     # Design documents
 ├── skills-store/           # Generated skills (configured skills folder)
 ├── utils/
 │   ├── simulate.py         # CLI for creating simulations
@@ -305,6 +317,7 @@ simulation-harness/
 ## Documentation
 
 - **[API reference](docs/api.md)** — REST + MCP integrator's guide
+- **[Simulation generation](docs/simulation-generation.md)** — how an OpenAPI spec becomes a simulation skill (the generation pipeline, stage by stage)
 - **[Deployment guide](deploy/README.md)** — Docker and Kubernetes
 - **Design documents** in `docs/design/`:
   - [README.md](docs/design/README.md) — master document and index
