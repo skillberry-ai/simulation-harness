@@ -49,6 +49,27 @@ def test_extract_operations_pulls_stub_fields():
     ]
 
 
+def test_extract_operations_uses_sanitized_ids():
+    spec = OpenAPISpec(
+        {
+            "openapi": "3.0.0",
+            "info": {"title": "Booking", "version": "1.0"},
+            "paths": {
+                "/accommodations/search": {
+                    "post": {
+                        "operationId": "/accommodations/search",
+                        "responses": {"200": {"description": "ok"}},
+                    }
+                }
+            },
+        }
+    )
+    ops = A.extract_operations(spec)
+    assert [o["operation_id"] for o in ops] == ["accommodations_search"]
+    # The IR id must match what the parser/MCP layer exposes as the tool name.
+    assert ops[0]["operation_id"] == spec.operations[0].operation_id
+
+
 async def test_analyze_orchestrates_extract_classify_merge():
     records = [
         {

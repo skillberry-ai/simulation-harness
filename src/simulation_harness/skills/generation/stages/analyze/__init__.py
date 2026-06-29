@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import re
 from collections.abc import Callable
 
 from simulation_harness.openapi.parser import OpenAPISpec
@@ -23,32 +22,20 @@ from simulation_harness.skills.generation.stages.analyze.merge import (
 
 __all__ = ["analyze", "extract_operations"]
 
-_NON_ALNUM = re.compile(r"[^a-zA-Z0-9]+")
-
 
 def extract_operations(spec: OpenAPISpec) -> list[dict]:
-    stubs: list[dict] = []
-    for path, item in spec.paths.items():
-        if not isinstance(item, dict):
-            continue
-        for method in ("get", "post", "put", "patch", "delete", "head", "options"):
-            op = item.get(method)
-            if not isinstance(op, dict):
-                continue
-            op_id = op.get("operationId") or _NON_ALNUM.sub(
-                "_", f"{method}_{path}"
-            ).strip("_")
-            tags = op.get("tags") or []
-            stubs.append(
-                {
-                    "operation_id": op_id,
-                    "method": method.upper(),
-                    "path": path,
-                    "tag": tags[0] if tags else None,
-                    "summary": op.get("summary"),
-                }
-            )
-    return stubs
+    # Reuse the parser's operations so the IR's operation_ids are the same
+    # sanitized, collision-free ids the MCP layer exposes as tool names.
+    return [
+        {
+            "operation_id": op.operation_id,
+            "method": op.method.upper(),
+            "path": op.path,
+            "tag": op.tags[0] if op.tags else None,
+            "summary": op.summary or None,
+        }
+        for op in spec.operations
+    ]
 
 
 async def _guard(coro, timeout):

@@ -1,6 +1,7 @@
 """Unit tests for OpenAPI parser."""
 
 import json
+import re
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -10,6 +11,7 @@ import pytest
 from simulation_harness.openapi.parser import (
     OpenAPISpec,
     load_openapi_spec,
+    sanitize_operation_id,
     validate_openapi_spec,
 )
 from simulation_harness.utils.errors import OpenAPIValidationError
@@ -382,6 +384,115 @@ def test_skip_validation(temp_dir: Path):
     # Should not raise even if spec is incomplete
     spec = load_openapi_spec(spec_file, validate_spec=False)
     assert spec.title == "Test"
+
+
+def _spec_with_operation_ids(paths: dict[str, Any]) -> OpenAPISpec:
+    """Build an OpenAPISpec directly from a paths mapping."""
+    return OpenAPISpec(
+        {
+            "openapi": "3.0.0",
+            "info": {"title": "Test API", "version": "1.0.0"},
+            "paths": paths,
+        }
+    )
+
+
+class TestSanitizeOperationId:
+    """Unit tests for sanitize_operation_id."""
+
+    def test_path_style_id_becomes_underscore_separated(self):
+        result = sanitize_operation_id(
+            "/accommodations/search", method="post", path="/accommodations/search"
+        )
+        assert result == "accommodations_search"
+
+    def test_leading_and_trailing_separators_stripped(self):
+        result = sanitize_operation_id(
+            "orders/preview", method="post", path="/orders/preview"
+        )
+        assert result == "orders_preview"
+
+    def test_already_valid_id_unchanged(self):
+        result = sanitize_operation_id("getUser", method="get", path="/users/{id}")
+        assert result == "getUser"
+
+    def test_hyphen_and_underscore_preserved(self):
+        result = sanitize_operation_id("list_users-v2", method="get", path="/users")
+        assert result == "list_users-v2"
+
+    def test_empty_id_falls_back_to_method_and_path(self):
+        result = sanitize_operation_id("", method="get", path="/users/{id}")
+        assert result == "get_users_id"
+
+    def test_all_invalid_id_falls_back_to_method_and_path(self):
+        result = sanitize_operation_id("/", method="get", path="/users/{id}")
+        assert result == "get_users_id"
+
+    def test_result_is_valid_mcp_tool_name(self):
+        result = sanitize_operation_id(
+            "/common/locations/airports",
+            method="post",
+            path="/common/locations/airports",
+        )
+        assert re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", result)
+
+    def test_length_capped_at_64(self):
+        long_raw = "/" + "/".join(["segment"] * 20)
+        result = sanitize_operation_id(long_raw, method="get", path=long_raw)
+        assert len(result) <= 64
+        assert re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", result)
+
+
+class TestParserSanitizesOperationIds:
+    """Integration: the parser sanitizes operationIds when building operations."""
+
+    def test_slash_operation_ids_are_sanitized(self):
+        spec = _spec_with_operation_ids(
+            {
+                "/accommodations/search": {
+                    "post": {"operationId": "/accommodations/search", "responses": {}}
+                },
+                "/orders/preview": {
+                    "post": {"operationId": "orders/preview", "responses": {}}
+                },
+            }
+        )
+
+        ids = [op.operation_id for op in spec.operations]
+        assert ids == ["accommodations_search", "orders_preview"]
+        assert all("/" not in oid for oid in ids)
+
+    def test_get_operation_by_id_uses_sanitized_id(self):
+        spec = _spec_with_operation_ids(
+            {
+                "/accommodations/search": {
+                    "post": {"operationId": "/accommodations/search", "responses": {}}
+                }
+            }
+        )
+
+        op = spec.get_operation_by_id("accommodations_search")
+        assert op is not None
+        assert op.path == "/accommodations/search"
+        assert op.method == "post"
+
+    def test_colliding_ids_are_disambiguated(self):
+        spec = _spec_with_operation_ids(
+            {
+                "/a": {"post": {"operationId": "foo/bar", "responses": {}}},
+                "/b": {"post": {"operationId": "foo bar", "responses": {}}},
+            }
+        )
+
+        ids = [op.operation_id for op in spec.operations]
+        assert ids == ["foo_bar", "foo_bar_2"]
+        assert len(set(ids)) == len(ids)
+
+    def test_missing_operation_id_sanitized_fallback(self):
+        spec = _spec_with_operation_ids({"/users/{id}": {"get": {"responses": {}}}})
+
+        ids = [op.operation_id for op in spec.operations]
+        assert ids == ["get_users_id"]
 
 
 # Made with Bob
