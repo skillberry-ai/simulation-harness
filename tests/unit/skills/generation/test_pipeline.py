@@ -75,12 +75,18 @@ async def test_run_pipeline_produces_bundle_with_scenarios():
         patch.object(
             P,
             "generate_scenarios",
-            AsyncMock(return_value=[
-                __import__(
-                    "simulation_harness.skills.generation.ir",
-                    fromlist=["Scenario"],
-                ).Scenario(title="Read", intent="Read a feature.", operations=["getFeature"])
-            ]),
+            AsyncMock(
+                return_value=[
+                    __import__(
+                        "simulation_harness.skills.generation.ir",
+                        fromlist=["Scenario"],
+                    ).Scenario(
+                        title="Read",
+                        intent="Read a feature.",
+                        operations=["getFeature"],
+                    )
+                ]
+            ),
         ),
         patch.object(
             P, "generate_seed", AsyncMock(return_value={"features": [{"id": "f1"}]})

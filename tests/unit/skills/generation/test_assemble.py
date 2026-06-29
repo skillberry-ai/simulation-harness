@@ -81,7 +81,11 @@ def test_validate_bundle_flags_missing_operation_section():
 
 def test_render_preamble_includes_scenarios_section():
     scenarios = [
-        {"title": "Read a feature", "intent": "Fetch a feature by id.", "operations": ["getFeature"]}
+        {
+            "title": "Read a feature",
+            "intent": "Fetch a feature by id.",
+            "operations": ["getFeature"],
+        }
     ]
     out = A.render_preamble(_ir(), scenarios)
     assert "## Example Scenarios" in out
