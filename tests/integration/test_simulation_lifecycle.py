@@ -187,7 +187,9 @@ class TestSimulationCreation:
 
             assert response.status_code == 202
             data = response.json()
-            assert data["name"] == "test-api-3.1"
+            # "Test API 3.1" sanitizes to a valid Agent Skills name: the dot
+            # becomes a hyphen (see sanitize_skill_name).
+            assert data["name"] == "test-api-3-1"
 
             final = poll_until_ready(app_client, timeout=30.0)
 
