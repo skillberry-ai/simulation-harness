@@ -20,7 +20,7 @@ VALID = {
 }
 
 
-async def test_extract_data_model_builds_model():
+async def test_extract_data_model_builds_model() -> None:
     with patch.object(E, "call_json", AsyncMock(return_value=VALID)):
         dm = await E.extract_data_model({}, slug="aha", llm=object(), retries=2)
     assert dm.api_name == "Aha"
@@ -28,7 +28,7 @@ async def test_extract_data_model_builds_model():
     assert dm.store_metadata.pk_map == {"features": "id"}
 
 
-def test_validate_data_model_flags_undeclared_collection():
+def test_validate_data_model_flags_undeclared_collection() -> None:
     dm = E.DataModel(
         api_name="x",
         entities=[Entity(name="F", collection="features", primary_key="id", fields=[])],
@@ -38,7 +38,7 @@ def test_validate_data_model_flags_undeclared_collection():
     assert any("features" in e for e in errors)
 
 
-async def test_extract_repairs_then_succeeds():
+async def test_extract_repairs_then_succeeds() -> None:
     # first payload omits store_metadata (shape error), second is valid
     bad = {"api_name": "Aha", "entities": []}
     seq = iter([bad, VALID])
@@ -47,7 +47,7 @@ async def test_extract_repairs_then_succeeds():
     assert dm.entities[0].name == "Feature"
 
 
-async def test_extract_exhausts_retries_raises():
+async def test_extract_exhausts_retries_raises() -> None:
     bad = {"api_name": "Aha", "entities": []}  # missing store_metadata every time
     with patch.object(E, "call_json", AsyncMock(return_value=bad)):
         with pytest.raises(GenerationStageError) as exc:

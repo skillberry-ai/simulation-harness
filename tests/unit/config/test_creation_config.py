@@ -4,25 +4,28 @@
 import pytest
 
 from simulation_harness.config.models import CreationConfig, HarnessConfig
+from typing import Any
 
 
-def test_creation_config_default():
+def test_creation_config_default() -> None:
     cfg = CreationConfig()
     assert cfg.max_duration_seconds == 600
 
 
-def test_creation_config_must_be_positive():
+def test_creation_config_must_be_positive() -> None:
     with pytest.raises(ValueError):
         CreationConfig(max_duration_seconds=0)
 
 
-def test_harness_config_includes_creation_default(minimal_harness_kwargs):
+def test_harness_config_includes_creation_default(
+    minimal_harness_kwargs: dict[str, Any],
+) -> None:
     cfg = HarnessConfig(**minimal_harness_kwargs)
     assert cfg.creation.max_duration_seconds == 600
 
 
 @pytest.fixture
-def minimal_harness_kwargs():
+def minimal_harness_kwargs() -> dict[str, Any]:
     return {
         "llm": {
             "provider": "openai",

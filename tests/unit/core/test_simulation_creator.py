@@ -12,22 +12,23 @@ from simulation_harness.core.simulation_record import (
     SimulationRecord,
     SimulationStatus,
 )
+from typing import Any
 
 
 @pytest.fixture
-def record():
+def record() -> Any:
     return SimulationRecord.declare(name="test-api")
 
 
 @pytest.fixture
-def skill_registry():
+def skill_registry() -> MagicMock:
     reg = MagicMock()
     reg.ensure_skill = AsyncMock(return_value=Path("/tmp/skills/test-api/SKILL.md"))
     return reg
 
 
 @pytest.fixture
-def instance_factory():
+def instance_factory() -> Any:
     """Synchronous callable returning a fake SimulationInstance."""
     instance = MagicMock()
     instance.shutdown = AsyncMock()
@@ -35,7 +36,9 @@ def instance_factory():
     return factory, instance
 
 
-async def test_run_advances_through_to_ready(record, skill_registry, instance_factory):
+async def test_run_advances_through_to_ready(
+    record: Any, skill_registry: MagicMock, instance_factory: Any
+) -> None:
     factory, instance = instance_factory
     creator = SimulationCreator(
         record=record,
@@ -56,8 +59,8 @@ async def test_run_advances_through_to_ready(record, skill_registry, instance_fa
 
 
 async def test_skill_reuse_skips_generating_skill_phase(
-    record, skill_registry, instance_factory
-):
+    record: Any, skill_registry: MagicMock, instance_factory: Any
+) -> None:
     factory, instance = instance_factory
     creator = SimulationCreator(
         record=record,
@@ -72,7 +75,7 @@ async def test_skill_reuse_skips_generating_skill_phase(
     statuses_seen: list[SimulationStatus] = []
     original_transition = record.transition
 
-    def spy(new_status, phase=None):
+    def spy(new_status: Any, phase: Any = None) -> Any:
         statuses_seen.append(new_status)
         return original_transition(new_status, phase=phase)
 
@@ -86,8 +89,8 @@ async def test_skill_reuse_skips_generating_skill_phase(
 
 
 async def test_skill_generation_failure_marks_failed(
-    record, skill_registry, instance_factory
-):
+    record: Any, skill_registry: MagicMock, instance_factory: Any
+) -> None:
     factory, _ = instance_factory
     skill_registry.ensure_skill.side_effect = RuntimeError("boom")
 
@@ -110,13 +113,13 @@ async def test_skill_generation_failure_marks_failed(
 
 
 async def test_cancellation_during_skill_generation_propagates(
-    record, skill_registry, instance_factory
-):
+    record: Any, skill_registry: MagicMock, instance_factory: Any
+) -> None:
     factory, _ = instance_factory
     started = asyncio.Event()
     cancelled_inside = asyncio.Event()
 
-    async def slow_ensure_skill(*args, **kwargs):
+    async def slow_ensure_skill(*args: Any, **kwargs: Any) -> Any:
         started.set()
         try:
             await asyncio.sleep(10)
@@ -148,11 +151,11 @@ async def test_cancellation_during_skill_generation_propagates(
 
 
 async def test_timeout_marks_failed_with_creation_timeout(
-    record, skill_registry, instance_factory
-):
+    record: Any, skill_registry: MagicMock, instance_factory: Any
+) -> None:
     factory, _ = instance_factory
 
-    async def hang(*args, **kwargs):
+    async def hang(*args: Any, **kwargs: Any) -> Any:
         await asyncio.sleep(10)
         return Path("/tmp/x/SKILL.md")
 

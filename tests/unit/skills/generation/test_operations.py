@@ -10,15 +10,16 @@ from simulation_harness.skills.generation.ir import (
     StoreMetadata,
 )
 from simulation_harness.skills.generation.stages import operations as O
+from typing import Any
 
 
-def _op(oid, path, tag=None):
+def _op(oid: Any, path: Any, tag: Any = None) -> Operation:
     return Operation(
         operation_id=oid, method="GET", path=path, tag=tag, kind=OperationKind.read
     )
 
 
-def _ir(ops):
+def _ir(ops: Any) -> SpecModel:
     return SpecModel(
         api_name="Aha",
         slug="aha",
@@ -37,13 +38,13 @@ def _ir(ops):
     )
 
 
-def test_plan_chunks_one_per_op_when_small():
+def test_plan_chunks_one_per_op_when_small() -> None:
     ir = _ir([_op("a", "/a"), _op("b", "/b")])
     chunks = O.plan_chunks(ir, threshold=40)
     assert [len(c) for c in chunks] == [1, 1]
 
 
-def test_plan_chunks_groups_by_tag_when_large():
+def test_plan_chunks_groups_by_tag_when_large() -> None:
     ops = [_op(f"o{i}", f"/p{i}", tag="X" if i % 2 else "Y") for i in range(50)]
     chunks = O.plan_chunks(_ir(ops), threshold=40)
     # grouped by tag; each chunk holds a single tag
@@ -67,7 +68,7 @@ SPEC = {
 }
 
 
-async def test_generate_section_requires_headers():
+async def test_generate_section_requires_headers() -> None:
     ir = _ir([_op("getFeature", "/features/{id}")])
     good = "### /features/{id} GET\nDoes a thing."
     with patch.object(O, "call_text", AsyncMock(return_value=good)):
@@ -77,7 +78,7 @@ async def test_generate_section_requires_headers():
     assert "### /features/{id} GET" in section
 
 
-async def test_generate_section_repairs_missing_header():
+async def test_generate_section_repairs_missing_header() -> None:
     ir = _ir([_op("getFeature", "/features/{id}")])
     bad_then_good = iter(["no header here", "### /features/{id} GET\nok"])
     with patch.object(

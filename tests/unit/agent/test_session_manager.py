@@ -4,16 +4,17 @@ import asyncio
 import pytest
 from langgraph.checkpoint.memory import MemorySaver
 from simulation_harness.agent.session_manager import SessionManager
+from typing import Any
 
 
 @pytest.fixture
-def memory_saver():
+def memory_saver() -> Any:
     """Create a MemorySaver instance."""
     return MemorySaver()
 
 
 @pytest.fixture
-def session_manager(memory_saver):
+def session_manager(memory_saver: Any) -> SessionManager:
     """Create a SessionManager instance."""
     return SessionManager(
         checkpointer=memory_saver,
@@ -23,7 +24,7 @@ def session_manager(memory_saver):
     )
 
 
-def test_session_manager_initialization(memory_saver):
+def test_session_manager_initialization(memory_saver: Any) -> None:
     """Test SessionManager initializes correctly."""
     manager = SessionManager(
         checkpointer=memory_saver,
@@ -39,7 +40,7 @@ def test_session_manager_initialization(memory_saver):
     assert manager._running is False
 
 
-def test_session_manager_initialization_without_checkpointer():
+def test_session_manager_initialization_without_checkpointer() -> None:
     """Test SessionManager initializes without checkpointer."""
     manager = SessionManager(
         checkpointer=None,
@@ -52,7 +53,7 @@ def test_session_manager_initialization_without_checkpointer():
     assert manager.max_sessions == 10
 
 
-def test_record_activity(session_manager):
+def test_record_activity(session_manager: SessionManager) -> None:
     """Test recording session activity."""
     session_manager.record_activity("thread1")
 
@@ -60,7 +61,7 @@ def test_record_activity(session_manager):
     assert session_manager.get_active_session_count() == 1
 
 
-def test_get_active_session_count(session_manager):
+def test_get_active_session_count(session_manager: SessionManager) -> None:
     """Test getting active session count."""
     assert session_manager.get_active_session_count() == 0
 
@@ -70,7 +71,7 @@ def test_get_active_session_count(session_manager):
     assert session_manager.get_active_session_count() == 2
 
 
-def test_is_session_expired(session_manager):
+def test_is_session_expired(session_manager: SessionManager) -> None:
     """Test checking if session is expired."""
     import time
 
@@ -91,7 +92,7 @@ def test_is_session_expired(session_manager):
 
 
 @pytest.mark.asyncio
-async def test_cleanup_expired_sessions(session_manager):
+async def test_cleanup_expired_sessions(session_manager: SessionManager) -> None:
     """Test cleaning up expired sessions."""
     import time
 
@@ -111,7 +112,7 @@ async def test_cleanup_expired_sessions(session_manager):
 
 
 @pytest.mark.asyncio
-async def test_cleanup_expired_sessions_without_checkpointer():
+async def test_cleanup_expired_sessions_without_checkpointer() -> None:
     """Test cleanup does nothing without checkpointer."""
     manager = SessionManager(
         checkpointer=None,
@@ -124,7 +125,7 @@ async def test_cleanup_expired_sessions_without_checkpointer():
 
 
 @pytest.mark.asyncio
-async def test_enforce_max_sessions(session_manager):
+async def test_enforce_max_sessions(session_manager: SessionManager) -> None:
     """Test enforcing maximum session limit."""
 
     # Add more sessions than max (max is 10)
@@ -142,7 +143,7 @@ async def test_enforce_max_sessions(session_manager):
     assert session_manager.get_active_session_count() == 10
 
 
-def test_clear_session(session_manager):
+def test_clear_session(session_manager: SessionManager) -> None:
     """Test clearing a specific session."""
     session_manager.record_activity("thread1")
     session_manager.record_activity("thread2")
@@ -159,7 +160,7 @@ def test_clear_session(session_manager):
     assert result is False
 
 
-def test_clear_all_sessions(session_manager):
+def test_clear_all_sessions(session_manager: SessionManager) -> None:
     """Test clearing all sessions."""
     session_manager.record_activity("thread1")
     session_manager.record_activity("thread2")
@@ -172,7 +173,7 @@ def test_clear_all_sessions(session_manager):
 
 
 @pytest.mark.asyncio
-async def test_start_and_stop(session_manager):
+async def test_start_and_stop(session_manager: SessionManager) -> None:
     """Test starting and stopping cleanup task."""
     # Start
     session_manager.start()
@@ -186,7 +187,7 @@ async def test_start_and_stop(session_manager):
 
 
 @pytest.mark.asyncio
-async def test_start_without_checkpointer():
+async def test_start_without_checkpointer() -> None:
     """Test start does nothing without checkpointer."""
     manager = SessionManager(
         checkpointer=None,

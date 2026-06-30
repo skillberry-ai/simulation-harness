@@ -10,14 +10,15 @@ enough that a normal tool call does not exhaust it.
 import pytest
 
 from simulation_harness.config.models import HarnessConfig, SessionsConfig
+from typing import Any
 
 
-def test_agent_recursion_limit_default():
+def test_agent_recursion_limit_default() -> None:
     cfg = SessionsConfig(max_messages=10, idle_timeout_seconds=60)
     assert cfg.agent_recursion_limit == 50
 
 
-def test_agent_recursion_limit_override():
+def test_agent_recursion_limit_override() -> None:
     cfg = SessionsConfig(
         max_messages=10,
         idle_timeout_seconds=60,
@@ -26,7 +27,7 @@ def test_agent_recursion_limit_override():
     assert cfg.agent_recursion_limit == 80
 
 
-def test_agent_recursion_limit_must_be_positive():
+def test_agent_recursion_limit_must_be_positive() -> None:
     with pytest.raises(ValueError):
         SessionsConfig(
             max_messages=10,
@@ -35,13 +36,15 @@ def test_agent_recursion_limit_must_be_positive():
         )
 
 
-def test_harness_config_includes_recursion_default(minimal_harness_kwargs):
+def test_harness_config_includes_recursion_default(
+    minimal_harness_kwargs: dict[str, Any],
+) -> None:
     cfg = HarnessConfig(**minimal_harness_kwargs)
     assert cfg.sessions.agent_recursion_limit == 50
 
 
 @pytest.fixture
-def minimal_harness_kwargs():
+def minimal_harness_kwargs() -> dict[str, Any]:
     return {
         "llm": {
             "provider": "openai",

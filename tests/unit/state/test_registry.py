@@ -3,12 +3,13 @@
 import pytest
 
 from simulation_harness.state import StoreRegistry
+from pathlib import Path
 
 # ``skill_dir`` is provided by tests/unit/state/conftest.py.
 
 
 @pytest.fixture
-def registry(skill_dir):
+def registry(skill_dir: Path) -> StoreRegistry:
     """Create a StoreRegistry instance."""
     return StoreRegistry(skill_dir)
 
@@ -16,13 +17,13 @@ def registry(skill_dir):
 class TestRegistryBasics:
     """Test basic registry operations."""
 
-    def test_create_registry(self, skill_dir):
+    def test_create_registry(self, skill_dir: Path) -> None:
         """Test creating a registry."""
         registry = StoreRegistry(skill_dir)
         assert registry is not None
         assert registry.thread_count() == 0
 
-    def test_for_thread_creates_store(self, registry):
+    def test_for_thread_creates_store(self, registry: StoreRegistry) -> None:
         """Test that for_thread creates a store on first access."""
         assert registry.thread_count() == 0
 
@@ -30,7 +31,7 @@ class TestRegistryBasics:
         assert store is not None
         assert registry.thread_count() == 1
 
-    def test_for_thread_returns_same_store(self, registry):
+    def test_for_thread_returns_same_store(self, registry: StoreRegistry) -> None:
         """Test that for_thread returns the same store for the same thread."""
         store1 = registry.for_thread("thread_1")
         store2 = registry.for_thread("thread_1")
@@ -42,7 +43,9 @@ class TestRegistryBasics:
 class TestThreadIsolation:
     """Test that threads have isolated stores."""
 
-    def test_different_threads_get_different_stores(self, registry):
+    def test_different_threads_get_different_stores(
+        self, registry: StoreRegistry
+    ) -> None:
         """Test that different threads get different store instances."""
         store1 = registry.for_thread("thread_1")
         store2 = registry.for_thread("thread_2")
@@ -50,7 +53,7 @@ class TestThreadIsolation:
         assert store1 is not store2
         assert registry.thread_count() == 2
 
-    def test_writes_are_isolated(self, registry):
+    def test_writes_are_isolated(self, registry: StoreRegistry) -> None:
         """Test that writes to one thread don't affect another."""
         store1 = registry.for_thread("thread_1")
         store2 = registry.for_thread("thread_2")
@@ -87,7 +90,7 @@ class TestThreadIsolation:
 class TestReset:
     """Test reset functionality."""
 
-    def test_reset_restores_seed(self, registry):
+    def test_reset_restores_seed(self, registry: StoreRegistry) -> None:
         """Test that reset restores a thread's store to seed state."""
         store = registry.for_thread("thread_1")
 
@@ -123,7 +126,7 @@ class TestReset:
         store_after = registry.for_thread("thread_1")
         assert store_after.get("restaurants", "rest_temp") is None
 
-    def test_reset_nonexistent_thread(self, registry):
+    def test_reset_nonexistent_thread(self, registry: StoreRegistry) -> None:
         """Test that resetting a nonexistent thread doesn't crash."""
         # Should not raise
         registry.reset("nonexistent_thread")
@@ -132,7 +135,7 @@ class TestReset:
 class TestDrop:
     """Test drop functionality."""
 
-    def test_drop_removes_store(self, registry):
+    def test_drop_removes_store(self, registry: StoreRegistry) -> None:
         """Test that drop removes a thread's store."""
         registry.for_thread("thread_1")
         assert registry.thread_count() == 1
@@ -140,12 +143,12 @@ class TestDrop:
         registry.drop("thread_1")
         assert registry.thread_count() == 0
 
-    def test_drop_nonexistent_thread(self, registry):
+    def test_drop_nonexistent_thread(self, registry: StoreRegistry) -> None:
         """Test that dropping a nonexistent thread doesn't crash."""
         # Should not raise
         registry.drop("nonexistent_thread")
 
-    def test_drop_recreates_fresh_store(self, registry):
+    def test_drop_recreates_fresh_store(self, registry: StoreRegistry) -> None:
         """Test that accessing a dropped thread creates a fresh store."""
         store1 = registry.for_thread("thread_1")
 
@@ -182,7 +185,7 @@ class TestDrop:
 class TestDropAll:
     """Test drop_all functionality."""
 
-    def test_drop_all_removes_all_stores(self, registry):
+    def test_drop_all_removes_all_stores(self, registry: StoreRegistry) -> None:
         """Test that drop_all removes all stores."""
         registry.for_thread("thread_1")
         registry.for_thread("thread_2")

@@ -1,5 +1,7 @@
 """Unit tests for schema validation utilities."""
 
+from typing import Any
+
 import pytest
 
 from simulation_harness.openapi.schema_validator import (
@@ -16,7 +18,7 @@ from simulation_harness.openapi.schema_validator import (
 )
 
 
-def test_validate_against_schema_valid():
+def test_validate_against_schema_valid() -> None:
     """Test validating valid data against schema."""
     schema = {
         "type": "object",
@@ -30,7 +32,7 @@ def test_validate_against_schema_valid():
     assert len(errors) == 0
 
 
-def test_validate_against_schema_missing_required():
+def test_validate_against_schema_missing_required() -> None:
     """Test validation with missing required field."""
     schema = {
         "type": "object",
@@ -45,7 +47,7 @@ def test_validate_against_schema_missing_required():
     assert any("name" in error.lower() for error in errors)
 
 
-def test_validate_against_schema_wrong_type():
+def test_validate_against_schema_wrong_type() -> None:
     """Test validation with wrong data type."""
     schema = {"type": "object", "properties": {"age": {"type": "integer"}}}
 
@@ -55,7 +57,7 @@ def test_validate_against_schema_wrong_type():
     assert len(errors) > 0
 
 
-def test_validate_against_schema_strict_mode():
+def test_validate_against_schema_strict_mode() -> None:
     """Test strict mode raises exception on validation errors."""
     schema = {
         "type": "object",
@@ -63,13 +65,13 @@ def test_validate_against_schema_strict_mode():
         "properties": {"name": {"type": "string"}},
     }
 
-    data = {}  # Missing required field
+    data: dict[str, Any] = {}  # Missing required field
 
     with pytest.raises(SchemaValidationError, match="validation failed"):
         validate_against_schema(data, schema, strict=True)
 
 
-def test_validate_request_body_valid():
+def test_validate_request_body_valid() -> None:
     """Test validating valid request body."""
     schema = {"type": "object", "properties": {"name": {"type": "string"}}}
 
@@ -79,13 +81,13 @@ def test_validate_request_body_valid():
     assert len(errors) == 0
 
 
-def test_validate_request_body_no_schema():
+def test_validate_request_body_no_schema() -> None:
     """Test validating request body with no schema."""
     errors = validate_request_body({"data": "value"}, None)
     assert len(errors) == 0
 
 
-def test_validate_response_valid():
+def test_validate_response_valid() -> None:
     """Test validating valid response."""
     schema = {"type": "array", "items": {"type": "string"}}
 
@@ -95,13 +97,13 @@ def test_validate_response_valid():
     assert len(errors) == 0
 
 
-def test_validate_response_no_schema():
+def test_validate_response_no_schema() -> None:
     """Test validating response with no schema."""
     errors = validate_response({"data": "value"}, None)
     assert len(errors) == 0
 
 
-def test_check_required_fields_all_present():
+def test_check_required_fields_all_present() -> None:
     """Test checking required fields when all are present."""
     schema = {"required": ["name", "email"]}
     data = {"name": "John", "email": "john@example.com", "age": 30}
@@ -110,7 +112,7 @@ def test_check_required_fields_all_present():
     assert len(missing) == 0
 
 
-def test_check_required_fields_some_missing():
+def test_check_required_fields_some_missing() -> None:
     """Test checking required fields when some are missing."""
     schema = {"required": ["name", "email"]}
     data = {"name": "John"}
@@ -120,7 +122,7 @@ def test_check_required_fields_some_missing():
     assert "name" not in missing
 
 
-def test_get_schema_type():
+def test_get_schema_type() -> None:
     """Test getting schema type."""
     assert get_schema_type({"type": "object"}) == "object"
     assert get_schema_type({"type": "array"}) == "array"
@@ -128,21 +130,21 @@ def test_get_schema_type():
     assert get_schema_type({}) is None
 
 
-def test_is_object_schema():
+def test_is_object_schema() -> None:
     """Test checking if schema is object type."""
     assert is_object_schema({"type": "object"}) is True
     assert is_object_schema({"type": "array"}) is False
     assert is_object_schema({}) is False
 
 
-def test_is_array_schema():
+def test_is_array_schema() -> None:
     """Test checking if schema is array type."""
     assert is_array_schema({"type": "array"}) is True
     assert is_array_schema({"type": "object"}) is False
     assert is_array_schema({}) is False
 
 
-def test_get_property_schema():
+def test_get_property_schema() -> None:
     """Test getting property schema from object schema."""
     schema = {
         "type": "object",
@@ -161,13 +163,13 @@ def test_get_property_schema():
     assert get_property_schema(schema, "nonexistent") is None
 
 
-def test_get_property_schema_non_object():
+def test_get_property_schema_non_object() -> None:
     """Test getting property schema from non-object schema."""
     schema = {"type": "array"}
     assert get_property_schema(schema, "name") is None
 
 
-def test_get_array_item_schema():
+def test_get_array_item_schema() -> None:
     """Test getting array item schema."""
     schema = {"type": "array", "items": {"type": "string"}}
 
@@ -176,7 +178,7 @@ def test_get_array_item_schema():
     assert item_schema["type"] == "string"
 
 
-def test_get_array_item_schema_non_array():
+def test_get_array_item_schema_non_array() -> None:
     """Test getting array item schema from non-array schema."""
     schema = {"type": "object"}
     assert get_array_item_schema(schema) is None

@@ -10,10 +10,11 @@ from pydantic import SecretStr
 from simulation_harness.core.simulation_instance import SimulationInstance
 from simulation_harness.models.domain import SimulationSpec
 from simulation_harness.utils.errors import ConcurrentQueueFullError
+from typing import Any
 
 
 @pytest.fixture
-def mock_spec():
+def mock_spec() -> SimulationSpec:
     """Create a mock simulation spec."""
     return SimulationSpec(
         name="test-sim",
@@ -25,7 +26,7 @@ def mock_spec():
 
 
 @pytest.fixture
-def mock_agent():
+def mock_agent() -> MagicMock:
     """Create a mock deep agent."""
     agent = MagicMock()
     agent.generate_response = AsyncMock(return_value={"result": "success"})
@@ -34,9 +35,9 @@ def mock_agent():
     return agent
 
 
-def create_instance(spec, **kwargs):
+def create_instance(spec: Any, **kwargs: Any) -> SimulationInstance:
     """Helper to create SimulationInstance with default config values."""
-    defaults = {
+    defaults: dict[str, Any] = {
         "max_messages": 100,
         "idle_timeout_seconds": 3600,
         "max_queue_depth": 10,
@@ -50,7 +51,9 @@ def create_instance(spec, **kwargs):
 
 
 @pytest.mark.asyncio
-async def test_execute_tool_success(mock_spec, mock_agent):
+async def test_execute_tool_success(
+    mock_spec: SimulationSpec, mock_agent: MagicMock
+) -> None:
     """Test successful tool execution."""
     with patch(
         "simulation_harness.core.simulation_instance.DeepAgent", return_value=mock_agent
@@ -65,7 +68,9 @@ async def test_execute_tool_success(mock_spec, mock_agent):
 
 
 @pytest.mark.asyncio
-async def test_execute_tool_increments_counter(mock_spec, mock_agent):
+async def test_execute_tool_increments_counter(
+    mock_spec: SimulationSpec, mock_agent: MagicMock
+) -> None:
     """Test that tool execution increments counter."""
     with patch(
         "simulation_harness.core.simulation_instance.DeepAgent", return_value=mock_agent
@@ -80,7 +85,9 @@ async def test_execute_tool_increments_counter(mock_spec, mock_agent):
 
 
 @pytest.mark.asyncio
-async def test_execute_tool_updates_last_activity(mock_spec, mock_agent):
+async def test_execute_tool_updates_last_activity(
+    mock_spec: SimulationSpec, mock_agent: MagicMock
+) -> None:
     """Test that tool execution updates last activity timestamp."""
     with patch(
         "simulation_harness.core.simulation_instance.DeepAgent", return_value=mock_agent
@@ -98,7 +105,9 @@ async def test_execute_tool_updates_last_activity(mock_spec, mock_agent):
 
 
 @pytest.mark.asyncio
-async def test_execute_tool_raises_on_max_messages(mock_spec, mock_agent):
+async def test_execute_tool_raises_on_max_messages(
+    mock_spec: SimulationSpec, mock_agent: MagicMock
+) -> None:
     """Test that exceeding max_messages returns failed result and resets."""
     with patch(
         "simulation_harness.core.simulation_instance.DeepAgent", return_value=mock_agent
@@ -112,7 +121,7 @@ async def test_execute_tool_raises_on_max_messages(mock_spec, mock_agent):
         result = await instance.execute_tool("test_tool", {"param": "value"})
         assert result.success is False
         assert result.error is not None
-        assert "max_messages" in result.error.lower()
+        assert "max_messages" in (result.error or "").lower()
 
         # Session should be reset
         state = instance.get_session_state()
@@ -120,7 +129,9 @@ async def test_execute_tool_raises_on_max_messages(mock_spec, mock_agent):
 
 
 @pytest.mark.asyncio
-async def test_execute_tool_raises_on_idle_timeout(mock_spec, mock_agent):
+async def test_execute_tool_raises_on_idle_timeout(
+    mock_spec: SimulationSpec, mock_agent: MagicMock
+) -> None:
     """Test that idle timeout returns failed result and resets."""
     with patch(
         "simulation_harness.core.simulation_instance.DeepAgent", return_value=mock_agent
@@ -128,13 +139,13 @@ async def test_execute_tool_raises_on_idle_timeout(mock_spec, mock_agent):
         instance = create_instance(mock_spec, idle_timeout_seconds=1)
 
         # Manually set last_activity to past
-        instance._last_activity = datetime.now(timezone.utc) - timedelta(seconds=2)
+        instance._last_activity = datetime.now(timezone.utc) - timedelta(seconds=2)  # type: ignore[assignment]
 
         # Call should fail with expiry
         result = await instance.execute_tool("test_tool", {"param": "value"})
         assert result.success is False
         assert result.error is not None
-        assert "idle_timeout" in result.error.lower()
+        assert "idle_timeout" in (result.error or "").lower()
 
         # Session should be reset
         state = instance.get_session_state()
@@ -142,11 +153,13 @@ async def test_execute_tool_raises_on_idle_timeout(mock_spec, mock_agent):
 
 
 @pytest.mark.asyncio
-async def test_execute_tool_enforces_queue_depth(mock_spec, mock_agent):
+async def test_execute_tool_enforces_queue_depth(
+    mock_spec: SimulationSpec, mock_agent: MagicMock
+) -> None:
     """Test that queue depth is enforced."""
 
     # Make agent slow to allow queue to fill
-    async def slow_response(*args, **kwargs):
+    async def slow_response(*args: Any, **kwargs: Any) -> dict[str, Any]:
         await asyncio.sleep(0.1)
         return {"result": "success"}
 
@@ -185,7 +198,9 @@ async def test_execute_tool_enforces_queue_depth(mock_spec, mock_agent):
 
 
 @pytest.mark.asyncio
-async def test_execute_tool_handles_agent_error(mock_spec, mock_agent):
+async def test_execute_tool_handles_agent_error(
+    mock_spec: SimulationSpec, mock_agent: MagicMock
+) -> None:
     """Test that agent errors are handled gracefully."""
     mock_agent.generate_response = AsyncMock(side_effect=Exception("Agent error"))
 
@@ -203,8 +218,8 @@ async def test_execute_tool_handles_agent_error(mock_spec, mock_agent):
 
 @pytest.mark.asyncio
 async def test_execute_tool_does_not_increment_counter_on_failure(
-    mock_spec, mock_agent
-):
+    mock_spec: SimulationSpec, mock_agent: MagicMock
+) -> None:
     """Test that counter is not incremented on failure."""
     mock_agent.generate_response = AsyncMock(side_effect=Exception("Agent error"))
 
@@ -221,7 +236,9 @@ async def test_execute_tool_does_not_increment_counter_on_failure(
 
 
 @pytest.mark.asyncio
-async def test_get_session_state(mock_spec, mock_agent):
+async def test_get_session_state(
+    mock_spec: SimulationSpec, mock_agent: MagicMock
+) -> None:
     """Test getting session state."""
     with patch(
         "simulation_harness.core.simulation_instance.DeepAgent", return_value=mock_agent
@@ -241,7 +258,7 @@ async def test_get_session_state(mock_spec, mock_agent):
 
 
 @pytest.mark.asyncio
-async def test_reset_session(mock_spec, mock_agent):
+async def test_reset_session(mock_spec: SimulationSpec, mock_agent: MagicMock) -> None:
     """Test resetting session."""
     with patch(
         "simulation_harness.core.simulation_instance.DeepAgent", return_value=mock_agent
@@ -264,7 +281,7 @@ async def test_reset_session(mock_spec, mock_agent):
 
 
 @pytest.mark.asyncio
-async def test_shutdown(mock_spec, mock_agent):
+async def test_shutdown(mock_spec: SimulationSpec, mock_agent: MagicMock) -> None:
     """Test shutdown."""
     with patch(
         "simulation_harness.core.simulation_instance.DeepAgent", return_value=mock_agent
@@ -277,7 +294,7 @@ async def test_shutdown(mock_spec, mock_agent):
 
 
 @pytest.mark.asyncio
-async def test_expiry_fail_then_reset(mock_agent):
+async def test_expiry_fail_then_reset(mock_agent: MagicMock) -> None:
     """Test that expiry fails the call then resets thread."""
     spec = SimulationSpec(
         name="test-sim",
@@ -308,7 +325,7 @@ async def test_expiry_fail_then_reset(mock_agent):
         result = await instance.execute_tool("getTest", {})
         assert result.success is False
         assert result.error is not None
-        assert "max_messages" in result.error.lower()
+        assert "max_messages" in (result.error or "").lower()
 
         # Next call should succeed on fresh thread (reset happened)
         result = await instance.execute_tool("getTest", {})
@@ -318,7 +335,7 @@ async def test_expiry_fail_then_reset(mock_agent):
 
 
 @pytest.mark.asyncio
-async def test_structured_error_fields(mock_agent):
+async def test_structured_error_fields(mock_agent: MagicMock) -> None:
     """Test that expiry errors have all required structured fields."""
     spec = SimulationSpec(
         name="test-sim",
@@ -351,7 +368,7 @@ async def test_structured_error_fields(mock_agent):
 
 
 @pytest.mark.asyncio
-async def test_idle_timer_starts_on_first_call():
+async def test_idle_timer_starts_on_first_call() -> None:
     """Test that idle timer starts at first tool call, not creation."""
     spec = SimulationSpec(
         name="test-sim",
@@ -395,7 +412,7 @@ async def test_idle_timer_starts_on_first_call():
 
 
 @pytest.mark.asyncio
-async def test_idle_timer_starts_on_first_call_after_reset():
+async def test_idle_timer_starts_on_first_call_after_reset() -> None:
     """Test that idle timer starts at first tool call after reset, not at reset time."""
     spec = SimulationSpec(
         name="test-sim",
@@ -443,13 +460,13 @@ async def test_idle_timer_starts_on_first_call_after_reset():
         # Second call should fail (timer started after first post-reset call)
         result = await instance.execute_tool("getTest", {})
         assert result.success is False
-        assert "idle_timeout" in result.error.lower()
+        assert "idle_timeout" in (result.error or "").lower()
 
-        assert "idle_timeout" in result.error.lower()
+        assert "idle_timeout" in (result.error or "").lower()
 
 
 @pytest.mark.asyncio
-async def test_counter_not_advanced_on_failure():
+async def test_counter_not_advanced_on_failure() -> None:
     """Test that counter doesn't advance for failed calls."""
     spec = SimulationSpec(
         name="test-sim",
@@ -501,7 +518,7 @@ async def test_counter_not_advanced_on_failure():
 
 
 @pytest.mark.asyncio
-async def test_expiry_check_before_counter_increment():
+async def test_expiry_check_before_counter_increment() -> None:
     """Test that expiry is checked before counter increments.
 
     This test verifies that when a call would exceed max_messages,
@@ -549,7 +566,7 @@ async def test_expiry_check_before_counter_increment():
         # and fails because next call would be #3
         result = await instance.execute_tool("getTest", {})
         assert result.success is False
-        assert "max_messages" in result.error.lower()
+        assert "max_messages" in (result.error or "").lower()
 
         # After expiry, session auto-resets (fail-then-reset per §1.7)
         # So counter is now 0, proving it never reached 3
@@ -563,7 +580,7 @@ async def test_expiry_check_before_counter_increment():
         assert state.tool_call_count == 1
 
 
-def test_create_instance_forwards_base_url_to_agent(mock_spec):
+def test_create_instance_forwards_base_url_to_agent(mock_spec: SimulationSpec) -> None:
     """base_url passed to SimulationInstance is forwarded to DeepAgent."""
     with patch(
         "simulation_harness.core.simulation_instance.DeepAgent"
@@ -574,7 +591,7 @@ def test_create_instance_forwards_base_url_to_agent(mock_spec):
         assert kwargs["base_url"] == "https://custom.example.com/v1"
 
 
-def test_create_instance_base_url_defaults_to_none(mock_spec):
+def test_create_instance_base_url_defaults_to_none(mock_spec: SimulationSpec) -> None:
     """base_url defaults to None when not provided."""
     with patch(
         "simulation_harness.core.simulation_instance.DeepAgent"
@@ -585,7 +602,7 @@ def test_create_instance_base_url_defaults_to_none(mock_spec):
         assert kwargs["base_url"] is None
 
 
-def test_mcp_port_stored_when_provided(mock_spec):
+def test_mcp_port_stored_when_provided(mock_spec: SimulationSpec) -> None:
     """SimulationInstance stores mcp_port when provided."""
     with patch(
         "simulation_harness.core.simulation_instance.DeepAgent"
@@ -595,7 +612,7 @@ def test_mcp_port_stored_when_provided(mock_spec):
         assert instance.mcp_port == 9000
 
 
-def test_mcp_port_defaults_to_none(mock_spec):
+def test_mcp_port_defaults_to_none(mock_spec: SimulationSpec) -> None:
     """SimulationInstance.mcp_port is None when not provided."""
     with patch(
         "simulation_harness.core.simulation_instance.DeepAgent"
@@ -606,7 +623,9 @@ def test_mcp_port_defaults_to_none(mock_spec):
 
 
 @pytest.mark.asyncio
-async def test_shutdown_stops_sidecar_when_present(mock_spec, mock_agent):
+async def test_shutdown_stops_sidecar_when_present(
+    mock_spec: SimulationSpec, mock_agent: MagicMock
+) -> None:
     """shutdown() calls stop() on the sidecar if one is set."""
     with patch(
         "simulation_harness.core.simulation_instance.DeepAgent", return_value=mock_agent
@@ -614,7 +633,7 @@ async def test_shutdown_stops_sidecar_when_present(mock_spec, mock_agent):
         instance = create_instance(mock_spec)
         mock_sidecar = MagicMock()
         mock_sidecar.stop = AsyncMock()
-        instance._sidecar = mock_sidecar
+        instance._sidecar = mock_sidecar  # type: ignore[assignment]
 
         await instance.shutdown()
 

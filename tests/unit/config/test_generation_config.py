@@ -1,10 +1,11 @@
 import pytest
 
 from simulation_harness.config.models import GenerationConfig, HarnessConfig
+from typing import Any
 
 
 @pytest.fixture
-def minimal_harness_dict():
+def minimal_harness_dict() -> dict[str, Any]:
     return {
         "llm": {
             "provider": "openai",
@@ -17,7 +18,7 @@ def minimal_harness_dict():
     }
 
 
-def test_generation_defaults():
+def test_generation_defaults() -> None:
     cfg = GenerationConfig()
     assert cfg.concurrency == 5
     assert cfg.chunk_threshold == 40
@@ -31,7 +32,7 @@ def test_generation_defaults():
     assert cfg.operation.max_tokens == 4000
 
 
-def test_generation_overrides_and_extra_forbidden():
+def test_generation_overrides_and_extra_forbidden() -> None:
     cfg = GenerationConfig(concurrency=8, extract={"max_tokens": 9000})
     assert cfg.concurrency == 8
     assert cfg.extract.max_tokens == 9000
@@ -39,12 +40,14 @@ def test_generation_overrides_and_extra_forbidden():
 
     # stale 'analyze' key must be rejected (no back-compat)
     with pytest.raises(ValidationError):
-        GenerationConfig(analyze={"max_tokens": 9000})
+        GenerationConfig(analyze={"max_tokens": 9000})  # type: ignore[call-arg]
     with pytest.raises(ValidationError):
-        GenerationConfig(unknown_field=1)
+        GenerationConfig(unknown_field=1)  # type: ignore[call-arg]
 
 
-def test_harness_config_defaults_generation(minimal_harness_dict):
+def test_harness_config_defaults_generation(
+    minimal_harness_dict: dict[str, Any],
+) -> None:
     cfg = HarnessConfig(**minimal_harness_dict)
     assert isinstance(cfg.generation, GenerationConfig)
     assert cfg.generation.classify_batch_size == 40

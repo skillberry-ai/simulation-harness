@@ -12,7 +12,7 @@ from simulation_harness.skills.generation.llm import (
 )
 
 
-def test_build_chat_json_mode_sets_response_format():
+def test_build_chat_json_mode_sets_response_format() -> None:
     with patch.object(llmmod, "ChatOpenAI") as mock:
         build_chat(
             api_key=SecretStr("k"),
@@ -28,7 +28,7 @@ def test_build_chat_json_mode_sets_response_format():
         assert kwargs["model_kwargs"] == {"response_format": {"type": "json_object"}}
 
 
-def test_build_chat_text_mode_has_no_response_format():
+def test_build_chat_text_mode_has_no_response_format() -> None:
     with patch.object(llmmod, "ChatOpenAI") as mock:
         build_chat(
             api_key=SecretStr("k"),
@@ -43,26 +43,26 @@ def test_build_chat_text_mode_has_no_response_format():
         assert kwargs["base_url"] == "http://x"
 
 
-async def test_call_json_parses_object():
+async def test_call_json_parses_object() -> None:
     fake = MagicMock()
     fake.ainvoke = AsyncMock(return_value=MagicMock(content='{"a": 1}'))
     assert await call_json(fake, "sys", "usr") == {"a": 1}
 
 
-async def test_call_json_raises_on_bad_json():
+async def test_call_json_raises_on_bad_json() -> None:
     fake = MagicMock()
     fake.ainvoke = AsyncMock(return_value=MagicMock(content="not json"))
     with pytest.raises(StructuredCallError):
         await call_json(fake, "sys", "usr")
 
 
-async def test_call_text_returns_content():
+async def test_call_text_returns_content() -> None:
     fake = MagicMock()
     fake.ainvoke = AsyncMock(return_value=MagicMock(content="hello"))
     assert await call_text(fake, "sys", "usr") == "hello"
 
 
-async def test_call_json_wraps_length_truncation_as_structured_error():
+async def test_call_json_wraps_length_truncation_as_structured_error() -> None:
     from openai import LengthFinishReasonError
 
     fake = MagicMock()
@@ -74,7 +74,7 @@ async def test_call_json_wraps_length_truncation_as_structured_error():
     assert "truncated" in str(exc.value).lower()
 
 
-async def test_call_text_wraps_length_truncation_as_structured_error():
+async def test_call_text_wraps_length_truncation_as_structured_error() -> None:
     from openai import LengthFinishReasonError
 
     fake = MagicMock()

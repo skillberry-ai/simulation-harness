@@ -13,10 +13,12 @@ import yaml
 from fastapi.testclient import TestClient
 
 from tests.integration.conftest import poll_until_ready
+from collections.abc import Iterator
+from typing import Any
 
 
 @pytest.fixture
-def valid_openapi_spec():
+def valid_openapi_spec() -> dict[str, Any]:
     """Provide a valid OpenAPI 3.0 specification with multiple operations."""
     return {
         "openapi": "3.0.0",
@@ -99,7 +101,7 @@ def valid_openapi_spec():
 
 
 @pytest.fixture
-def app_client():
+def app_client() -> Iterator[Any]:
     """Create test client with valid config and clean state for each test."""
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
         config = {
@@ -163,7 +165,9 @@ def app_client():
 class TestMCPToolListing:
     """Test MCP tools/list functionality."""
 
-    def test_tools_list_returns_correct_schemas(self, app_client, valid_openapi_spec):
+    def test_tools_list_returns_correct_schemas(
+        self, app_client: Any, valid_openapi_spec: dict[str, Any]
+    ) -> None:
         """Test that tools/list returns correct tool schemas from OpenAPI spec."""
         with patch(
             "simulation_harness.skills.generator.SkillGenerator.generate_skill",
@@ -192,7 +196,9 @@ class TestMCPToolListing:
 class TestMCPToolExecution:
     """Test MCP tool execution."""
 
-    def test_tools_call_executes_successfully(self, app_client, valid_openapi_spec):
+    def test_tools_call_executes_successfully(
+        self, app_client: Any, valid_openapi_spec: dict[str, Any]
+    ) -> None:
         """Test that tools/call executes successfully."""
         with patch(
             "simulation_harness.skills.generator.SkillGenerator.generate_skill",
@@ -230,8 +236,8 @@ class TestMCPToolExecution:
                 assert data["session_state"]["tool_call_count"] == 0
 
     def test_tool_invocation_errors_preserve_state(
-        self, app_client, valid_openapi_spec
-    ):
+        self, app_client: Any, valid_openapi_spec: dict[str, Any]
+    ) -> None:
         """Test that tool invocation errors don't corrupt simulation state."""
         with patch(
             "simulation_harness.skills.generator.SkillGenerator.generate_skill",
@@ -259,7 +265,9 @@ class TestMCPToolExecution:
 class TestMultiCallCoherence:
     """Test multi-call coherence with shared context."""
 
-    def test_multi_call_shared_context(self, app_client, valid_openapi_spec):
+    def test_multi_call_shared_context(
+        self, app_client: Any, valid_openapi_spec: dict[str, Any]
+    ) -> None:
         """Test that multiple tool calls share context correctly."""
         with patch(
             "simulation_harness.skills.generator.SkillGenerator.generate_skill",
@@ -299,7 +307,9 @@ class TestMultiCallCoherence:
 class TestToolExecutionErrorHandling:
     """Test error handling during tool execution."""
 
-    def test_failed_calls_dont_burn_slots(self, app_client, valid_openapi_spec):
+    def test_failed_calls_dont_burn_slots(
+        self, app_client: Any, valid_openapi_spec: dict[str, Any]
+    ) -> None:
         """Test that failed tool calls don't increment the message counter."""
         with patch(
             "simulation_harness.skills.generator.SkillGenerator.generate_skill",
@@ -329,7 +339,9 @@ class TestToolExecutionErrorHandling:
 class TestLogging:
     """Test that tool calls are logged correctly."""
 
-    def test_per_tool_call_log_line_emitted(self, app_client, valid_openapi_spec):
+    def test_per_tool_call_log_line_emitted(
+        self, app_client: Any, valid_openapi_spec: dict[str, Any]
+    ) -> None:
         """Test that each tool call emits a log line with required fields."""
         with patch(
             "simulation_harness.skills.generator.SkillGenerator.generate_skill",

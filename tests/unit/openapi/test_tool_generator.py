@@ -16,10 +16,11 @@ from simulation_harness.openapi.tool_generator import (
     get_required_parameters,
     get_tool_by_name,
 )
+from collections.abc import Iterator
 
 
 @pytest.fixture
-def temp_dir():
+def temp_dir() -> Iterator[Any]:
     """Create temporary directory for test files."""
     with TemporaryDirectory() as tmpdir:
         yield Path(tmpdir)
@@ -116,7 +117,7 @@ def complex_openapi_spec() -> dict[str, Any]:
 
 def test_generate_tools_from_simple_spec(
     temp_dir: Path, simple_openapi_spec: dict[str, Any]
-):
+) -> None:
     """Test generating tools from simple specification."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -132,7 +133,7 @@ def test_generate_tools_from_simple_spec(
 
 def test_generate_tools_from_complex_spec(
     temp_dir: Path, complex_openapi_spec: dict[str, Any]
-):
+) -> None:
     """Test generating tools from complex specification."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -149,7 +150,7 @@ def test_generate_tools_from_complex_spec(
 
 def test_tool_input_schema_with_parameters(
     temp_dir: Path, simple_openapi_spec: dict[str, Any]
-):
+) -> None:
     """Test tool input schema includes parameters."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -165,7 +166,7 @@ def test_tool_input_schema_with_parameters(
 
 def test_tool_input_schema_with_request_body(
     temp_dir: Path, complex_openapi_spec: dict[str, Any]
-):
+) -> None:
     """Test tool input schema includes request body properties."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -188,7 +189,9 @@ def test_tool_input_schema_with_request_body(
     assert "age" not in create_tool["inputSchema"]["required"]
 
 
-def test_tool_required_parameters(temp_dir: Path, complex_openapi_spec: dict[str, Any]):
+def test_tool_required_parameters(
+    temp_dir: Path, complex_openapi_spec: dict[str, Any]
+) -> None:
     """Test getting required parameters from tool."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -204,7 +207,9 @@ def test_tool_required_parameters(temp_dir: Path, complex_openapi_spec: dict[str
     assert "id" in required
 
 
-def test_tool_optional_parameters(temp_dir: Path, simple_openapi_spec: dict[str, Any]):
+def test_tool_optional_parameters(
+    temp_dir: Path, simple_openapi_spec: dict[str, Any]
+) -> None:
     """Test getting optional parameters from tool."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -218,7 +223,7 @@ def test_tool_optional_parameters(temp_dir: Path, simple_openapi_spec: dict[str,
     assert "limit" in optional
 
 
-def test_get_tool_by_name(temp_dir: Path, complex_openapi_spec: dict[str, Any]):
+def test_get_tool_by_name(temp_dir: Path, complex_openapi_spec: dict[str, Any]) -> None:
     """Test getting tool by name."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -237,7 +242,7 @@ def test_get_tool_by_name(temp_dir: Path, complex_openapi_spec: dict[str, Any]):
 
 def test_tool_description_includes_http_info(
     temp_dir: Path, simple_openapi_spec: dict[str, Any]
-):
+) -> None:
     """Test that tool description includes HTTP method and path."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -252,7 +257,7 @@ def test_tool_description_includes_http_info(
 
 def test_generate_tool_from_operation(
     temp_dir: Path, simple_openapi_spec: dict[str, Any]
-):
+) -> None:
     """Test generating single tool from operation."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -268,7 +273,7 @@ def test_generate_tool_from_operation(
     assert tool["inputSchema"]
 
 
-def test_tool_generation_error():
+def test_tool_generation_error() -> None:
     """Test that ToolGenerationError can be raised."""
     # This is a simple test to ensure the exception exists
     with pytest.raises(ToolGenerationError):

@@ -17,7 +17,7 @@ from simulation_harness.utils.errors import PortInUseError
 class TestCheckPortAvailable:
     """Tests for _check_port_available helper."""
 
-    def test_raises_port_in_use_error_when_port_taken(self):
+    def test_raises_port_in_use_error_when_port_taken(self) -> None:
         """When a port is already bound, raises PortInUseError."""
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -30,7 +30,7 @@ class TestCheckPortAvailable:
         finally:
             sock.close()
 
-    def test_does_not_raise_when_port_is_free(self):
+    def test_does_not_raise_when_port_is_free(self) -> None:
         """When port is available, does not raise."""
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.bind(("0.0.0.0", 0))
@@ -44,17 +44,19 @@ class TestSidecarMCPServer:
     """Tests for SidecarMCPServer."""
 
     @pytest.fixture
-    def mock_instance(self):
+    def mock_instance(self) -> MagicMock:
         from simulation_harness.core.simulation_instance import SimulationInstance
 
         return MagicMock(spec=SimulationInstance)
 
     @pytest.fixture
-    def sse_config(self):
+    def sse_config(self) -> MCPConfig:
         return MCPConfig(transport=TransportType.SSE)
 
     @pytest.mark.asyncio
-    async def test_start_raises_port_in_use_error(self, mock_instance, sse_config):
+    async def test_start_raises_port_in_use_error(
+        self, mock_instance: MagicMock, sse_config: MCPConfig
+    ) -> None:
         """start() raises PortInUseError when port pre-check fails."""
         sidecar = SidecarMCPServer(mock_instance, 9000, sse_config)
         with patch(
@@ -65,7 +67,9 @@ class TestSidecarMCPServer:
                 await sidecar.start()
 
     @pytest.mark.asyncio
-    async def test_start_creates_uvicorn_task(self, mock_instance, sse_config):
+    async def test_start_creates_uvicorn_task(
+        self, mock_instance: MagicMock, sse_config: MCPConfig
+    ) -> None:
         """start() creates an asyncio task running the uvicorn server."""
         sidecar = SidecarMCPServer(mock_instance, 9001, sse_config)
 
@@ -73,7 +77,7 @@ class TestSidecarMCPServer:
         mock_server.started = True
         serve_called = []
 
-        async def fake_serve():
+        async def fake_serve() -> None:
             serve_called.append(True)
 
         mock_server.serve = fake_serve
@@ -94,14 +98,16 @@ class TestSidecarMCPServer:
         assert serve_called
 
     @pytest.mark.asyncio
-    async def test_stop_signals_server_exit(self, mock_instance, sse_config):
+    async def test_stop_signals_server_exit(
+        self, mock_instance: MagicMock, sse_config: MCPConfig
+    ) -> None:
         """stop() sets should_exit on the uvicorn server."""
         sidecar = SidecarMCPServer(mock_instance, 9002, sse_config)
         mock_server = MagicMock()
         mock_server.started = True
         mock_server.should_exit = False
 
-        async def fake_serve():
+        async def fake_serve() -> None:
             while not mock_server.should_exit:
                 await asyncio.sleep(0.01)
 
@@ -122,7 +128,9 @@ class TestSidecarMCPServer:
         assert mock_server.should_exit is True
 
     @pytest.mark.asyncio
-    async def test_stop_is_safe_when_not_started(self, mock_instance, sse_config):
+    async def test_stop_is_safe_when_not_started(
+        self, mock_instance: MagicMock, sse_config: MCPConfig
+    ) -> None:
         """stop() does nothing when the sidecar was never started."""
         sidecar = SidecarMCPServer(mock_instance, 9003, sse_config)
         # Should not raise

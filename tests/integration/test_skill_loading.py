@@ -6,9 +6,10 @@ from deepagents.backends.filesystem import FilesystemBackend
 from deepagents.middleware.skills import _list_skills
 
 from simulation_harness.agent.skill_backend import build_skill_sources
+from pathlib import Path
 
 
-def test_active_simulation_skill_is_discovered_and_isolated(tmp_path):
+def test_active_simulation_skill_is_discovered_and_isolated(tmp_path: Path) -> None:
     skill_dir = tmp_path / "petstore"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(
@@ -37,6 +38,7 @@ def test_active_simulation_skill_is_discovered_and_isolated(tmp_path):
         skill = skills[0]
         response = backend.download_files([skill["path"]])[0]
         assert response.error is None
+        assert response.content is not None
         assert "Pet Store Simulation" in response.content.decode()
     finally:
         shutil.rmtree(root_dir, ignore_errors=True)

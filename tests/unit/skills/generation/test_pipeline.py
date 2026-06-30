@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 from simulation_harness.config.models import GenerationConfig
@@ -40,7 +41,7 @@ SCHEMA = {
 }
 
 
-def _ir():
+def _ir() -> SpecModel:
     return SpecModel(
         api_name="Aha",
         slug="aha",
@@ -67,8 +68,8 @@ def _ir():
     )
 
 
-async def test_run_pipeline_produces_bundle_with_scenarios():
-    phases = []
+async def test_run_pipeline_produces_bundle_with_scenarios() -> None:
+    phases: list[Any] = []
     with (
         patch.object(P, "analyze", AsyncMock(return_value=_ir())),
         patch.object(P, "generate_schema", AsyncMock(return_value=SCHEMA)),
@@ -117,8 +118,8 @@ async def test_run_pipeline_produces_bundle_with_scenarios():
     assert "assembling" in phases
 
 
-async def test_run_pipeline_disabled_scenarios_skips_stage():
-    phases = []
+async def test_run_pipeline_disabled_scenarios_skips_stage() -> None:
+    phases: list[Any] = []
     with (
         patch.object(P, "analyze", AsyncMock(return_value=_ir())),
         patch.object(P, "generate_schema", AsyncMock(return_value=SCHEMA)),

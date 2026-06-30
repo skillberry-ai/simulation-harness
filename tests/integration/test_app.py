@@ -2,6 +2,7 @@
 
 import os
 import tempfile
+from typing import Any, cast
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -11,6 +12,7 @@ from fastapi.testclient import TestClient
 from simulation_harness.utils.errors import (
     SimulationAlreadyExistsError,
 )
+from collections.abc import Iterator
 
 
 def _valid_harness_config() -> dict:
@@ -35,7 +37,7 @@ def _valid_harness_config() -> dict:
 class TestAppStartup:
     """Test application startup and configuration."""
 
-    def test_app_starts_with_valid_config(self):
+    def test_app_starts_with_valid_config(self) -> None:
         """Test that app starts successfully with valid config."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             yaml.dump(_valid_harness_config(), f)
@@ -51,7 +53,7 @@ class TestAppStartup:
             assert app is not None
             assert app.title == "Simulation Harness"
 
-            routes = [route.path for route in app.routes]
+            routes = [route.path for route in cast(list[Any], app.routes)]
             assert "/api/v1/simulation" in routes
             assert "/api/v1/simulation/reset" in routes
 
@@ -64,7 +66,7 @@ class TestAppStartup:
             elif "LLM_API_KEY" in os.environ:
                 del os.environ["LLM_API_KEY"]
 
-    def test_app_refuses_to_start_with_invalid_config(self):
+    def test_app_refuses_to_start_with_invalid_config(self) -> None:
         """Test that app refuses to start with invalid config."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             config = {
@@ -88,7 +90,7 @@ class TestAppStartup:
         finally:
             os.unlink(config_path)
 
-    def test_app_refuses_to_start_with_missing_config(self):
+    def test_app_refuses_to_start_with_missing_config(self) -> None:
         """Test that app refuses to start when config file is missing."""
         from simulation_harness.config.settings import load_config
 
@@ -100,14 +102,14 @@ class TestMCPTransportMounting:
     """Test MCP transport mounting."""
 
     @pytest.fixture
-    def valid_config_path(self):
+    def valid_config_path(self) -> Iterator[Any]:
         """Create a temporary valid config file."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             yaml.dump(_valid_harness_config(), f)
             yield f.name
         os.unlink(f.name)
 
-    def test_sse_transport_mounts_correctly(self, valid_config_path):
+    def test_sse_transport_mounts_correctly(self, valid_config_path: Any) -> None:
         """Test that SSE transport mounts correctly."""
         _prior_key = os.environ.get("LLM_API_KEY")
         os.environ["HARNESS_CONFIG_PATH"] = valid_config_path
@@ -116,7 +118,7 @@ class TestMCPTransportMounting:
         try:
             from simulation_harness.main import app
 
-            routes = [route.path for route in app.routes]
+            routes = [route.path for route in cast(list[Any], app.routes)]
             assert "/mcp/sse" in routes
             assert "/mcp/messages" in routes
 
@@ -128,7 +130,7 @@ class TestMCPTransportMounting:
             elif "LLM_API_KEY" in os.environ:
                 del os.environ["LLM_API_KEY"]
 
-    def test_streamable_http_transport_mounts_correctly(self):
+    def test_streamable_http_transport_mounts_correctly(self) -> None:
         """Test that Streamable HTTP transport mounts correctly."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             config = _valid_harness_config()
@@ -152,7 +154,7 @@ class TestManagementAPIRoutes:
     """Test management API routes registration."""
 
     @pytest.fixture
-    def app_client(self):
+    def app_client(self) -> Iterator[Any]:
         """Create test client with valid config."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             yaml.dump(_valid_harness_config(), f)
@@ -176,7 +178,7 @@ class TestManagementAPIRoutes:
             elif "LLM_API_KEY" in os.environ:
                 del os.environ["LLM_API_KEY"]
 
-    def test_management_routes_are_registered(self, app_client):
+    def test_management_routes_are_registered(self, app_client: Any) -> None:
         """Test that management API routes are registered."""
         response = app_client.get("/openapi.json")
         assert response.status_code == 200
@@ -196,7 +198,7 @@ class TestErrorHandlers:
     """Test error handlers return correct status codes."""
 
     @pytest.fixture
-    def app_with_mocked_dependencies(self):
+    def app_with_mocked_dependencies(self) -> Iterator[Any]:
         """Create app with mocked dependencies for error testing."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             yaml.dump(_valid_harness_config(), f)
@@ -219,7 +221,9 @@ class TestErrorHandlers:
             elif "LLM_API_KEY" in os.environ:
                 del os.environ["LLM_API_KEY"]
 
-    def test_simulation_already_exists_returns_409(self, app_with_mocked_dependencies):
+    def test_simulation_already_exists_returns_409(
+        self, app_with_mocked_dependencies: Any
+    ) -> None:
         """Test SimulationAlreadyExistsError returns 409."""
         TestClient(app_with_mocked_dependencies)
 
@@ -234,27 +238,39 @@ class TestErrorHandlers:
 
             assert hasattr(app_with_mocked_dependencies, "exception_handlers")
 
-    def test_simulation_not_found_returns_404(self, app_with_mocked_dependencies):
+    def test_simulation_not_found_returns_404(
+        self, app_with_mocked_dependencies: Any
+    ) -> None:
         """Test SimulationNotFoundError returns 404."""
         assert hasattr(app_with_mocked_dependencies, "exception_handlers")
 
-    def test_openapi_validation_error_returns_422(self, app_with_mocked_dependencies):
+    def test_openapi_validation_error_returns_422(
+        self, app_with_mocked_dependencies: Any
+    ) -> None:
         """Test OpenAPIValidationError returns 422."""
         assert hasattr(app_with_mocked_dependencies, "exception_handlers")
 
-    def test_config_validation_error_returns_500(self, app_with_mocked_dependencies):
+    def test_config_validation_error_returns_500(
+        self, app_with_mocked_dependencies: Any
+    ) -> None:
         """Test ConfigValidationError returns 500."""
         assert hasattr(app_with_mocked_dependencies, "exception_handlers")
 
-    def test_session_expired_error_returns_410(self, app_with_mocked_dependencies):
+    def test_session_expired_error_returns_410(
+        self, app_with_mocked_dependencies: Any
+    ) -> None:
         """Test SessionExpiredError returns 410."""
         assert hasattr(app_with_mocked_dependencies, "exception_handlers")
 
-    def test_concurrent_queue_full_returns_503(self, app_with_mocked_dependencies):
+    def test_concurrent_queue_full_returns_503(
+        self, app_with_mocked_dependencies: Any
+    ) -> None:
         """Test ConcurrentQueueFullError returns 503."""
         assert hasattr(app_with_mocked_dependencies, "exception_handlers")
 
-    def test_generic_exception_returns_500(self, app_with_mocked_dependencies):
+    def test_generic_exception_returns_500(
+        self, app_with_mocked_dependencies: Any
+    ) -> None:
         """Test generic exceptions return 500."""
         assert hasattr(app_with_mocked_dependencies, "exception_handlers")
 
@@ -262,7 +278,7 @@ class TestErrorHandlers:
 class TestLifespanManagement:
     """Test lifespan management."""
 
-    def test_lifespan_startup_validates_config(self):
+    def test_lifespan_startup_validates_config(self) -> None:
         """Test that lifespan startup validates config."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             yaml.dump(_valid_harness_config(), f)
@@ -287,7 +303,7 @@ class TestLifespanManagement:
             elif "LLM_API_KEY" in os.environ:
                 del os.environ["LLM_API_KEY"]
 
-    def test_lifespan_cleanup_works_properly(self):
+    def test_lifespan_cleanup_works_properly(self) -> None:
         """Test that lifespan cleanup works properly."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             yaml.dump(_valid_harness_config(), f)
@@ -318,7 +334,7 @@ class TestLifespanManagement:
 class TestConfigPathEnvironmentVariable:
     """Test config path can be specified via environment variable."""
 
-    def test_config_path_from_env_variable(self):
+    def test_config_path_from_env_variable(self) -> None:
         """Test that config path can be specified via HARNESS_CONFIG_PATH."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             yaml.dump(_valid_harness_config(), f)
@@ -342,7 +358,7 @@ class TestConfigPathEnvironmentVariable:
             elif "LLM_API_KEY" in os.environ:
                 del os.environ["LLM_API_KEY"]
 
-    def test_config_path_defaults_to_config_harness_yaml(self):
+    def test_config_path_defaults_to_config_harness_yaml(self) -> None:
         """Test that config path defaults to config/harness.yaml."""
         if "HARNESS_CONFIG_PATH" in os.environ:
             del os.environ["HARNESS_CONFIG_PATH"]

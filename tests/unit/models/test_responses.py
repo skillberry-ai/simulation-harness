@@ -7,16 +7,17 @@ from pydantic import ValidationError
 
 from simulation_harness.models.domain import SessionState
 from simulation_harness.models.responses import ProgressPayload, SimulationResponse
+from typing import Any
 
 
-def _make_progress(now):
+def _make_progress(now: Any) -> ProgressPayload:
     return ProgressPayload(phase=None, started_at=now, updated_at=now)
 
 
 class TestSimulationResponse:
     """Tests for SimulationResponse model."""
 
-    def test_create_with_all_fields(self):
+    def test_create_with_all_fields(self) -> None:
         """Test creating response with all fields."""
         now = datetime.now(timezone.utc)
         session_state = SessionState(
@@ -43,10 +44,10 @@ class TestSimulationResponse:
         assert response.mcp_url == "http://localhost:8000/mcp/test-simulation"
         assert response.created_at == now
 
-    def test_required_fields(self):
+    def test_required_fields(self) -> None:
         """Test that name, status, created_at, and progress are required."""
         with pytest.raises(ValidationError) as exc_info:
-            SimulationResponse()
+            SimulationResponse()  # type: ignore[call-arg]
 
         error_str = str(exc_info.value)
         assert "name" in error_str
@@ -54,7 +55,7 @@ class TestSimulationResponse:
         assert "created_at" in error_str
         assert "progress" in error_str
 
-    def test_optional_fields_default_to_none(self):
+    def test_optional_fields_default_to_none(self) -> None:
         """Test that session_state, mcp_url, and error default to None."""
         now = datetime.now(timezone.utc)
         response = SimulationResponse(
@@ -67,7 +68,7 @@ class TestSimulationResponse:
         assert response.mcp_url is None
         assert response.error is None
 
-    def test_session_state_must_be_valid(self):
+    def test_session_state_must_be_valid(self) -> None:
         """Test that session_state must be a valid SessionState object."""
         now = datetime.now(timezone.utc)
 
@@ -83,7 +84,7 @@ class TestSimulationResponse:
 
         assert "session_state" in str(exc_info.value)
 
-    def test_created_at_must_be_datetime(self):
+    def test_created_at_must_be_datetime(self) -> None:
         """Test that created_at must be a datetime object."""
         now = datetime.now(timezone.utc)
 
@@ -97,7 +98,7 @@ class TestSimulationResponse:
 
         assert "created_at" in str(exc_info.value)
 
-    def test_response_serialization(self):
+    def test_response_serialization(self) -> None:
         """Test that response can be serialized to dict."""
         now = datetime.now(timezone.utc)
         session_state = SessionState(

@@ -10,6 +10,7 @@ from pydantic import SecretStr
 from simulation_harness.skills import generator as G
 from simulation_harness.skills.generator import SkillGenerator
 from simulation_harness.skills.generation.pipeline import SkillBundle
+from typing import Any
 
 SPEC = {
     "openapi": "3.0.0",
@@ -95,11 +96,11 @@ class TestPipelineDelegation:
         gen = SkillGenerator(api_key=SecretStr("k"))
         seen = {}
 
-        async def fake_pipeline(spec, slug, **kwargs):
+        async def fake_pipeline(spec: Any, slug: Any, **kwargs: Any) -> Any:
             seen["cb"] = kwargs.get("progress_cb")
             return BUNDLE
 
-        def cb(p):
+        def cb(p: Any) -> None:
             return None
 
         with patch.object(G, "run_pipeline", fake_pipeline):
@@ -205,7 +206,9 @@ class TestBaseURLWiring:
 
 
 class TestSkillRegistryInvalidation:
-    def test_load_secrets_clears_skill_registry(self, monkeypatch):
+    def test_load_secrets_clears_skill_registry(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """load_secrets() must clear the cached _skill_registry."""
         import simulation_harness.api.dependencies as deps
         from unittest.mock import MagicMock
@@ -219,7 +222,7 @@ class TestSkillRegistryInvalidation:
         load_secrets(env_file=None)
         assert deps._skill_registry is None
 
-    def test_reset_skill_registry_clears_cached_singleton(self):
+    def test_reset_skill_registry_clears_cached_singleton(self) -> None:
         """reset_skill_registry() provides a public API to clear the cache."""
         import simulation_harness.api.dependencies as deps
         from unittest.mock import MagicMock
@@ -238,7 +241,7 @@ class TestForceSkillName:
     definition now lives in skills.generation.naming.
     """
 
-    def test_replaces_mismatched_name(self):
+    def test_replaces_mismatched_name(self) -> None:
         from simulation_harness.skills.generator import _force_skill_name
 
         skill_md = (
@@ -249,7 +252,7 @@ class TestForceSkillName:
         assert "name: widget-api" in out
         assert "widget-simulation" not in out
 
-    def test_preserves_other_frontmatter_and_body(self):
+    def test_preserves_other_frontmatter_and_body(self) -> None:
         from simulation_harness.skills.generator import _force_skill_name
 
         skill_md = (
@@ -261,7 +264,7 @@ class TestForceSkillName:
         assert "# Widget" in out
         assert "Body." in out
 
-    def test_inserts_name_when_absent_from_frontmatter(self):
+    def test_inserts_name_when_absent_from_frontmatter(self) -> None:
         from simulation_harness.skills.generator import _force_skill_name
 
         skill_md = "---\ndescription: Simulate the Widget API.\n---\n\n# Widget\n"
@@ -269,7 +272,7 @@ class TestForceSkillName:
         assert "name: widget-api" in out
         assert "description: Simulate the Widget API." in out
 
-    def test_adds_frontmatter_when_missing(self):
+    def test_adds_frontmatter_when_missing(self) -> None:
         from simulation_harness.skills.generator import _force_skill_name
 
         skill_md = "# Widget\n\nNo frontmatter here.\n"
@@ -277,7 +280,7 @@ class TestForceSkillName:
         assert out.startswith("---\nname: widget-api\n---\n")
         assert "No frontmatter here." in out
 
-    def test_only_first_name_in_frontmatter_is_rewritten(self):
+    def test_only_first_name_in_frontmatter_is_rewritten(self) -> None:
         """A `name:` mention in the body must not be touched."""
         from simulation_harness.skills.generator import _force_skill_name
 

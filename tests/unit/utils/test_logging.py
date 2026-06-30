@@ -6,13 +6,14 @@ from unittest.mock import patch
 
 from simulation_harness.models.domain import SessionState
 from simulation_harness.utils.logging import log_tool_call, log_tool_call_legacy
+from typing import Any
 
 
 class TestLogToolCall:
     """Tests for log_tool_call function."""
 
     @patch("simulation_harness.utils.logging.logger")
-    def test_logs_successful_tool_call(self, mock_logger):
+    def test_logs_successful_tool_call(self, mock_logger: Any) -> None:
         """Test logging a successful tool call."""
         now = datetime.now(timezone.utc)
         session_state = SessionState(
@@ -44,7 +45,7 @@ class TestLogToolCall:
         assert "5" in log_message  # tool_call_count
 
     @patch("simulation_harness.utils.logging.logger")
-    def test_logs_failed_tool_call(self, mock_logger):
+    def test_logs_failed_tool_call(self, mock_logger: Any) -> None:
         """Test logging a failed tool call."""
         now = datetime.now(timezone.utc)
         session_state = SessionState(
@@ -84,7 +85,7 @@ class TestLogToolCall:
         assert "User not found" in log_message or "error" in log_message.lower()
 
     @patch("simulation_harness.utils.logging.logger")
-    def test_includes_all_required_fields(self, mock_logger):
+    def test_includes_all_required_fields(self, mock_logger: Any) -> None:
         """Test that log includes all required fields from REQUIREMENTS."""
         now = datetime.now(timezone.utc)
         session_state = SessionState(
@@ -116,7 +117,7 @@ class TestLogToolCall:
         assert call_args is not None
 
     @patch("simulation_harness.utils.logging.logger")
-    def test_handles_complex_arguments(self, mock_logger):
+    def test_handles_complex_arguments(self, mock_logger: Any) -> None:
         """Test logging with complex nested arguments."""
         now = datetime.now(timezone.utc)
         session_state = SessionState(
@@ -152,7 +153,7 @@ class TestLogToolCall:
         assert mock_logger.info.called
 
     @patch("simulation_harness.utils.logging.logger")
-    def test_logs_with_timestamp(self, mock_logger):
+    def test_logs_with_timestamp(self, mock_logger: Any) -> None:
         """Test that log includes timestamp information."""
         now = datetime.now(timezone.utc)
         session_state = SessionState(
@@ -182,7 +183,7 @@ class TestLogToolCall:
         assert call_args is not None
 
     @patch("simulation_harness.utils.logging.logger")
-    def test_includes_session_state_details(self, mock_logger):
+    def test_includes_session_state_details(self, mock_logger: Any) -> None:
         """Test that session state details are included in log."""
         now = datetime.now(timezone.utc)
         session_state = SessionState(
@@ -212,7 +213,7 @@ class TestLogToolCall:
         assert "15" in log_message  # tool_call_count
         assert "3" in log_message  # queue_depth
 
-    def test_log_tool_call_complete_fields(self):
+    def test_log_tool_call_complete_fields(self) -> None:
         """Test that log_tool_call includes all required fields."""
         log_entry = log_tool_call(
             tool_name="test_tool",
@@ -237,7 +238,7 @@ class TestLogToolCall:
         assert log_entry["transport"] == "sse"
         assert "timestamp" in log_entry
 
-    def test_log_tool_call_outcome_taxonomy(self):
+    def test_log_tool_call_outcome_taxonomy(self) -> None:
         """Test that outcome uses correct taxonomy."""
         valid_outcomes = [
             "success",
@@ -252,7 +253,7 @@ class TestLogToolCall:
         for outcome in valid_outcomes:
             log_entry = log_tool_call(
                 tool_name="test",
-                outcome=outcome,
+                outcome=outcome,  # type: ignore[arg-type]
                 duration_ms=100,
                 tool_call_count=1,
                 queue_depth_at_admission=0,
@@ -261,7 +262,7 @@ class TestLogToolCall:
             )
             assert log_entry["outcome"] == outcome
 
-    def test_log_tool_call_with_null_token_usage(self):
+    def test_log_tool_call_with_null_token_usage(self) -> None:
         """Test that token_usage can be None."""
         log_entry = log_tool_call(
             tool_name="test_tool",

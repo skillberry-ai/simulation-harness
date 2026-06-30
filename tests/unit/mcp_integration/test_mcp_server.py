@@ -12,10 +12,11 @@ from simulation_harness.utils.errors import (
     SessionExpiredError,
     ConcurrentQueueFullError,
 )
+from unittest.mock import MagicMock
 
 
 @pytest.fixture
-def mock_simulation_instance():
+def mock_simulation_instance() -> MagicMock:
     """Create a mock simulation instance."""
     instance = Mock(spec=SimulationInstance)
     instance.execute_tool = AsyncMock()
@@ -37,7 +38,9 @@ def mock_simulation_instance():
 
 
 @pytest.mark.asyncio
-async def test_mcp_server_wrapper_initialization(mock_simulation_instance):
+async def test_mcp_server_wrapper_initialization(
+    mock_simulation_instance: MagicMock,
+) -> None:
     """Test that MCPServerWrapper initializes correctly."""
     wrapper = MCPServerWrapper(mock_simulation_instance)
 
@@ -46,7 +49,9 @@ async def test_mcp_server_wrapper_initialization(mock_simulation_instance):
 
 
 @pytest.mark.asyncio
-async def test_list_tools_returns_tool_schemas(mock_simulation_instance):
+async def test_list_tools_returns_tool_schemas(
+    mock_simulation_instance: MagicMock,
+) -> None:
     """Test that list_tools returns correct tool schemas from OpenAPI operations."""
     wrapper = MCPServerWrapper(mock_simulation_instance)
 
@@ -66,7 +71,9 @@ async def test_list_tools_returns_tool_schemas(mock_simulation_instance):
 
 
 @pytest.mark.asyncio
-async def test_call_tool_executes_via_simulation_instance(mock_simulation_instance):
+async def test_call_tool_executes_via_simulation_instance(
+    mock_simulation_instance: MagicMock,
+) -> None:
     """Test that call_tool executes via SimulationInstance.execute_tool."""
     mock_simulation_instance.execute_tool.return_value = ToolCallResult(
         success=True,
@@ -89,7 +96,9 @@ async def test_call_tool_executes_via_simulation_instance(mock_simulation_instan
 
 
 @pytest.mark.asyncio
-async def test_call_tool_handles_session_expired_error(mock_simulation_instance):
+async def test_call_tool_handles_session_expired_error(
+    mock_simulation_instance: MagicMock,
+) -> None:
     """Test that SessionExpiredError is translated to MCP error result."""
     mock_simulation_instance.execute_tool.side_effect = SessionExpiredError(
         reason="max_messages_exceeded", limit=100, observed=101
@@ -107,7 +116,9 @@ async def test_call_tool_handles_session_expired_error(mock_simulation_instance)
 
 
 @pytest.mark.asyncio
-async def test_call_tool_handles_queue_full_error(mock_simulation_instance):
+async def test_call_tool_handles_queue_full_error(
+    mock_simulation_instance: MagicMock,
+) -> None:
     """Test that ConcurrentQueueFullError is translated to MCP error result."""
     mock_simulation_instance.execute_tool.side_effect = ConcurrentQueueFullError(
         "Queue is full (depth=10, max=10)"
@@ -125,7 +136,9 @@ async def test_call_tool_handles_queue_full_error(mock_simulation_instance):
 
 
 @pytest.mark.asyncio
-async def test_call_tool_handles_tool_execution_failure(mock_simulation_instance):
+async def test_call_tool_handles_tool_execution_failure(
+    mock_simulation_instance: MagicMock,
+) -> None:
     """Test that tool execution failures are properly returned."""
     mock_simulation_instance.execute_tool.return_value = ToolCallResult(
         success=False,
@@ -145,7 +158,7 @@ async def test_call_tool_handles_tool_execution_failure(mock_simulation_instance
 
 
 @pytest.mark.asyncio
-async def test_call_tool_with_arguments(mock_simulation_instance):
+async def test_call_tool_with_arguments(mock_simulation_instance: MagicMock) -> None:
     """Test that call_tool passes arguments correctly."""
     mock_simulation_instance.execute_tool.return_value = ToolCallResult(
         success=True,
@@ -168,8 +181,8 @@ async def test_call_tool_with_arguments(mock_simulation_instance):
 
 @pytest.mark.asyncio
 async def test_handle_call_tool_session_expired_includes_structured_reason(
-    mock_simulation_instance,
-):
+    mock_simulation_instance: MagicMock,
+) -> None:
     """Test that SessionExpiredError returns a JSON content block with reason field."""
     mock_simulation_instance.execute_tool.side_effect = SessionExpiredError(
         reason="max_messages_exceeded", limit=100, observed=101
@@ -180,7 +193,7 @@ async def test_handle_call_tool_session_expired_includes_structured_reason(
 
     assert result.isError is True
     assert len(result.content) >= 2
-    structured = json.loads(result.content[-1].text)
+    structured = json.loads(result.content[-1].text)  # type: ignore[union-attr]
     assert structured["reason"] == "session_expired"
     assert structured["limit"] == 100
     assert structured["observed"] == 101
@@ -188,8 +201,8 @@ async def test_handle_call_tool_session_expired_includes_structured_reason(
 
 @pytest.mark.asyncio
 async def test_handle_call_tool_queue_full_includes_structured_reason(
-    mock_simulation_instance,
-):
+    mock_simulation_instance: MagicMock,
+) -> None:
     """Test that ConcurrentQueueFullError returns a JSON content block with reason field."""
     mock_simulation_instance.execute_tool.side_effect = ConcurrentQueueFullError(
         "Queue full"
@@ -200,14 +213,14 @@ async def test_handle_call_tool_queue_full_includes_structured_reason(
 
     assert result.isError is True
     assert len(result.content) >= 2
-    structured = json.loads(result.content[-1].text)
+    structured = json.loads(result.content[-1].text)  # type: ignore[union-attr]
     assert structured["reason"] == "concurrent_queue_full"
 
 
 @pytest.mark.asyncio
 async def test_handle_call_tool_execution_failure_includes_structured_reason(
-    mock_simulation_instance,
-):
+    mock_simulation_instance: MagicMock,
+) -> None:
     """Test that tool execution failure returns a JSON content block with reason field."""
     mock_simulation_instance.execute_tool.return_value = ToolCallResult(
         success=False,
@@ -220,7 +233,7 @@ async def test_handle_call_tool_execution_failure_includes_structured_reason(
 
     assert result.isError is True
     assert len(result.content) >= 2
-    structured = json.loads(result.content[-1].text)
+    structured = json.loads(result.content[-1].text)  # type: ignore[union-attr]
     assert structured["reason"] == "tool_execution_failed"
 
 

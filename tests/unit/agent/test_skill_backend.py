@@ -14,10 +14,12 @@ import shutil
 from pathlib import Path
 
 import pytest
+from collections.abc import Iterator
+from typing import Any
 
 
 @pytest.fixture
-def staging_roots():
+def staging_roots() -> Iterator[Any]:
     """Collect staging roots created during a test and remove them on teardown."""
     roots: list[str] = []
     yield roots
@@ -46,13 +48,13 @@ def _build(skill_dir: Path, staging_roots: list[str]) -> tuple[str, list[str]]:
     return root_dir, sources
 
 
-def test_sources_point_at_dot_skills(tmp_path, staging_roots):
+def test_sources_point_at_dot_skills(tmp_path: Path, staging_roots: Any) -> None:
     skill_dir = _make_skill_dir(tmp_path)
     _root, sources = _build(skill_dir, staging_roots)
     assert sources == ["/.skills/"]
 
 
-def test_staging_root_is_outside_skill_dir(tmp_path, staging_roots):
+def test_staging_root_is_outside_skill_dir(tmp_path: Path, staging_roots: Any) -> None:
     skill_dir = _make_skill_dir(tmp_path)
     root_dir, _ = _build(skill_dir, staging_roots)
     root = Path(root_dir).resolve()
@@ -60,7 +62,7 @@ def test_staging_root_is_outside_skill_dir(tmp_path, staging_roots):
     assert not root.is_relative_to(skill_dir.resolve())
 
 
-def test_does_not_pollute_skill_dir(tmp_path, staging_roots):
+def test_does_not_pollute_skill_dir(tmp_path: Path, staging_roots: Any) -> None:
     """Regression: the old design created ``skill_dir/.skills/<name> -> ..``,
     a self-referential directory cycle. The skill directory must be left
     untouched."""
@@ -69,7 +71,9 @@ def test_does_not_pollute_skill_dir(tmp_path, staging_roots):
     assert not (skill_dir / ".skills").exists()
 
 
-def test_skill_files_are_copied_under_staging(tmp_path, staging_roots):
+def test_skill_files_are_copied_under_staging(
+    tmp_path: Path, staging_roots: Any
+) -> None:
     skill_dir = _make_skill_dir(tmp_path)
     root_dir, _ = _build(skill_dir, staging_roots)
     staged = Path(root_dir) / ".skills" / "petstore"
@@ -81,7 +85,9 @@ def test_skill_files_are_copied_under_staging(tmp_path, staging_roots):
     assert (staged / "db.json").exists()
 
 
-def test_staged_files_are_real_copies_not_symlinks(tmp_path, staging_roots):
+def test_staged_files_are_real_copies_not_symlinks(
+    tmp_path: Path, staging_roots: Any
+) -> None:
     """virtual_mode rejects symlink targets outside the root, so the staged
     entries must be real files, not links back to the source."""
     skill_dir = _make_skill_dir(tmp_path)
@@ -91,7 +97,9 @@ def test_staged_files_are_real_copies_not_symlinks(tmp_path, staging_roots):
     assert not (staged / "SKILL.md").is_symlink()
 
 
-def test_stale_dot_skills_in_source_is_not_propagated(tmp_path, staging_roots):
+def test_stale_dot_skills_in_source_is_not_propagated(
+    tmp_path: Path, staging_roots: Any
+) -> None:
     """A leftover ``.skills`` from the old design must not be copied into the
     staging tree (which would re-introduce the nesting)."""
     skill_dir = _make_skill_dir(tmp_path)
@@ -102,7 +110,9 @@ def test_stale_dot_skills_in_source_is_not_propagated(tmp_path, staging_roots):
     assert not (staged / ".skills").exists()
 
 
-def test_each_call_creates_independent_staging(tmp_path, staging_roots):
+def test_each_call_creates_independent_staging(
+    tmp_path: Path, staging_roots: Any
+) -> None:
     skill_dir = _make_skill_dir(tmp_path)
     root_a, _ = _build(skill_dir, staging_roots)
     root_b, _ = _build(skill_dir, staging_roots)

@@ -9,7 +9,7 @@ import json
 from simulation_harness.state.tools import StateListArgs
 
 
-def test_state_list_args_schema_valid():
+def test_state_list_args_schema_valid() -> None:
     """Test that StateListArgs generates a valid JSON schema.
 
     Azure OpenAI requires that array schemas have an 'items' field.
@@ -48,7 +48,7 @@ def test_state_list_args_schema_valid():
         assert "items" in sort_schema, f"Array schema missing 'items': {sort_schema}"
 
 
-def test_state_list_args_instantiation():
+def test_state_list_args_instantiation() -> None:
     """Test that StateListArgs can be instantiated with sort parameter."""
     # Test with list of lists (as LLM would provide)
     args = StateListArgs(
@@ -63,7 +63,7 @@ def test_state_list_args_instantiation():
     assert data["sort"] == [["name", "asc"], ["rating", "desc"]]
 
 
-def test_state_list_args_from_json():
+def test_state_list_args_from_json() -> None:
     """Test that StateListArgs can be created from JSON (as LLM would provide)."""
     # LLMs will provide lists
     json_data = {"store": "restaurants", "sort": [["name", "asc"], ["rating", "desc"]]}

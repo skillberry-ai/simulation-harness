@@ -1,6 +1,7 @@
 """Tests for MCP transport mounting."""
 
 import pytest
+from typing import Any, cast
 from unittest.mock import Mock, patch
 from fastapi import FastAPI
 
@@ -10,10 +11,11 @@ from simulation_harness.mcp_integration.transport import (
 )
 from simulation_harness.mcp_integration.mcp_server import MCPServerWrapper
 from simulation_harness.config.models import TransportType
+from unittest.mock import MagicMock
 
 
 @pytest.fixture
-def mock_mcp_wrapper():
+def mock_mcp_wrapper() -> MagicMock:
     """Create a mock MCP server wrapper."""
     wrapper = Mock(spec=MCPServerWrapper)
     wrapper.server = Mock()
@@ -21,17 +23,19 @@ def mock_mcp_wrapper():
 
 
 @pytest.fixture
-def fastapi_app():
+def fastapi_app() -> FastAPI:
     """Create a FastAPI app for testing."""
     return FastAPI()
 
 
-def test_mount_sse_transport_creates_correct_endpoints(fastapi_app, mock_mcp_wrapper):
+def test_mount_sse_transport_creates_correct_endpoints(
+    fastapi_app: FastAPI, mock_mcp_wrapper: MagicMock
+) -> None:
     """Test that SSE transport mounts at correct paths."""
     mount_sse_transport(fastapi_app, mock_mcp_wrapper)
 
     # Check that routes were added
-    routes = [route.path for route in fastapi_app.routes]
+    routes = [route.path for route in cast(list[Any], fastapi_app.routes)]
 
     # SSE should have GET /mcp/sse and POST /mcp/messages
     assert "/mcp/sse" in routes
@@ -39,25 +43,27 @@ def test_mount_sse_transport_creates_correct_endpoints(fastapi_app, mock_mcp_wra
 
 
 def test_mount_streamable_http_transport_creates_endpoint(
-    fastapi_app, mock_mcp_wrapper
-):
+    fastapi_app: FastAPI, mock_mcp_wrapper: MagicMock
+) -> None:
     """Test that Streamable HTTP transport mounts at /mcp."""
     mount_streamable_http_transport(fastapi_app, mock_mcp_wrapper)
 
     # Check that route was added
-    routes = [route.path for route in fastapi_app.routes]
+    routes = [route.path for route in cast(list[Any], fastapi_app.routes)]
 
     # Streamable HTTP should mount at /mcp
     assert "/mcp" in routes
 
 
-def test_mount_sse_transport_get_method(fastapi_app, mock_mcp_wrapper):
+def test_mount_sse_transport_get_method(
+    fastapi_app: FastAPI, mock_mcp_wrapper: MagicMock
+) -> None:
     """Test that SSE endpoint accepts GET method."""
     mount_sse_transport(fastapi_app, mock_mcp_wrapper)
 
     # Find the SSE route
     sse_route = None
-    for route in fastapi_app.routes:
+    for route in cast(list[Any], fastapi_app.routes):
         if route.path == "/mcp/sse":
             sse_route = route
             break
@@ -66,13 +72,15 @@ def test_mount_sse_transport_get_method(fastapi_app, mock_mcp_wrapper):
     assert "GET" in sse_route.methods
 
 
-def test_mount_sse_transport_post_method(fastapi_app, mock_mcp_wrapper):
+def test_mount_sse_transport_post_method(
+    fastapi_app: FastAPI, mock_mcp_wrapper: MagicMock
+) -> None:
     """Test that messages endpoint accepts POST method."""
     mount_sse_transport(fastapi_app, mock_mcp_wrapper)
 
     # Find the messages route
     messages_route = None
-    for route in fastapi_app.routes:
+    for route in cast(list[Any], fastapi_app.routes):
         if route.path == "/mcp/messages":
             messages_route = route
             break
@@ -81,13 +89,15 @@ def test_mount_sse_transport_post_method(fastapi_app, mock_mcp_wrapper):
     assert "POST" in messages_route.methods
 
 
-def test_mount_streamable_http_transport_post_method(fastapi_app, mock_mcp_wrapper):
+def test_mount_streamable_http_transport_post_method(
+    fastapi_app: FastAPI, mock_mcp_wrapper: MagicMock
+) -> None:
     """Test that Streamable HTTP endpoint accepts POST method."""
     mount_streamable_http_transport(fastapi_app, mock_mcp_wrapper)
 
     # Find the /mcp route
     mcp_route = None
-    for route in fastapi_app.routes:
+    for route in cast(list[Any], fastapi_app.routes):
         if route.path == "/mcp":
             mcp_route = route
             break
@@ -96,7 +106,9 @@ def test_mount_streamable_http_transport_post_method(fastapi_app, mock_mcp_wrapp
     assert "POST" in mcp_route.methods
 
 
-def test_cannot_mount_multiple_transports(fastapi_app, mock_mcp_wrapper):
+def test_cannot_mount_multiple_transports(
+    fastapi_app: FastAPI, mock_mcp_wrapper: MagicMock
+) -> None:
     """Test that mounting multiple transports raises an error."""
     # Mount first transport
     mount_sse_transport(fastapi_app, mock_mcp_wrapper)
@@ -106,7 +118,9 @@ def test_cannot_mount_multiple_transports(fastapi_app, mock_mcp_wrapper):
         mount_streamable_http_transport(fastapi_app, mock_mcp_wrapper)
 
 
-def test_transport_choice_from_config(fastapi_app, mock_mcp_wrapper):
+def test_transport_choice_from_config(
+    fastapi_app: FastAPI, mock_mcp_wrapper: MagicMock
+) -> None:
     """Test that transport is chosen based on config."""
     # This test verifies the integration point
     # The actual mounting function should check config and mount appropriate transport
@@ -136,7 +150,7 @@ def test_transport_choice_from_config(fastapi_app, mock_mcp_wrapper):
         mock_http.assert_called_once()
 
 
-def test_both_transports_share_same_server(mock_mcp_wrapper):
+def test_both_transports_share_same_server(mock_mcp_wrapper: MagicMock) -> None:
     """Test that both transports use the same mcp.server.Server instance."""
     app1 = FastAPI()
     app2 = FastAPI()

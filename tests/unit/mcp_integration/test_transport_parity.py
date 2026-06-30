@@ -10,10 +10,12 @@ from simulation_harness.mcp_integration.transport import (
     mount_streamable_http_transport,
 )
 from simulation_harness.models.domain import ToolCallResult
+from typing import Any
+from unittest.mock import MagicMock
 
 
 @pytest.fixture
-def mock_simulation_instance():
+def mock_simulation_instance() -> MagicMock:
     """Create a mock simulation instance."""
     instance = Mock()
     instance.execute_tool = AsyncMock()
@@ -43,7 +45,7 @@ def mock_simulation_instance():
 
 
 @pytest.fixture
-def sse_app(mock_simulation_instance):
+def sse_app(mock_simulation_instance: MagicMock) -> Any:
     """Create FastAPI app with SSE transport."""
     app = FastAPI()
     wrapper = MCPServerWrapper(mock_simulation_instance)
@@ -52,7 +54,7 @@ def sse_app(mock_simulation_instance):
 
 
 @pytest.fixture
-def http_app(mock_simulation_instance):
+def http_app(mock_simulation_instance: MagicMock) -> Any:
     """Create FastAPI app with Streamable HTTP transport."""
     app = FastAPI()
     wrapper = MCPServerWrapper(mock_simulation_instance)
@@ -61,7 +63,9 @@ def http_app(mock_simulation_instance):
 
 
 @pytest.mark.asyncio
-async def test_both_transports_return_same_tool_list(mock_simulation_instance):
+async def test_both_transports_return_same_tool_list(
+    mock_simulation_instance: MagicMock,
+) -> None:
     """Test that both transports return identical tool lists."""
     # Create wrappers for both transports
     wrapper1 = MCPServerWrapper(mock_simulation_instance)
@@ -84,8 +88,8 @@ async def test_both_transports_return_same_tool_list(mock_simulation_instance):
 
 @pytest.mark.asyncio
 async def test_both_transports_handle_successful_tool_call_identically(
-    mock_simulation_instance,
-):
+    mock_simulation_instance: MagicMock,
+) -> None:
     """Test that both transports handle successful tool calls identically."""
     mock_simulation_instance.execute_tool.return_value = ToolCallResult(
         success=True,
@@ -109,8 +113,8 @@ async def test_both_transports_handle_successful_tool_call_identically(
 
 @pytest.mark.asyncio
 async def test_both_transports_handle_tool_failure_identically(
-    mock_simulation_instance,
-):
+    mock_simulation_instance: MagicMock,
+) -> None:
     """Test that both transports handle tool failures identically."""
     mock_simulation_instance.execute_tool.return_value = ToolCallResult(
         success=False,
@@ -134,8 +138,8 @@ async def test_both_transports_handle_tool_failure_identically(
 
 @pytest.mark.asyncio
 async def test_both_transports_handle_session_expired_identically(
-    mock_simulation_instance,
-):
+    mock_simulation_instance: MagicMock,
+) -> None:
     """Test that both transports handle SessionExpiredError identically."""
     from simulation_harness.utils.errors import SessionExpiredError
 
@@ -158,7 +162,9 @@ async def test_both_transports_handle_session_expired_identically(
 
 
 @pytest.mark.asyncio
-async def test_both_transports_handle_queue_full_identically(mock_simulation_instance):
+async def test_both_transports_handle_queue_full_identically(
+    mock_simulation_instance: MagicMock,
+) -> None:
     """Test that both transports handle ConcurrentQueueFullError identically."""
     from simulation_harness.utils.errors import ConcurrentQueueFullError
 
@@ -181,7 +187,9 @@ async def test_both_transports_handle_queue_full_identically(mock_simulation_ins
 
 
 @pytest.mark.asyncio
-async def test_both_transports_share_same_server_instance(mock_simulation_instance):
+async def test_both_transports_share_same_server_instance(
+    mock_simulation_instance: MagicMock,
+) -> None:
     """Test that both transports can use the same MCP server instance."""
     # Create single wrapper
     wrapper = MCPServerWrapper(mock_simulation_instance)

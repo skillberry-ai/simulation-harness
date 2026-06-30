@@ -14,10 +14,12 @@ import yaml
 from fastapi.testclient import TestClient
 
 from tests.integration.conftest import poll_until_ready
+from collections.abc import Iterator
+from typing import Any
 
 
 @pytest.fixture
-def valid_openapi_spec():
+def valid_openapi_spec() -> dict[str, Any]:
     """Provide a valid OpenAPI 3.0 specification."""
     return {
         "openapi": "3.0.0",
@@ -50,7 +52,7 @@ def valid_openapi_spec():
 
 
 @pytest.fixture
-def valid_openapi_spec_31():
+def valid_openapi_spec_31() -> dict[str, Any]:
     """Provide a valid OpenAPI 3.1 specification."""
     return {
         "openapi": "3.1.0",
@@ -83,7 +85,7 @@ def valid_openapi_spec_31():
 
 
 @pytest.fixture
-def app_client():
+def app_client() -> Iterator[Any]:
     """Create test client with valid config and clean state for each test."""
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
         config = {
@@ -143,7 +145,9 @@ def app_client():
 class TestSimulationCreation:
     """Test simulation creation from OpenAPI spec."""
 
-    def test_create_simulation_from_openapi_spec(self, app_client, valid_openapi_spec):
+    def test_create_simulation_from_openapi_spec(
+        self, app_client: Any, valid_openapi_spec: dict[str, Any]
+    ) -> None:
         """Test creating a simulation from a valid OpenAPI spec."""
         # Mock skill generation to avoid actual LLM calls
         with patch(
@@ -171,8 +175,8 @@ class TestSimulationCreation:
         assert "created_at" in final
 
     def test_create_simulation_openapi_31_accepted(
-        self, app_client, valid_openapi_spec_31
-    ):
+        self, app_client: Any, valid_openapi_spec_31: dict[str, Any]
+    ) -> None:
         """Test that OpenAPI 3.1.x specs are accepted."""
         with patch(
             "simulation_harness.skills.generator.SkillGenerator.generate_skill",
@@ -195,7 +199,7 @@ class TestSimulationCreation:
 
         assert final["status"] == "ready", f"expected ready, got: {final}"
 
-    def test_create_simulation_invalid_spec_returns_422(self, app_client):
+    def test_create_simulation_invalid_spec_returns_422(self, app_client: Any) -> None:
         """Test that invalid OpenAPI spec returns 422."""
         invalid_spec = {
             "openapi": "3.0.0",
@@ -212,8 +216,8 @@ class TestSimulationCreation:
         assert "validation" in response.json()["detail"].lower()
 
     def test_create_simulation_10mb_body_cap_enforced(
-        self, app_client, valid_openapi_spec
-    ):
+        self, app_client: Any, valid_openapi_spec: dict[str, Any]
+    ) -> None:
         """Test that 10MB body size limit is enforced."""
         # Create a spec that exceeds 10MB
         large_spec = valid_openapi_spec.copy()
@@ -228,8 +232,8 @@ class TestSimulationCreation:
         assert response.status_code == 413
 
     def test_create_simulation_already_exists_returns_409(
-        self, app_client, valid_openapi_spec
-    ):
+        self, app_client: Any, valid_openapi_spec: dict[str, Any]
+    ) -> None:
         """Test that creating a duplicate simulation returns 409."""
         with patch(
             "simulation_harness.skills.generator.SkillGenerator.generate_skill",
@@ -255,7 +259,9 @@ class TestSimulationCreation:
 class TestSkillGeneration:
     """Test skill generation and reuse."""
 
-    def test_skill_generation_new_skill(self, app_client, valid_openapi_spec):
+    def test_skill_generation_new_skill(
+        self, app_client: Any, valid_openapi_spec: dict[str, Any]
+    ) -> None:
         """Test that a new skill is generated when none exists."""
         with patch(
             "simulation_harness.skills.generator.SkillGenerator.generate_skill",
@@ -276,7 +282,9 @@ class TestSkillGeneration:
             # Verify skill generator was called
             mock_gen.assert_called_once()
 
-    def test_skill_reuse_existing_skill(self, app_client, valid_openapi_spec):
+    def test_skill_reuse_existing_skill(
+        self, app_client: Any, valid_openapi_spec: dict[str, Any]
+    ) -> None:
         """Test that existing skill is reused when regenerate=False.
 
         This test verifies the behavior by creating a simulation twice with the same spec.
@@ -320,7 +328,9 @@ class TestSkillGeneration:
             # The behavior of skill reuse is tested in unit tests for SkillRegistry
             # Here we just verify the API works correctly
 
-    def test_regenerate_flag_forces_new_skill(self, app_client, valid_openapi_spec):
+    def test_regenerate_flag_forces_new_skill(
+        self, app_client: Any, valid_openapi_spec: dict[str, Any]
+    ) -> None:
         """Test that regenerate=True forces new skill generation."""
         with patch(
             "simulation_harness.skills.generator.SkillGenerator.generate_skill",
@@ -360,7 +370,9 @@ class TestSkillGeneration:
 class TestSimulationStatus:
     """Test getting simulation status."""
 
-    def test_get_simulation_status(self, app_client, valid_openapi_spec):
+    def test_get_simulation_status(
+        self, app_client: Any, valid_openapi_spec: dict[str, Any]
+    ) -> None:
         """Test getting status of active simulation."""
         with patch(
             "simulation_harness.skills.generator.SkillGenerator.generate_skill",
@@ -387,7 +399,9 @@ class TestSimulationStatus:
             assert data["status"] == "ready"
             assert "session_state" in data
 
-    def test_get_simulation_status_no_simulation_returns_404(self, app_client):
+    def test_get_simulation_status_no_simulation_returns_404(
+        self, app_client: Any
+    ) -> None:
         """Test that getting status with no simulation returns 404."""
         response = app_client.get("/api/v1/simulation")
         assert response.status_code == 404
@@ -396,7 +410,9 @@ class TestSimulationStatus:
 class TestSimulationDeletion:
     """Test simulation deletion."""
 
-    def test_delete_simulation(self, app_client, valid_openapi_spec):
+    def test_delete_simulation(
+        self, app_client: Any, valid_openapi_spec: dict[str, Any]
+    ) -> None:
         """Test deleting an active simulation."""
         with patch(
             "simulation_harness.skills.generator.SkillGenerator.generate_skill",
@@ -422,7 +438,7 @@ class TestSimulationDeletion:
             status_response = app_client.get("/api/v1/simulation")
             assert status_response.status_code == 404
 
-    def test_delete_simulation_no_simulation_returns_404(self, app_client):
+    def test_delete_simulation_no_simulation_returns_404(self, app_client: Any) -> None:
         """Test that deleting with no simulation returns 404."""
         response = app_client.delete("/api/v1/simulation")
         assert response.status_code == 404
@@ -431,7 +447,9 @@ class TestSimulationDeletion:
 class TestSessionReset:
     """Test session reset functionality."""
 
-    def test_reset_session(self, app_client, valid_openapi_spec):
+    def test_reset_session(
+        self, app_client: Any, valid_openapi_spec: dict[str, Any]
+    ) -> None:
         """Test resetting simulation session."""
         with patch(
             "simulation_harness.skills.generator.SkillGenerator.generate_skill",
@@ -460,7 +478,7 @@ class TestSessionReset:
             data = status_response.json()
             assert data["session_state"]["tool_call_count"] == 0
 
-    def test_reset_session_no_simulation_returns_404(self, app_client):
+    def test_reset_session_no_simulation_returns_404(self, app_client: Any) -> None:
         """Test that resetting with no simulation returns 404."""
         response = app_client.post("/api/v1/simulation/reset")
         assert response.status_code == 404
@@ -470,8 +488,8 @@ class TestMCPPortConfiguration:
     """Test mcp_port field on CreateSimulationRequest."""
 
     def test_create_simulation_with_mcp_port_returns_sidecar_url(
-        self, app_client, valid_openapi_spec
-    ):
+        self, app_client: Any, valid_openapi_spec: dict[str, Any]
+    ) -> None:
         """POST /simulation with mcp_port returns fully-qualified sidecar URL when ready."""
         from simulation_harness.mcp_integration.sidecar_server import SidecarMCPServer
 
@@ -501,8 +519,8 @@ class TestMCPPortConfiguration:
         assert final["mcp_url"] == "http://testserver:9000/mcp/sse"
 
     def test_create_simulation_without_mcp_port_returns_harness_url(
-        self, app_client, valid_openapi_spec
-    ):
+        self, app_client: Any, valid_openapi_spec: dict[str, Any]
+    ) -> None:
         """POST /simulation without mcp_port returns harness-relative URL when ready."""
         with patch(
             "simulation_harness.skills.generator.SkillGenerator.generate_skill",
@@ -523,8 +541,8 @@ class TestMCPPortConfiguration:
         assert final["mcp_url"] == "http://testserver/mcp/sse"
 
     def test_get_simulation_preserves_mcp_url_after_creation_with_port(
-        self, app_client, valid_openapi_spec
-    ):
+        self, app_client: Any, valid_openapi_spec: dict[str, Any]
+    ) -> None:
         """GET /simulation returns the same mcp_url as the ready status."""
         from simulation_harness.mcp_integration.sidecar_server import SidecarMCPServer
 
@@ -557,8 +575,8 @@ class TestMCPPortConfiguration:
         assert final["mcp_url"] == "http://testserver:9000/mcp/sse"
 
     def test_create_simulation_port_in_use_reaches_failed(
-        self, app_client, valid_openapi_spec
-    ):
+        self, app_client: Any, valid_openapi_spec: dict[str, Any]
+    ) -> None:
         """POST /simulation with an already-bound mcp_port results in failed status."""
         import socket
 
@@ -591,13 +609,15 @@ class TestMCPPortConfiguration:
         assert final["status"] == "failed", f"expected failed, got: {final}"
         assert str(taken_port) in str(final.get("error", {}))
 
-    def test_delete_simulation_tears_down_sidecar(self, app_client, valid_openapi_spec):
+    def test_delete_simulation_tears_down_sidecar(
+        self, app_client: Any, valid_openapi_spec: dict[str, Any]
+    ) -> None:
         """DELETE /simulation stops the sidecar server if one was started."""
         from simulation_harness.mcp_integration.sidecar_server import SidecarMCPServer
 
         stop_calls = []
 
-        async def fake_stop(self):
+        async def fake_stop(self) -> None:
             stop_calls.append(True)
 
         with (
@@ -629,7 +649,9 @@ class TestMCPPortConfiguration:
         assert len(stop_calls) >= 1
 
 
-def test_skill_reuse_reaches_ready_quickly(app_client, valid_openapi_spec):
+def test_skill_reuse_reaches_ready_quickly(
+    app_client: Any, valid_openapi_spec: dict[str, Any]
+) -> None:
     """Second POST reuses skill and reaches ready in polling."""
     with patch(
         "simulation_harness.skills.generator.SkillGenerator.generate_skill",
@@ -660,8 +682,8 @@ def test_skill_reuse_reaches_ready_quickly(app_client, valid_openapi_spec):
 
 
 def test_delete_during_pending_returns_404_on_subsequent_get(
-    app_client, valid_openapi_spec
-):
+    app_client: Any, valid_openapi_spec: dict[str, Any]
+) -> None:
     """DELETE during pending cancels creation; GET then returns 404."""
     import asyncio
 
@@ -670,7 +692,7 @@ def test_delete_during_pending_returns_404_on_subsequent_get(
         new_callable=AsyncMock,
     ) as mock_gen:
         # Simulate a slow skill generation so DELETE happens during pending
-        async def slow_generate(*args, **kwargs):
+        async def slow_generate(*args: Any, **kwargs: Any) -> Any:
             await asyncio.sleep(10)
             return Path("/tmp/fake-skill/SKILL.md")
 

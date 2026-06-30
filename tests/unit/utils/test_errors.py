@@ -17,7 +17,7 @@ from simulation_harness.utils.errors import (
 class TestSessionExpiredError:
     """Tests for SessionExpiredError exception."""
 
-    def test_can_be_raised(self):
+    def test_can_be_raised(self) -> None:
         """Test that SessionExpiredError can be raised."""
         with pytest.raises(SessionExpiredError) as exc_info:
             raise SessionExpiredError(
@@ -26,12 +26,12 @@ class TestSessionExpiredError:
 
         assert "max_messages" in str(exc_info.value)
 
-    def test_inherits_from_exception(self):
+    def test_inherits_from_exception(self) -> None:
         """Test that SessionExpiredError inherits from Exception."""
         error = SessionExpiredError(reason="test_reason", limit=10, observed=11)
         assert isinstance(error, Exception)
 
-    def test_can_have_custom_message(self):
+    def test_can_have_custom_message(self) -> None:
         """Test that SessionExpiredError can have a custom message."""
         message = "Session expired: idle timeout of 300 seconds exceeded"
         error = SessionExpiredError(
@@ -39,7 +39,7 @@ class TestSessionExpiredError:
         )
         assert str(error) == message
 
-    def test_structured_fields_max_messages(self):
+    def test_structured_fields_max_messages(self) -> None:
         """Test that SessionExpiredError has structured fields for max_messages."""
         error = SessionExpiredError(
             reason="max_messages_exceeded", limit=100, observed=101
@@ -52,7 +52,7 @@ class TestSessionExpiredError:
         assert "limit=100" in str(error)
         assert "observed=101" in str(error)
 
-    def test_structured_fields_idle_timeout(self):
+    def test_structured_fields_idle_timeout(self) -> None:
         """Test that SessionExpiredError has structured fields for idle_timeout."""
         error = SessionExpiredError(
             reason="idle_timeout_exceeded", limit=300, observed=350
@@ -63,7 +63,7 @@ class TestSessionExpiredError:
         assert error.observed == 350
         assert "idle_timeout_exceeded" in str(error)
 
-    def test_structured_fields_with_custom_message(self):
+    def test_structured_fields_with_custom_message(self) -> None:
         """Test that SessionExpiredError can have custom message with structured fields."""
         custom_msg = "Custom expiry message"
         error = SessionExpiredError(
@@ -79,19 +79,19 @@ class TestSessionExpiredError:
 class TestConcurrentQueueFullError:
     """Tests for ConcurrentQueueFullError exception."""
 
-    def test_can_be_raised(self):
+    def test_can_be_raised(self) -> None:
         """Test that ConcurrentQueueFullError can be raised."""
         with pytest.raises(ConcurrentQueueFullError) as exc_info:
             raise ConcurrentQueueFullError("Queue is full")
 
         assert "Queue is full" in str(exc_info.value)
 
-    def test_inherits_from_exception(self):
+    def test_inherits_from_exception(self) -> None:
         """Test that ConcurrentQueueFullError inherits from Exception."""
         error = ConcurrentQueueFullError("test")
         assert isinstance(error, Exception)
 
-    def test_can_have_custom_message(self):
+    def test_can_have_custom_message(self) -> None:
         """Test that ConcurrentQueueFullError can have a custom message."""
         message = "Concurrent queue full: 10/10 slots occupied"
         error = ConcurrentQueueFullError(message)
@@ -101,19 +101,19 @@ class TestConcurrentQueueFullError:
 class TestSimulationAlreadyExistsError:
     """Tests for SimulationAlreadyExistsError exception."""
 
-    def test_can_be_raised(self):
+    def test_can_be_raised(self) -> None:
         """Test that SimulationAlreadyExistsError can be raised."""
         with pytest.raises(SimulationAlreadyExistsError) as exc_info:
             raise SimulationAlreadyExistsError("Simulation already exists")
 
         assert "already exists" in str(exc_info.value)
 
-    def test_inherits_from_exception(self):
+    def test_inherits_from_exception(self) -> None:
         """Test that SimulationAlreadyExistsError inherits from Exception."""
         error = SimulationAlreadyExistsError("test")
         assert isinstance(error, Exception)
 
-    def test_can_have_simulation_name(self):
+    def test_can_have_simulation_name(self) -> None:
         """Test that SimulationAlreadyExistsError can include simulation name."""
         message = "Simulation 'test-sim' already exists"
         error = SimulationAlreadyExistsError(message)
@@ -123,19 +123,19 @@ class TestSimulationAlreadyExistsError:
 class TestSimulationNotFoundError:
     """Tests for SimulationNotFoundError exception."""
 
-    def test_can_be_raised(self):
+    def test_can_be_raised(self) -> None:
         """Test that SimulationNotFoundError can be raised."""
         with pytest.raises(SimulationNotFoundError) as exc_info:
             raise SimulationNotFoundError("Simulation not found")
 
         assert "not found" in str(exc_info.value)
 
-    def test_inherits_from_exception(self):
+    def test_inherits_from_exception(self) -> None:
         """Test that SimulationNotFoundError inherits from Exception."""
         error = SimulationNotFoundError("test")
         assert isinstance(error, Exception)
 
-    def test_can_have_simulation_name(self):
+    def test_can_have_simulation_name(self) -> None:
         """Test that SimulationNotFoundError can include simulation name."""
         message = "Simulation 'missing-sim' not found"
         error = SimulationNotFoundError(message)
@@ -145,19 +145,19 @@ class TestSimulationNotFoundError:
 class TestOpenAPIValidationError:
     """Tests for OpenAPIValidationError exception."""
 
-    def test_can_be_raised(self):
+    def test_can_be_raised(self) -> None:
         """Test that OpenAPIValidationError can be raised."""
         with pytest.raises(OpenAPIValidationError) as exc_info:
             raise OpenAPIValidationError("Invalid OpenAPI spec")
 
         assert "Invalid" in str(exc_info.value)
 
-    def test_inherits_from_exception(self):
+    def test_inherits_from_exception(self) -> None:
         """Test that OpenAPIValidationError inherits from Exception."""
         error = OpenAPIValidationError("test")
         assert isinstance(error, Exception)
 
-    def test_can_have_validation_details(self):
+    def test_can_have_validation_details(self) -> None:
         """Test that OpenAPIValidationError can include validation details."""
         message = "OpenAPI validation failed: missing 'info' field"
         error = OpenAPIValidationError(message)
@@ -167,7 +167,7 @@ class TestOpenAPIValidationError:
 class TestExceptionHierarchy:
     """Tests for exception hierarchy and relationships."""
 
-    def test_all_exceptions_are_distinct(self):
+    def test_all_exceptions_are_distinct(self) -> None:
         """Test that all custom exceptions are distinct types."""
         exceptions = [
             SessionExpiredError(reason="test", limit=1, observed=2),
@@ -181,7 +181,7 @@ class TestExceptionHierarchy:
         types = [type(e) for e in exceptions]
         assert len(types) == len(set(types))
 
-    def test_all_exceptions_inherit_from_exception(self):
+    def test_all_exceptions_inherit_from_exception(self) -> None:
         """Test that all custom exceptions inherit from Exception."""
         exceptions = [
             SessionExpiredError,
@@ -198,11 +198,11 @@ class TestExceptionHierarchy:
 class TestPortInUseError:
     """Tests for PortInUseError."""
 
-    def test_port_in_use_error_is_exception(self):
+    def test_port_in_use_error_is_exception(self) -> None:
         err = PortInUseError("Port 9000 is already in use")
         assert isinstance(err, Exception)
 
-    def test_port_in_use_error_message(self):
+    def test_port_in_use_error_message(self) -> None:
         err = PortInUseError("Port 9000 is already in use")
         assert "9000" in str(err)
 
@@ -210,7 +210,7 @@ class TestPortInUseError:
 class TestSimulationNotReadyError:
     """Tests for SimulationNotReadyError."""
 
-    def test_simulation_not_ready_error_carries_status_and_retry_after(self):
+    def test_simulation_not_ready_error_carries_status_and_retry_after(self) -> None:
         err = SimulationNotReadyError(
             name="test-api", status="generating_skill", retry_after_seconds=2
         )
@@ -219,17 +219,17 @@ class TestSimulationNotReadyError:
         assert err.retry_after_seconds == 2
         assert "test-api" in str(err)
 
-    def test_simulation_not_ready_error_default_retry_after(self):
+    def test_simulation_not_ready_error_default_retry_after(self) -> None:
         err = SimulationNotReadyError(name="my-api", status="starting")
         assert err.retry_after_seconds == 2
 
-    def test_simulation_not_ready_error_custom_message(self):
+    def test_simulation_not_ready_error_custom_message(self) -> None:
         err = SimulationNotReadyError(
             name="my-api", status="starting", message="custom msg"
         )
         assert str(err) == "custom msg"
 
-    def test_simulation_not_ready_error_is_exception(self):
+    def test_simulation_not_ready_error_is_exception(self) -> None:
         err = SimulationNotReadyError(name="x", status="y")
         assert isinstance(err, Exception)
 
@@ -237,22 +237,22 @@ class TestSimulationNotReadyError:
 class TestCreationTimeoutError:
     """Tests for CreationTimeoutError."""
 
-    def test_creation_timeout_error_carries_limit(self):
+    def test_creation_timeout_error_carries_limit(self) -> None:
         err = CreationTimeoutError(limit_seconds=120)
         assert err.limit_seconds == 120
         assert "120" in str(err)
 
-    def test_creation_timeout_error_custom_message(self):
+    def test_creation_timeout_error_custom_message(self) -> None:
         err = CreationTimeoutError(limit_seconds=60, message="timed out after 60s")
         assert str(err) == "timed out after 60s"
 
-    def test_creation_timeout_error_is_exception(self):
+    def test_creation_timeout_error_is_exception(self) -> None:
         err = CreationTimeoutError(limit_seconds=30)
         assert isinstance(err, Exception)
 
 
 class TestDatabaseValidationError:
-    def test_database_validation_error_carries_message_and_path(self):
+    def test_database_validation_error_carries_message_and_path(self) -> None:
         from simulation_harness.utils.errors import DatabaseValidationError
 
         err = DatabaseValidationError(
@@ -262,7 +262,7 @@ class TestDatabaseValidationError:
         assert "name" in str(err)
         assert err.json_path == "restaurants.0"
 
-    def test_database_validation_error_default_path_is_root(self):
+    def test_database_validation_error_default_path_is_root(self) -> None:
         from simulation_harness.utils.errors import DatabaseValidationError
 
         err = DatabaseValidationError(message="not a valid object")
@@ -270,7 +270,7 @@ class TestDatabaseValidationError:
 
 
 class TestSimulationBusyError:
-    def test_simulation_busy_error_carries_queue_depth(self):
+    def test_simulation_busy_error_carries_queue_depth(self) -> None:
         from simulation_harness.utils.errors import SimulationBusyError
 
         err = SimulationBusyError(queue_depth=2)

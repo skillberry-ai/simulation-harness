@@ -4,6 +4,7 @@ import logging
 import pytest
 from pathlib import Path
 from unittest.mock import Mock, patch
+from typing import Any
 
 
 class TestMainModule:
@@ -13,8 +14,8 @@ class TestMainModule:
     @patch("simulation_harness.__main__.apply_env_overrides", side_effect=lambda c: c)
     @patch("simulation_harness.__main__.load_config")
     def test_main_uses_configured_host_and_port(
-        self, mock_load_config, mock_apply_env, mock_uvicorn_run
-    ):
+        self, mock_load_config: Any, mock_apply_env: Any, mock_uvicorn_run: Any
+    ) -> None:
         """Test that main() uses host and port from configuration."""
         mock_config = Mock()
         mock_config.server.host = "0.0.0.0"
@@ -34,8 +35,8 @@ class TestMainModule:
     @patch("simulation_harness.__main__.apply_env_overrides", side_effect=lambda c: c)
     @patch("simulation_harness.__main__.load_config")
     def test_main_uses_default_host_and_port(
-        self, mock_load_config, mock_apply_env, mock_uvicorn_run
-    ):
+        self, mock_load_config: Any, mock_apply_env: Any, mock_uvicorn_run: Any
+    ) -> None:
         """Test that main() uses default host and port when not configured."""
         mock_config = Mock()
         mock_config.server.host = "localhost"
@@ -55,8 +56,8 @@ class TestMainModule:
     @patch("simulation_harness.__main__.apply_env_overrides", side_effect=lambda c: c)
     @patch("simulation_harness.__main__.load_config")
     def test_main_passes_app_to_uvicorn(
-        self, mock_load_config, mock_apply_env, mock_uvicorn_run
-    ):
+        self, mock_load_config: Any, mock_apply_env: Any, mock_uvicorn_run: Any
+    ) -> None:
         """Test that main() passes the correct app string to uvicorn."""
         mock_config = Mock()
         mock_config.server.host = "localhost"
@@ -75,8 +76,8 @@ class TestMainModule:
     @patch("simulation_harness.__main__.apply_env_overrides", side_effect=lambda c: c)
     @patch("simulation_harness.__main__.load_config")
     def test_main_loads_config_before_starting_uvicorn(
-        self, mock_load_config, mock_apply_env, mock_uvicorn_run
-    ):
+        self, mock_load_config: Any, mock_apply_env: Any, mock_uvicorn_run: Any
+    ) -> None:
         """Test that main() loads config and passes its host/port to uvicorn."""
         mock_config = Mock()
         mock_config.server.host = "0.0.0.0"
@@ -99,7 +100,7 @@ class TestMainModule:
 class TestLoggingConfiguration:
     """Test logging configuration in main.py."""
 
-    def test_logging_creates_log_directory(self, tmp_path):
+    def test_logging_creates_log_directory(self, tmp_path: Path) -> None:
         """Test that logging setup creates the log directory if it doesn't exist."""
         # Create a temporary config file with custom log directory
         import yaml
@@ -139,7 +140,7 @@ class TestLoggingConfiguration:
         assert log_dir.exists()
         assert log_dir.is_dir()
 
-    def test_logging_uses_configured_level(self):
+    def test_logging_uses_configured_level(self) -> None:
         """Test that logging configuration respects the configured level."""
         from simulation_harness.config.settings import load_config
 
@@ -149,7 +150,7 @@ class TestLoggingConfiguration:
         assert config.logging.level in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
         assert hasattr(logging, config.logging.level)
 
-    def test_logging_filename_format(self):
+    def test_logging_filename_format(self) -> None:
         """Test that log filename follows the required format."""
         from datetime import datetime
 
@@ -164,7 +165,7 @@ class TestLoggingConfiguration:
         assert parts[1].count("-") == 2  # HH-MM-SS
         assert parts[2] == "simulation-harness.log"
 
-    def test_logging_uses_configured_destination_folder(self):
+    def test_logging_uses_configured_destination_folder(self) -> None:
         """Test that logging uses the destination folder from config."""
         from simulation_harness.config.settings import load_config
 
@@ -179,8 +180,8 @@ class TestLifespan:
 
     @pytest.mark.asyncio
     async def test_lifespan_wraps_oserror_from_load_secrets_as_runtime_error(
-        self, monkeypatch
-    ):
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """lifespan converts any non-ValidationError from load_secrets to RuntimeError."""
         monkeypatch.setenv("LLM_API_KEY", "test-key")
         monkeypatch.setenv("HARNESS_CONFIG_PATH", "config/harness.yaml")
@@ -198,7 +199,7 @@ class TestLifespan:
 class TestExceptionHandlers:
     """Test exception handlers for FastAPI app."""
 
-    def test_port_in_use_error_handler_exists(self):
+    def test_port_in_use_error_handler_exists(self) -> None:
         """Verify PortInUseError exception handler is registered with the FastAPI app."""
         from simulation_harness.main import app
         from simulation_harness.utils.errors import PortInUseError

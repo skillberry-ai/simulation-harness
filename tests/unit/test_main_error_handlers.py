@@ -5,6 +5,7 @@ import tempfile
 import pytest
 import yaml
 from fastapi.testclient import TestClient
+from typing import Any
 
 
 def _valid_config() -> dict:
@@ -26,7 +27,7 @@ def _valid_config() -> dict:
 
 
 @pytest.fixture
-def app_with_env(monkeypatch):
+def app_with_env(monkeypatch: pytest.MonkeyPatch) -> Any:
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
         yaml.dump(_valid_config(), f)
         config_path = f.name
@@ -61,7 +62,7 @@ def app_with_env(monkeypatch):
     return m.app
 
 
-def test_database_validation_error_maps_to_422(app_with_env):
+def test_database_validation_error_maps_to_422(app_with_env: Any) -> None:
     with TestClient(app_with_env) as client:
         resp = client.get("/_boom_db_validation")
     assert resp.status_code == 422
@@ -69,7 +70,7 @@ def test_database_validation_error_maps_to_422(app_with_env):
     assert body["json_path"] == "restaurants.0"
 
 
-def test_simulation_busy_error_maps_to_409(app_with_env):
+def test_simulation_busy_error_maps_to_409(app_with_env: Any) -> None:
     with TestClient(app_with_env) as client:
         resp = client.get("/_boom_busy")
     assert resp.status_code == 409

@@ -24,7 +24,7 @@ SCHEMA = {
 }
 
 
-def _ir():
+def _ir() -> SpecModel:
     return SpecModel(
         api_name="Aha",
         slug="aha",
@@ -51,7 +51,7 @@ def _ir():
     )
 
 
-def test_render_preamble_has_frontmatter_and_sections():
+def test_render_preamble_has_frontmatter_and_sections() -> None:
     md = A.render_preamble(_ir(), [])
     assert md.startswith("---")
     assert "name: aha" in md
@@ -59,27 +59,27 @@ def test_render_preamble_has_frontmatter_and_sections():
     assert "schema.json" in md and "db.json" in md
 
 
-def test_assemble_forces_name_and_appends_sections():
+def test_assemble_forces_name_and_appends_sections() -> None:
     ir = _ir()
     md = A.assemble_skill(ir, A.render_preamble(ir, []), ["### /features/{id} GET\nok"])
     assert "name: aha" in md
     assert "### /features/{id} GET" in md
 
 
-def test_validate_bundle_passes_for_complete_skill():
+def test_validate_bundle_passes_for_complete_skill() -> None:
     ir = _ir()
     md = A.assemble_skill(ir, A.render_preamble(ir, []), ["### /features/{id} GET\nok"])
     assert A.validate_bundle(ir, md, SCHEMA, {"features": [{"id": "f1"}]}) == []
 
 
-def test_validate_bundle_flags_missing_operation_section():
+def test_validate_bundle_flags_missing_operation_section() -> None:
     ir = _ir()
     md = A.assemble_skill(ir, A.render_preamble(ir, []), [])  # no sections
     errs = A.validate_bundle(ir, md, SCHEMA, {"features": [{"id": "f1"}]})
     assert any("getFeature" in e or "/features/{id} GET" in e for e in errs)
 
 
-def test_render_preamble_includes_scenarios_section():
+def test_render_preamble_includes_scenarios_section() -> None:
     scenarios = [
         {
             "title": "Read a feature",
@@ -93,6 +93,6 @@ def test_render_preamble_includes_scenarios_section():
     assert "getFeature" in out
 
 
-def test_render_preamble_omits_scenarios_section_when_empty():
+def test_render_preamble_omits_scenarios_section_when_empty() -> None:
     out = A.render_preamble(_ir(), [])
     assert "## Example Scenarios" not in out

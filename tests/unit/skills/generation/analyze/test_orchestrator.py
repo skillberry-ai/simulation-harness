@@ -7,6 +7,7 @@ from simulation_harness.skills.generation.ir import Entity, StoreMetadata
 from simulation_harness.skills.generation.repair import GenerationStageError
 from simulation_harness.skills.generation.stages import analyze as A
 from simulation_harness.skills.generation.stages.analyze.extract import DataModel
+from typing import Any
 
 SPEC = {
     "openapi": "3.0.0",
@@ -68,7 +69,7 @@ RPC_SPEC = {
 }
 
 
-def _dm():
+def _dm() -> DataModel:
     return DataModel(
         api_name="Aha",
         entities=[
@@ -80,7 +81,7 @@ def _dm():
     )
 
 
-def test_extract_operations_pulls_stub_fields():
+def test_extract_operations_pulls_stub_fields() -> None:
     ops = A.extract_operations(OpenAPISpec(SPEC))
     assert ops == [
         {
@@ -93,7 +94,7 @@ def test_extract_operations_pulls_stub_fields():
     ]
 
 
-def test_extract_operations_uses_sanitized_ids():
+def test_extract_operations_uses_sanitized_ids() -> None:
     spec = OpenAPISpec(
         {
             "openapi": "3.0.0",
@@ -114,7 +115,7 @@ def test_extract_operations_uses_sanitized_ids():
     assert ops[0]["operation_id"] == spec.operations[0].operation_id
 
 
-async def test_analyze_orchestrates_extract_classify_merge():
+async def test_analyze_orchestrates_extract_classify_merge() -> None:
     records = [
         {
             "operation_id": "getFeature",
@@ -146,7 +147,7 @@ async def test_analyze_orchestrates_extract_classify_merge():
     assert any(p.startswith("classifying_ops") for p in phases)
 
 
-def test_inline_schema_evidence_collects_request_and_response():
+def test_inline_schema_evidence_collects_request_and_response() -> None:
     ev = A.inline_schema_evidence(OpenAPISpec(RPC_SPEC))
     assert ev["get_user__request"] == {
         "type": "object",
@@ -156,15 +157,15 @@ def test_inline_schema_evidence_collects_request_and_response():
     assert set(ev["get_user__response"]["properties"]) == {"user_id", "name"}
 
 
-def test_inline_schema_evidence_skips_ops_without_bodies():
+def test_inline_schema_evidence_skips_ops_without_bodies() -> None:
     # SPEC has no requestBody and a schema-less 200 response.
     assert A.inline_schema_evidence(OpenAPISpec(SPEC)) == {}
 
 
-async def test_analyze_falls_back_to_inline_when_no_components():
+async def test_analyze_falls_back_to_inline_when_no_components() -> None:
     captured: dict = {}
 
-    async def fake_extract(source, slug, llm, *, retries):
+    async def fake_extract(source: Any, slug: Any, llm: Any, *, retries: Any) -> Any:
         captured["source"] = source
         return _dm()
 
@@ -187,7 +188,7 @@ async def test_analyze_falls_back_to_inline_when_no_components():
     assert ir.operations[0].operation_id == "get_user"
 
 
-async def test_analyze_prefers_components_over_inline():
+async def test_analyze_prefers_components_over_inline() -> None:
     spec = {
         "openapi": "3.0.0",
         "info": {"title": "Aha", "version": "1.0"},
@@ -206,7 +207,7 @@ async def test_analyze_prefers_components_over_inline():
     }
     captured: dict = {}
 
-    async def fake_extract(source, slug, llm, *, retries):
+    async def fake_extract(source: Any, slug: Any, llm: Any, *, retries: Any) -> Any:
         captured["source"] = source
         return _dm()
 
@@ -228,7 +229,7 @@ async def test_analyze_prefers_components_over_inline():
     assert captured["source"] == {"Feature": {"type": "object"}}
 
 
-async def test_analyze_raises_when_no_entities_extracted():
+async def test_analyze_raises_when_no_entities_extracted() -> None:
     empty_dm = DataModel(
         api_name="x",
         entities=[],
@@ -248,7 +249,7 @@ async def test_analyze_raises_when_no_entities_extracted():
     assert exc.value.stage == "extract"
 
 
-async def test_analyze_raises_on_coverage_gap():
+async def test_analyze_raises_on_coverage_gap() -> None:
     with (
         patch.object(A, "extract_data_model", AsyncMock(return_value=_dm())),
         patch.object(

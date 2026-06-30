@@ -24,7 +24,7 @@ GOOD_SCHEMA = {
 }
 
 
-def _ir():
+def _ir() -> SpecModel:
     return SpecModel(
         api_name="Aha",
         slug="aha",
@@ -43,16 +43,16 @@ def _ir():
     )
 
 
-def test_validate_accepts_consistent_pair():
+def test_validate_accepts_consistent_pair() -> None:
     assert SD.validate_schema_and_db(GOOD_SCHEMA, {"features": [{"id": "f1"}]}) == []
 
 
-def test_validate_flags_db_not_matching_schema():
+def test_validate_flags_db_not_matching_schema() -> None:
     errs = SD.validate_schema_and_db(GOOD_SCHEMA, {"features": [{"id": 123}]})
     assert errs
 
 
-async def test_generate_seed_returns_validated_db():
+async def test_generate_seed_returns_validated_db() -> None:
     db = {"features": [{"id": "f1"}, {"id": "f2"}]}
     with patch.object(
         SD, "call_json", AsyncMock(return_value={"db_json": db})
@@ -70,7 +70,7 @@ async def test_generate_seed_returns_validated_db():
     assert "scenarios" in user_prompt
 
 
-async def test_generate_seed_omits_scenarios_block_when_empty():
+async def test_generate_seed_omits_scenarios_block_when_empty() -> None:
     db = {"features": [{"id": "f1"}]}
     with patch.object(
         SD, "call_json", AsyncMock(return_value={"db_json": db})

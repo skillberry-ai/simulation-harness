@@ -61,13 +61,14 @@ asyncio_mode = "auto"
 
 [tool.mypy]
 python_version = "3.11"
+plugins = ["pydantic.mypy"]
 # Lenient global baseline so the type-check gate passes on today's code while
 # annotation coverage grows. Tighten these (and shrink the override list below)
 # as modules are annotated. See `make type-check`.
 ignore_missing_imports = true
 warn_unused_configs = true
 warn_redundant_casts = true
-files = ["src/simulation_harness"]
+files = ["src/simulation_harness", "tests"]
 
 # Burn-down backlog: modules with pre-existing type errors are exempted so the
 # gate enforces "no NEW untyped breakage". Remove a module from this list once

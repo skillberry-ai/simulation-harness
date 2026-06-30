@@ -5,6 +5,8 @@ import tempfile
 import pytest
 import yaml
 from fastapi.testclient import TestClient
+from collections.abc import Iterator
+from typing import Any
 
 
 def _valid_config() -> dict:
@@ -26,7 +28,7 @@ def _valid_config() -> dict:
 
 
 @pytest.fixture
-def client(monkeypatch):
+def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[tuple[TestClient, Any]]:
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
         yaml.dump(_valid_config(), f)
         config_path = f.name
@@ -42,21 +44,21 @@ def client(monkeypatch):
         yield c, m
 
 
-def test_healthz_returns_200(client):
+def test_healthz_returns_200(client: tuple[TestClient, Any]) -> None:
     c, _ = client
     r = c.get("/healthz")
     assert r.status_code == 200
     assert r.json() == {"status": "ok"}
 
 
-def test_readyz_returns_200_when_not_draining(client):
+def test_readyz_returns_200_when_not_draining(client: tuple[TestClient, Any]) -> None:
     c, _ = client
     r = c.get("/readyz")
     assert r.status_code == 200
     assert r.json() == {"status": "ready"}
 
 
-def test_readyz_returns_503_when_draining(client):
+def test_readyz_returns_503_when_draining(client: tuple[TestClient, Any]) -> None:
     c, m = client
     m.app.state.draining = True
     r = c.get("/readyz")

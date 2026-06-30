@@ -5,7 +5,7 @@ import os
 from unittest.mock import MagicMock, patch
 
 
-def test_uvicorn_respects_logging_config():
+def test_uvicorn_respects_logging_config() -> None:
     """Test that uvicorn.run is configured to respect our logging setup.
 
     This test verifies that uvicorn.run is called with log_config=None,
@@ -46,7 +46,7 @@ def test_uvicorn_respects_logging_config():
             )
 
 
-def test_logging_configured_before_uvicorn():
+def test_logging_configured_before_uvicorn() -> None:
     """Test that logging is configured in main.py before uvicorn starts.
 
     This ensures that when uvicorn imports main.py, the logging configuration

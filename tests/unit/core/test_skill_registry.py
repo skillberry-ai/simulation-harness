@@ -6,10 +6,12 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from simulation_harness.core.skill_registry import SkillRegistry
+from pathlib import Path
+from typing import Any
 
 
 @pytest.fixture
-def temp_skills_dir(tmp_path):
+def temp_skills_dir(tmp_path: Path) -> Path:
     """Create a temporary skills directory."""
     skills_dir = tmp_path / "skills"
     skills_dir.mkdir()
@@ -17,7 +19,7 @@ def temp_skills_dir(tmp_path):
 
 
 @pytest.fixture
-def mock_generator():
+def mock_generator() -> MagicMock:
     """Create a mock skill generator."""
     generator = MagicMock()
     generator.generate_skill = AsyncMock()
@@ -25,7 +27,7 @@ def mock_generator():
 
 
 @pytest.fixture
-def sample_openapi_spec():
+def sample_openapi_spec() -> dict[str, Any]:
     """Create a sample OpenAPI spec."""
     return {
         "openapi": "3.0.0",
@@ -43,8 +45,10 @@ def sample_openapi_spec():
 
 @pytest.mark.asyncio
 async def test_ensure_skill_generates_new_skill(
-    temp_skills_dir, mock_generator, sample_openapi_spec
-):
+    temp_skills_dir: Path,
+    mock_generator: MagicMock,
+    sample_openapi_spec: dict[str, Any],
+) -> None:
     """Test that ensure_skill generates a new skill when none exists."""
     registry = SkillRegistry(temp_skills_dir, mock_generator)
 
@@ -64,8 +68,10 @@ async def test_ensure_skill_generates_new_skill(
 
 @pytest.mark.asyncio
 async def test_ensure_skill_reuses_existing_skill(
-    temp_skills_dir, mock_generator, sample_openapi_spec
-):
+    temp_skills_dir: Path,
+    mock_generator: MagicMock,
+    sample_openapi_spec: dict[str, Any],
+) -> None:
     """Test that ensure_skill reuses existing skill when all 4 files exist."""
     registry = SkillRegistry(temp_skills_dir, mock_generator)
 
@@ -86,8 +92,10 @@ async def test_ensure_skill_reuses_existing_skill(
 
 @pytest.mark.asyncio
 async def test_ensure_skill_regenerates_when_flag_set(
-    temp_skills_dir, mock_generator, sample_openapi_spec
-):
+    temp_skills_dir: Path,
+    mock_generator: MagicMock,
+    sample_openapi_spec: dict[str, Any],
+) -> None:
     """Test that ensure_skill regenerates when regenerate flag is set."""
     registry = SkillRegistry(temp_skills_dir, mock_generator)
 
@@ -112,8 +120,11 @@ async def test_ensure_skill_regenerates_when_flag_set(
 
 @pytest.mark.asyncio
 async def test_ensure_skill_logs_warning_on_reuse(
-    temp_skills_dir, mock_generator, sample_openapi_spec, caplog
-):
+    temp_skills_dir: Path,
+    mock_generator: MagicMock,
+    sample_openapi_spec: dict[str, Any],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """Test that ensure_skill logs warning when reusing existing skill."""
     import logging
 
@@ -138,8 +149,10 @@ async def test_ensure_skill_logs_warning_on_reuse(
 
 @pytest.mark.asyncio
 async def test_ensure_skill_handles_generation_error(
-    temp_skills_dir, mock_generator, sample_openapi_spec
-):
+    temp_skills_dir: Path,
+    mock_generator: MagicMock,
+    sample_openapi_spec: dict[str, Any],
+) -> None:
     """Test that ensure_skill handles generation errors."""
     registry = SkillRegistry(temp_skills_dir, mock_generator)
 
@@ -151,8 +164,11 @@ async def test_ensure_skill_handles_generation_error(
 
 @pytest.mark.asyncio
 async def test_ensure_skill_logs_warning_with_regeneration_reminder(
-    temp_skills_dir, mock_generator, sample_openapi_spec, caplog
-):
+    temp_skills_dir: Path,
+    mock_generator: MagicMock,
+    sample_openapi_spec: dict[str, Any],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """Test that ensure_skill logs warning with regeneration reminder."""
     import logging
 
@@ -180,8 +196,11 @@ async def test_ensure_skill_logs_warning_with_regeneration_reminder(
 
 @pytest.mark.asyncio
 async def test_ensure_skill_regenerates_when_schema_missing(
-    temp_skills_dir, mock_generator, sample_openapi_spec, caplog
-):
+    temp_skills_dir: Path,
+    mock_generator: MagicMock,
+    sample_openapi_spec: dict[str, Any],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """Test that ensure_skill regenerates when schema.json is missing."""
     import logging
 
@@ -214,8 +233,11 @@ async def test_ensure_skill_regenerates_when_schema_missing(
 
 @pytest.mark.asyncio
 async def test_ensure_skill_regenerates_when_db_missing(
-    temp_skills_dir, mock_generator, sample_openapi_spec, caplog
-):
+    temp_skills_dir: Path,
+    mock_generator: MagicMock,
+    sample_openapi_spec: dict[str, Any],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """Test that ensure_skill regenerates when db.json is missing."""
     import logging
 
@@ -248,8 +270,10 @@ async def test_ensure_skill_regenerates_when_db_missing(
 
 @pytest.mark.asyncio
 async def test_ensure_skill_regenerates_when_all_files_missing(
-    temp_skills_dir, mock_generator, sample_openapi_spec
-):
+    temp_skills_dir: Path,
+    mock_generator: MagicMock,
+    sample_openapi_spec: dict[str, Any],
+) -> None:
     """Test that ensure_skill regenerates when all files are missing."""
     registry = SkillRegistry(temp_skills_dir, mock_generator)
 
@@ -264,8 +288,11 @@ async def test_ensure_skill_regenerates_when_all_files_missing(
 
 @pytest.mark.asyncio
 async def test_ensure_skill_regenerates_when_multiple_files_missing(
-    temp_skills_dir, mock_generator, sample_openapi_spec, caplog
-):
+    temp_skills_dir: Path,
+    mock_generator: MagicMock,
+    sample_openapi_spec: dict[str, Any],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """Test that ensure_skill regenerates when multiple files are missing."""
     import logging
 
@@ -299,8 +326,11 @@ async def test_ensure_skill_regenerates_when_multiple_files_missing(
 
 @pytest.mark.asyncio
 async def test_ensure_skill_does_not_regenerate_complete_skill(
-    temp_skills_dir, mock_generator, sample_openapi_spec, caplog
-):
+    temp_skills_dir: Path,
+    mock_generator: MagicMock,
+    sample_openapi_spec: dict[str, Any],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """Test that ensure_skill does not regenerate when all 4 files exist."""
     import logging
 
@@ -340,8 +370,11 @@ async def test_ensure_skill_does_not_regenerate_complete_skill(
 
 @pytest.mark.asyncio
 async def test_ensure_skill_regenerates_when_api_json_missing(
-    temp_skills_dir, mock_generator, sample_openapi_spec, caplog
-):
+    temp_skills_dir: Path,
+    mock_generator: MagicMock,
+    sample_openapi_spec: dict[str, Any],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """Test that ensure_skill regenerates when api.json is missing."""
     import logging
 
@@ -375,8 +408,10 @@ async def test_ensure_skill_regenerates_when_api_json_missing(
 
 @pytest.mark.asyncio
 async def test_ensure_skill_reuses_when_all_four_files_exist(
-    temp_skills_dir, mock_generator, sample_openapi_spec
-):
+    temp_skills_dir: Path,
+    mock_generator: MagicMock,
+    sample_openapi_spec: dict[str, Any],
+) -> None:
     """Test that ensure_skill reuses existing skill when all 4 files exist (including api.json)."""
     registry = SkillRegistry(temp_skills_dir, mock_generator)
 
@@ -396,7 +431,7 @@ async def test_ensure_skill_reuses_when_all_four_files_exist(
 
 
 @pytest.fixture
-def populated_registry(tmp_path):
+def populated_registry(tmp_path: Path) -> Any:
     """Write a minimal complete skill bundle and return (registry, simulation_name)."""
     name = "demo-api"
     skill_dir = tmp_path / name
@@ -431,36 +466,36 @@ def populated_registry(tmp_path):
         json.dumps({"items": [{"id": "1", "name": "alpha"}]})
     )
 
-    registry = SkillRegistry(skills_folder=tmp_path, generator=None)
+    registry = SkillRegistry(skills_folder=tmp_path, generator=None)  # type: ignore[arg-type]
     return registry, name
 
 
 class TestReadSchema:
-    def test_returns_parsed_schema(self, populated_registry):
+    def test_returns_parsed_schema(self, populated_registry: Any) -> None:
         registry, name = populated_registry
         schema = registry.read_schema(name)
         assert schema["properties"]["items"]["items"]["$ref"] == "#/$defs/Item"
 
-    def test_missing_skill_raises_file_not_found(self, tmp_path):
-        registry = SkillRegistry(skills_folder=tmp_path, generator=None)
+    def test_missing_skill_raises_file_not_found(self, tmp_path: Path) -> None:
+        registry = SkillRegistry(skills_folder=tmp_path, generator=None)  # type: ignore[arg-type]
         with pytest.raises(FileNotFoundError):
             registry.read_schema("nope")
 
 
 class TestReadDb:
-    def test_returns_parsed_db(self, populated_registry):
+    def test_returns_parsed_db(self, populated_registry: Any) -> None:
         registry, name = populated_registry
         db = registry.read_db(name)
         assert db == {"items": [{"id": "1", "name": "alpha"}]}
 
-    def test_missing_skill_raises_file_not_found(self, tmp_path):
-        registry = SkillRegistry(skills_folder=tmp_path, generator=None)
+    def test_missing_skill_raises_file_not_found(self, tmp_path: Path) -> None:
+        registry = SkillRegistry(skills_folder=tmp_path, generator=None)  # type: ignore[arg-type]
         with pytest.raises(FileNotFoundError):
             registry.read_db("nope")
 
 
 class TestWriteDb:
-    def test_writes_valid_db(self, populated_registry):
+    def test_writes_valid_db(self, populated_registry: Any) -> None:
         registry, name = populated_registry
         new_db = {"items": [{"id": "2", "name": "beta"}]}
         registry.write_db(name, new_db)
@@ -469,8 +504,8 @@ class TestWriteDb:
         assert json.loads(path.read_text()) == new_db
 
     def test_invalid_db_raises_validation_error_and_does_not_write(
-        self, populated_registry
-    ):
+        self, populated_registry: Any
+    ) -> None:
         from simulation_harness.utils.errors import DatabaseValidationError
 
         registry, name = populated_registry
@@ -483,19 +518,21 @@ class TestWriteDb:
 
         assert path.read_text() == original
 
-    def test_write_is_atomic_no_tmp_left_behind_on_success(self, populated_registry):
+    def test_write_is_atomic_no_tmp_left_behind_on_success(
+        self, populated_registry: Any
+    ) -> None:
         registry, name = populated_registry
         registry.write_db(name, {"items": []})
         skill_dir = registry.skills_folder / name
         leftover = list(skill_dir.glob("db.json.tmp*"))
         assert leftover == []
 
-    def test_missing_schema_raises_file_not_found(self, tmp_path):
+    def test_missing_schema_raises_file_not_found(self, tmp_path: Path) -> None:
         name = "incomplete"
         d = tmp_path / name
         d.mkdir()
         (d / "db.json").write_text("{}")
-        registry = SkillRegistry(skills_folder=tmp_path, generator=None)
+        registry = SkillRegistry(skills_folder=tmp_path, generator=None)  # type: ignore[arg-type]
         with pytest.raises(FileNotFoundError):
             registry.write_db(name, {"anything": []})
 
@@ -503,12 +540,12 @@ class TestWriteDb:
 # Made with Bob
 
 
-async def test_ensure_skill_forwards_progress_cb(tmp_path):
+async def test_ensure_skill_forwards_progress_cb(tmp_path: Path) -> None:
     gen = AsyncMock()
     gen.generate_skill = AsyncMock(return_value=tmp_path / "aha" / "SKILL.md")
     reg = SkillRegistry(skills_folder=tmp_path, generator=gen)
 
-    def cb(p):
+    def cb(p: Any) -> None:
         return None
 
     await reg.ensure_skill("aha", {"openapi": "3.0.0"}, regenerate=True, progress_cb=cb)

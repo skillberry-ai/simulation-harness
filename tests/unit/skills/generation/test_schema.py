@@ -24,7 +24,7 @@ GOOD_SCHEMA = {
 }
 
 
-def _ir():
+def _ir() -> SpecModel:
     return SpecModel(
         api_name="Aha",
         slug="aha",
@@ -43,15 +43,15 @@ def _ir():
     )
 
 
-def test_validate_schema_accepts_valid_schema():
+def test_validate_schema_accepts_valid_schema() -> None:
     assert S.validate_schema(GOOD_SCHEMA) == []
 
 
-def test_validate_schema_flags_invalid_schema():
+def test_validate_schema_flags_invalid_schema() -> None:
     assert S.validate_schema({"type": "not-a-type"})
 
 
-async def test_generate_schema_returns_validated_schema():
+async def test_generate_schema_returns_validated_schema() -> None:
     with patch.object(
         S, "call_json", AsyncMock(return_value={"schema_json": GOOD_SCHEMA})
     ):

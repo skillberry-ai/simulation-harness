@@ -9,10 +9,12 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 import yaml
 from fastapi.testclient import TestClient
+from collections.abc import Iterator
+from typing import Any
 
 
 @pytest.fixture(scope="module", autouse=True)
-def _harness_env():
+def _harness_env() -> Iterator[None]:
     config = {
         "llm": {
             "provider": "openai",
@@ -83,7 +85,7 @@ def skill_bundle(tmp_path: Path) -> tuple[Path, str]:
     return tmp_path, name
 
 
-def _make_app_with(skills_folder: Path, simulation_name: str):
+def _make_app_with(skills_folder: Path, simulation_name: str) -> Any:
     """Use the real FastAPI app with dependency overrides for isolated testing."""
     import importlib
 
@@ -103,7 +105,7 @@ def _make_app_with(skills_folder: Path, simulation_name: str):
     from simulation_harness.core.skill_registry import SkillRegistry
     from simulation_harness.models.domain import SessionState
 
-    skill_registry = SkillRegistry(skills_folder=skills_folder, generator=None)
+    skill_registry = SkillRegistry(skills_folder=skills_folder, generator=None)  # type: ignore[arg-type]
 
     host = SimulationHost()
     instance = MagicMock()
@@ -128,7 +130,7 @@ def _make_app_with(skills_folder: Path, simulation_name: str):
 
 
 @pytest.fixture(autouse=True)
-def _clear_dependency_overrides():
+def _clear_dependency_overrides() -> Iterator[None]:
     yield
     import importlib
 
@@ -139,7 +141,9 @@ def _clear_dependency_overrides():
 
 
 class TestDatabaseEndpointsIntegration:
-    def test_get_schema_returns_disk_contents(self, skill_bundle):
+    def test_get_schema_returns_disk_contents(
+        self, skill_bundle: tuple[Path, str]
+    ) -> None:
         skills_folder, name = skill_bundle
         app, *_ = _make_app_with(skills_folder, name)
         with TestClient(app) as client:
@@ -147,7 +151,9 @@ class TestDatabaseEndpointsIntegration:
         assert resp.status_code == 200
         assert resp.json()["$defs"]["Item"]["x-primary-key"] == "id"
 
-    def test_get_database_returns_disk_contents(self, skill_bundle):
+    def test_get_database_returns_disk_contents(
+        self, skill_bundle: tuple[Path, str]
+    ) -> None:
         skills_folder, name = skill_bundle
         app, *_ = _make_app_with(skills_folder, name)
         with TestClient(app) as client:
@@ -155,7 +161,9 @@ class TestDatabaseEndpointsIntegration:
         assert resp.status_code == 200
         assert resp.json() == {"items": [{"id": "1", "name": "alpha"}]}
 
-    def test_put_database_replaces_file_and_resets_instance(self, skill_bundle):
+    def test_put_database_replaces_file_and_resets_instance(
+        self, skill_bundle: tuple[Path, str]
+    ) -> None:
         skills_folder, name = skill_bundle
         app, _host, _registry, instance = _make_app_with(skills_folder, name)
 
@@ -167,7 +175,9 @@ class TestDatabaseEndpointsIntegration:
         assert json.loads((skills_folder / name / "db.json").read_text()) == new_db
         instance.reset_session.assert_awaited_once()
 
-    def test_put_invalid_database_returns_422_and_does_not_reset(self, skill_bundle):
+    def test_put_invalid_database_returns_422_and_does_not_reset(
+        self, skill_bundle: tuple[Path, str]
+    ) -> None:
         skills_folder, name = skill_bundle
         app, _host, _registry, instance = _make_app_with(skills_folder, name)
         original = (skills_folder / name / "db.json").read_text()

@@ -4,10 +4,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
+from collections.abc import Iterator
+from typing import Any
 
 
 @pytest.fixture
-def pending_host():
+def pending_host() -> MagicMock:
     """A SimulationHost mock that always returns a pending record."""
     from simulation_harness.core.simulation_record import SimulationRecord
 
@@ -19,7 +21,7 @@ def pending_host():
 
 
 @pytest.fixture
-def no_record_host():
+def no_record_host() -> MagicMock:
     """A SimulationHost mock that has no record."""
     host = MagicMock()
     host.get_record = AsyncMock(return_value=None)
@@ -28,7 +30,7 @@ def no_record_host():
 
 
 @pytest.fixture
-def app_with_pending(pending_host):
+def app_with_pending(pending_host: MagicMock) -> Iterator[Any]:
     """App configured with a pending simulation."""
     from simulation_harness.main import app
     from simulation_harness.api.dependencies import get_simulation_host
@@ -39,7 +41,7 @@ def app_with_pending(pending_host):
 
 
 @pytest.fixture
-def app_with_no_record(no_record_host):
+def app_with_no_record(no_record_host: MagicMock) -> Iterator[Any]:
     """App configured with no simulation."""
     from simulation_harness.main import app
     from simulation_harness.api.dependencies import get_simulation_host
@@ -49,7 +51,7 @@ def app_with_no_record(no_record_host):
     app.dependency_overrides.clear()
 
 
-def test_mcp_messages_503_when_simulation_pending(app_with_pending):
+def test_mcp_messages_503_when_simulation_pending(app_with_pending: Any) -> None:
     """When record exists but is pending, MCP endpoints return 503 with Retry-After."""
     client = TestClient(app_with_pending, raise_server_exceptions=False)
     resp = client.post("/mcp/messages", content=b"{}")
@@ -57,7 +59,7 @@ def test_mcp_messages_503_when_simulation_pending(app_with_pending):
     assert resp.headers.get("Retry-After") == "2"
 
 
-def test_mcp_messages_404_when_no_record(app_with_no_record):
+def test_mcp_messages_404_when_no_record(app_with_no_record: Any) -> None:
     """When no simulation has been declared, MCP endpoints return 404."""
     client = TestClient(app_with_no_record, raise_server_exceptions=False)
     resp = client.post("/mcp/messages", content=b"{}")

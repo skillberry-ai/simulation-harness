@@ -7,9 +7,10 @@ from simulation_harness.skills.generation.ir import (
     SpecModel,
     StoreMetadata,
 )
+from typing import Any
 
 
-def _entity(name="Feature", coll="features", pk="id"):
+def _entity(name: Any = "Feature", coll: Any = "features", pk: Any = "id") -> Entity:
     return Entity(
         name=name,
         collection=coll,
@@ -18,7 +19,7 @@ def _entity(name="Feature", coll="features", pk="id"):
     )
 
 
-def _ir(**over):
+def _ir(**over: Any) -> SpecModel:
     base = dict(
         api_name="Aha",
         slug="aha",
@@ -40,11 +41,11 @@ def _ir(**over):
     return SpecModel(**base)
 
 
-def test_valid_ir_has_no_consistency_errors():
+def test_valid_ir_has_no_consistency_errors() -> None:
     assert _ir().validate_consistency() == []
 
 
-def test_dangling_operation_entity_is_flagged():
+def test_dangling_operation_entity_is_flagged() -> None:
     ir = _ir(
         operations=[
             Operation(
@@ -60,7 +61,7 @@ def test_dangling_operation_entity_is_flagged():
     assert any("Ghost" in e for e in errs)
 
 
-def test_pk_map_collection_must_be_a_known_collection():
+def test_pk_map_collection_must_be_a_known_collection() -> None:
     ir = _ir(
         store_metadata=StoreMetadata(collections=["features"], pk_map={"widgets": "id"})
     )
@@ -68,13 +69,13 @@ def test_pk_map_collection_must_be_a_known_collection():
     assert any("widgets" in e for e in errs)
 
 
-def test_entity_collection_must_appear_in_store_metadata():
+def test_entity_collection_must_appear_in_store_metadata() -> None:
     ir = _ir(store_metadata=StoreMetadata(collections=[], pk_map={}))
     errs = ir.validate_consistency()
     assert any("features" in e for e in errs)
 
 
-def test_scenario_defaults_operations_to_empty_list():
+def test_scenario_defaults_operations_to_empty_list() -> None:
     s = Scenario(title="Book a room", intent="Find and book an available room.")
     assert s.operations == []
     assert s.title == "Book a room"

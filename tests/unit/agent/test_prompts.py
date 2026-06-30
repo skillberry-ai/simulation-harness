@@ -4,22 +4,23 @@ from unittest.mock import Mock
 
 from simulation_harness.agent.prompts import render_system_prompt
 from simulation_harness.openapi.parser import OpenAPISpec
+from unittest.mock import MagicMock
 
 
-def _mock_spec():
+def _mock_spec() -> MagicMock:
     spec = Mock(spec=OpenAPISpec)
     spec.info = {"title": "Test API", "version": "1.0.0", "description": "A test API"}
     spec.servers = [{"url": "https://api.example.com"}]
     return spec
 
 
-def test_render_includes_api_info():
+def test_render_includes_api_info() -> None:
     result = render_system_prompt(_mock_spec())
     assert "Test API" in result
     assert "1.0.0" in result
 
 
-def test_render_keeps_state_mechanism_and_json_contract():
+def test_render_keeps_state_mechanism_and_json_contract() -> None:
     result = render_system_prompt(_mock_spec())
     # State tools must still be described in the always-on prompt.
     assert "state_get" in result
@@ -29,12 +30,12 @@ def test_render_keeps_state_mechanism_and_json_contract():
     assert "json" in result.lower()
 
 
-def test_render_points_to_simulation_skill():
+def test_render_points_to_simulation_skill() -> None:
     result = render_system_prompt(_mock_spec())
     assert "skill" in result.lower()
 
 
-def test_render_does_not_embed_per_operation_detail():
+def test_render_does_not_embed_per_operation_detail() -> None:
     # render_system_prompt no longer accepts or renders operations.
     result = render_system_prompt(_mock_spec())
     assert "/users/{id}" not in result

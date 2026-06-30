@@ -5,9 +5,10 @@ import pytest
 
 from simulation_harness.skills.generation.repair import GenerationStageError
 from simulation_harness.skills.generation.stages.analyze import classify as C
+from typing import Any
 
 
-def _stub(oid, tag):
+def _stub(oid: Any, tag: Any) -> dict[str, Any]:
     return {
         "operation_id": oid,
         "method": "GET",
@@ -17,7 +18,7 @@ def _stub(oid, tag):
     }
 
 
-def test_plan_packs_tags_without_splitting_when_under_cap():
+def test_plan_packs_tags_without_splitting_when_under_cap() -> None:
     # tags of size 24, 21, 16, 11, 10 — all < cap 40
     sizes = {"A": 24, "B": 21, "C": 16, "D": 11, "E": 10}
     stubs = [_stub(f"{t}{i}", t) for t, n in sizes.items() for i in range(n)]
@@ -34,7 +35,7 @@ def test_plan_packs_tags_without_splitting_when_under_cap():
     assert all(len(bs) == 1 for bs in tag_batches.values())
 
 
-def test_plan_splits_only_the_oversized_tag():
+def test_plan_splits_only_the_oversized_tag() -> None:
     stubs = [_stub(f"big{i}", "Big") for i in range(95)] + [_stub("s0", "Small")]
     batches = C.plan_classify_batches(stubs, cap=40)
     assert all(len(b) <= 40 for b in batches)
@@ -46,11 +47,11 @@ def test_plan_splits_only_the_oversized_tag():
     assert len(small_batches) == 1
 
 
-def test_plan_empty():
+def test_plan_empty() -> None:
     assert C.plan_classify_batches([], cap=40) == []
 
 
-async def test_classify_batch_returns_records():
+async def test_classify_batch_returns_records() -> None:
     stubs = [_stub("getFeature", "Features")]
     records = [
         {
@@ -65,7 +66,7 @@ async def test_classify_batch_returns_records():
     assert out == records
 
 
-async def test_classify_batch_unwraps_json_object_payload():
+async def test_classify_batch_unwraps_json_object_payload() -> None:
     # Under OpenAI json_object mode the model cannot emit a bare top-level
     # array, so it wraps the records in an object. classify_batch must unwrap it.
     stubs = [_stub("getFeature", "Features")]
@@ -83,9 +84,11 @@ async def test_classify_batch_unwraps_json_object_payload():
     assert out == records
 
 
-async def test_classify_batch_repairs_coverage_gap():
+async def test_classify_batch_repairs_coverage_gap() -> None:
     stubs = [_stub("a", "T"), _stub("b", "T")]
-    incomplete = [{"operation_id": "a", "entity": None, "kind": "read", "patterns": []}]
+    incomplete: list[dict[str, Any]] = [
+        {"operation_id": "a", "entity": None, "kind": "read", "patterns": []}
+    ]
     complete = incomplete + [
         {"operation_id": "b", "entity": None, "kind": "read", "patterns": []}
     ]
@@ -95,16 +98,18 @@ async def test_classify_batch_repairs_coverage_gap():
     assert {r["operation_id"] for r in out} == {"a", "b"}
 
 
-async def test_classify_batch_rejects_invalid_kind_and_exhausts():
+async def test_classify_batch_rejects_invalid_kind_and_exhausts() -> None:
     stubs = [_stub("a", "T")]
-    bad = [{"operation_id": "a", "entity": None, "kind": "frobnicate", "patterns": []}]
+    bad: list[dict[str, Any]] = [
+        {"operation_id": "a", "entity": None, "kind": "frobnicate", "patterns": []}
+    ]
     with patch.object(C, "call_json", AsyncMock(return_value=bad)):
         with pytest.raises(GenerationStageError) as exc:
             await C.classify_batch(stubs, [], llm=object(), retries=1)
     assert exc.value.stage == "classify"
 
 
-async def test_classify_batch_rejects_unknown_entity():
+async def test_classify_batch_rejects_unknown_entity() -> None:
     stubs = [_stub("a", "T")]
     bad = [{"operation_id": "a", "entity": "Ghost", "kind": "read", "patterns": []}]
     with patch.object(C, "call_json", AsyncMock(return_value=bad)):

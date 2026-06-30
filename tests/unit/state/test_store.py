@@ -10,12 +10,14 @@ from simulation_harness.state import (
     UnknownStoreError,
     BadQueryError,
 )
+from pathlib import Path
+from typing import Any
 
 # ``skill_dir`` is provided by tests/unit/state/conftest.py.
 
 
 @pytest.fixture
-def restaurant_store(skill_dir):
+def restaurant_store(skill_dir: Path) -> Any:
     """Load the restaurant reservation fixture store."""
     return load_store_from_skill(skill_dir)
 
@@ -23,7 +25,7 @@ def restaurant_store(skill_dir):
 class TestStoreBasics:
     """Test basic store operations."""
 
-    def test_load_from_skill(self, restaurant_store):
+    def test_load_from_skill(self, restaurant_store: Any) -> None:
         """Test loading a store from a skill directory."""
         assert restaurant_store is not None
 
@@ -35,19 +37,19 @@ class TestStoreBasics:
         reservations = restaurant_store.list("reservations")
         assert isinstance(reservations, list)
 
-    def test_get_existing_entity(self, restaurant_store):
+    def test_get_existing_entity(self, restaurant_store: Any) -> None:
         """Test getting an entity by primary key."""
         restaurant = restaurant_store.get("restaurants", "rest_001")
         assert restaurant is not None
         assert restaurant["id"] == "rest_001"
         assert restaurant["name"] == "The Italian Corner"
 
-    def test_get_nonexistent_entity(self, restaurant_store):
+    def test_get_nonexistent_entity(self, restaurant_store: Any) -> None:
         """Test getting a nonexistent entity returns None."""
         result = restaurant_store.get("restaurants", "nonexistent")
         assert result is None
 
-    def test_get_unknown_store(self, restaurant_store):
+    def test_get_unknown_store(self, restaurant_store: Any) -> None:
         """Test getting from an unknown store raises error."""
         with pytest.raises(UnknownStoreError) as exc_info:
             restaurant_store.get("unknown_store", "some_id")
@@ -59,7 +61,7 @@ class TestStoreBasics:
 class TestList:
     """Test list operations with filtering and sorting."""
 
-    def test_list_all(self, restaurant_store):
+    def test_list_all(self, restaurant_store: Any) -> None:
         """Test listing all entities in a store."""
         restaurants = restaurant_store.list("restaurants")
         assert len(restaurants) >= 3
@@ -68,13 +70,13 @@ class TestList:
         ids = [r["id"] for r in restaurants]
         assert ids == sorted(ids)
 
-    def test_list_with_equality_filter(self, restaurant_store):
+    def test_list_with_equality_filter(self, restaurant_store: Any) -> None:
         """Test filtering with exact equality."""
         results = restaurant_store.list("restaurants", where={"cuisine": "Italian"})
         assert len(results) >= 1
         assert all(r["cuisine"] == "Italian" for r in results)
 
-    def test_list_with_case_insensitive_filter(self, restaurant_store):
+    def test_list_with_case_insensitive_filter(self, restaurant_store: Any) -> None:
         """Test filtering with case-insensitive equality."""
         results = restaurant_store.list(
             "restaurants", where={"location.city": {"$ieq": "boston"}}
@@ -82,7 +84,7 @@ class TestList:
         assert len(results) >= 1
         assert all(r["location"]["city"].lower() == "boston" for r in results)
 
-    def test_list_with_in_filter(self, restaurant_store):
+    def test_list_with_in_filter(self, restaurant_store: Any) -> None:
         """Test filtering with $in operator."""
         results = restaurant_store.list(
             "restaurants", where={"price_tier": {"$in": [2, 3]}}
@@ -90,7 +92,7 @@ class TestList:
         assert len(results) >= 1
         assert all(r["price_tier"] in [2, 3] for r in results)
 
-    def test_list_with_range_filters(self, restaurant_store):
+    def test_list_with_range_filters(self, restaurant_store: Any) -> None:
         """Test filtering with range operators."""
         # Greater than or equal
         results = restaurant_store.list("restaurants", where={"rating": {"$gte": 4.5}})
@@ -102,7 +104,7 @@ class TestList:
         assert len(results) >= 1
         assert all(r["price_tier"] < 3 for r in results)
 
-    def test_list_with_nested_path(self, restaurant_store):
+    def test_list_with_nested_path(self, restaurant_store: Any) -> None:
         """Test filtering on nested object fields."""
         results = restaurant_store.list(
             "restaurants", where={"location.city": "Boston"}
@@ -110,7 +112,7 @@ class TestList:
         assert len(results) >= 1
         assert all(r["location"]["city"] == "Boston" for r in results)
 
-    def test_list_with_multiple_filters(self, restaurant_store):
+    def test_list_with_multiple_filters(self, restaurant_store: Any) -> None:
         """Test that multiple filters are ANDed together."""
         results = restaurant_store.list(
             "restaurants", where={"location.city": "Boston", "price_tier": {"$lte": 3}}
@@ -119,13 +121,13 @@ class TestList:
             r["location"]["city"] == "Boston" and r["price_tier"] <= 3 for r in results
         )
 
-    def test_list_with_sort(self, restaurant_store):
+    def test_list_with_sort(self, restaurant_store: Any) -> None:
         """Test sorting results."""
         results = restaurant_store.list("restaurants", sort=[("rating", "desc")])
         ratings = [r["rating"] for r in results]
         assert ratings == sorted(ratings, reverse=True)
 
-    def test_list_with_limit(self, restaurant_store):
+    def test_list_with_limit(self, restaurant_store: Any) -> None:
         """Test limiting results."""
         results = restaurant_store.list("restaurants", limit=2)
         assert len(results) == 2
@@ -134,12 +136,12 @@ class TestList:
 class TestCount:
     """Test count operations."""
 
-    def test_count_all(self, restaurant_store):
+    def test_count_all(self, restaurant_store: Any) -> None:
         """Test counting all entities."""
         count = restaurant_store.count("restaurants")
         assert count >= 3
 
-    def test_count_with_filter(self, restaurant_store):
+    def test_count_with_filter(self, restaurant_store: Any) -> None:
         """Test counting with a filter."""
         count = restaurant_store.count("restaurants", where={"location.city": "Boston"})
         assert count >= 1
@@ -148,7 +150,7 @@ class TestCount:
 class TestInsert:
     """Test insert operations."""
 
-    def test_insert_valid_entity(self, restaurant_store):
+    def test_insert_valid_entity(self, restaurant_store: Any) -> None:
         """Test inserting a valid entity."""
         new_restaurant = {
             "id": "rest_999",
@@ -176,7 +178,7 @@ class TestInsert:
         assert retrieved is not None
         assert retrieved["name"] == "Test Restaurant"
 
-    def test_insert_duplicate_key(self, restaurant_store):
+    def test_insert_duplicate_key(self, restaurant_store: Any) -> None:
         """Test that inserting a duplicate key raises error."""
         duplicate = {
             "id": "rest_001",  # Already exists
@@ -201,7 +203,7 @@ class TestInsert:
 
         assert "rest_001" in str(exc_info.value)
 
-    def test_insert_missing_required_field(self, restaurant_store):
+    def test_insert_missing_required_field(self, restaurant_store: Any) -> None:
         """Test that inserting without required fields raises validation error."""
         invalid = {
             "id": "rest_998",
@@ -214,7 +216,7 @@ class TestInsert:
 
         assert "required" in str(exc_info.value).lower()
 
-    def test_insert_missing_primary_key(self, restaurant_store):
+    def test_insert_missing_primary_key(self, restaurant_store: Any) -> None:
         """Test that inserting without primary key raises validation error."""
         invalid = {
             # Missing "id" field
@@ -243,7 +245,7 @@ class TestInsert:
 class TestUpdate:
     """Test update operations."""
 
-    def test_update_existing_entity(self, restaurant_store):
+    def test_update_existing_entity(self, restaurant_store: Any) -> None:
         """Test updating an existing entity."""
         result = restaurant_store.update("restaurants", "rest_001", {"rating": 4.8})
 
@@ -254,14 +256,14 @@ class TestUpdate:
         retrieved = restaurant_store.get("restaurants", "rest_001")
         assert retrieved["rating"] == 4.8
 
-    def test_update_nonexistent_entity(self, restaurant_store):
+    def test_update_nonexistent_entity(self, restaurant_store: Any) -> None:
         """Test updating a nonexistent entity raises error."""
         with pytest.raises(NotFoundError) as exc_info:
             restaurant_store.update("restaurants", "nonexistent", {"rating": 5.0})
 
         assert "nonexistent" in str(exc_info.value)
 
-    def test_update_with_invalid_data(self, restaurant_store):
+    def test_update_with_invalid_data(self, restaurant_store: Any) -> None:
         """Test that update validates the merged entity."""
         with pytest.raises(ValidationError):
             restaurant_store.update(
@@ -274,7 +276,7 @@ class TestUpdate:
 class TestDelete:
     """Test delete operations."""
 
-    def test_delete_existing_entity(self, restaurant_store):
+    def test_delete_existing_entity(self, restaurant_store: Any) -> None:
         """Test deleting an existing entity."""
         # First insert a test entity
         test_entity = {
@@ -304,7 +306,7 @@ class TestDelete:
         result = restaurant_store.get("restaurants", "rest_delete_test")
         assert result is None
 
-    def test_delete_nonexistent_entity(self, restaurant_store):
+    def test_delete_nonexistent_entity(self, restaurant_store: Any) -> None:
         """Test deleting a nonexistent entity raises error."""
         with pytest.raises(NotFoundError) as exc_info:
             restaurant_store.delete("restaurants", "nonexistent")
@@ -315,7 +317,7 @@ class TestDelete:
 class TestReset:
     """Test reset functionality."""
 
-    def test_reset_restores_seed(self, restaurant_store):
+    def test_reset_restores_seed(self, restaurant_store: Any) -> None:
         """Test that reset restores the store to seed state."""
         # Make some changes
         restaurant_store.insert(
@@ -354,7 +356,7 @@ class TestReset:
 class TestSnapshot:
     """Test snapshot functionality."""
 
-    def test_snapshot_returns_all_data(self, restaurant_store):
+    def test_snapshot_returns_all_data(self, restaurant_store: Any) -> None:
         """Test that snapshot returns complete state."""
         snapshot = restaurant_store.snapshot()
 
@@ -369,7 +371,7 @@ class TestSnapshot:
 class TestIsolation:
     """Test that returned entities are isolated from internal state."""
 
-    def test_get_returns_copy(self, restaurant_store):
+    def test_get_returns_copy(self, restaurant_store: Any) -> None:
         """Test that get returns a deep copy."""
         entity1 = restaurant_store.get("restaurants", "rest_001")
         entity2 = restaurant_store.get("restaurants", "rest_001")
@@ -384,7 +386,7 @@ class TestIsolation:
         entity3 = restaurant_store.get("restaurants", "rest_001")
         assert entity3["name"] == "The Italian Corner"
 
-    def test_list_returns_copies(self, restaurant_store):
+    def test_list_returns_copies(self, restaurant_store: Any) -> None:
         """Test that list returns deep copies."""
         entities1 = restaurant_store.list("restaurants")
         entities2 = restaurant_store.list("restaurants")
@@ -399,12 +401,12 @@ class TestIsolation:
 class TestBadQueries:
     """Test error handling for malformed queries."""
 
-    def test_unknown_operator(self, restaurant_store):
+    def test_unknown_operator(self, restaurant_store: Any) -> None:
         """Test that unknown operators raise BadQueryError."""
         with pytest.raises(BadQueryError):
             restaurant_store.list("restaurants", where={"name": {"$unknown": "value"}})
 
-    def test_invalid_sort_field(self, restaurant_store):
+    def test_invalid_sort_field(self, restaurant_store: Any) -> None:
         """Test that sorting on nonexistent field raises error."""
         with pytest.raises(BadQueryError):
             restaurant_store.list("restaurants", sort=[("nonexistent_field", "asc")])

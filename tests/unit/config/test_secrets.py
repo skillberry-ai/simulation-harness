@@ -6,10 +6,13 @@ import pytest
 from pydantic import ValidationError
 
 from simulation_harness.config.secrets import Secrets
+from pathlib import Path
 
 
 class TestSecretsLoading:
-    def test_loads_required_field_from_env(self, monkeypatch):
+    def test_loads_required_field_from_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("LLM_API_KEY", "sk-test-123")
         monkeypatch.delenv("LLM_API_BASE", raising=False)
 
@@ -18,7 +21,9 @@ class TestSecretsLoading:
         assert secrets.llm_api_key.get_secret_value() == "sk-test-123"
         assert secrets.llm_api_base is None
 
-    def test_loads_optional_api_base_from_env(self, monkeypatch):
+    def test_loads_optional_api_base_from_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("LLM_API_KEY", "sk-test-123")
         monkeypatch.setenv("LLM_API_BASE", "https://example.invalid/v1")
 
@@ -26,19 +31,25 @@ class TestSecretsLoading:
 
         assert secrets.llm_api_base == "https://example.invalid/v1"
 
-    def test_missing_required_raises_validation_error(self, monkeypatch):
+    def test_missing_required_raises_validation_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.delenv("LLM_API_KEY", raising=False)
 
         with pytest.raises(ValidationError):
             Secrets(_env_file=None)
 
-    def test_empty_string_required_raises_validation_error(self, monkeypatch):
+    def test_empty_string_required_raises_validation_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("LLM_API_KEY", "")
 
         with pytest.raises(ValidationError):
             Secrets(_env_file=None)
 
-    def test_empty_string_api_base_raises_validation_error(self, monkeypatch):
+    def test_empty_string_api_base_raises_validation_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """llm_api_base='' must be rejected — empty string is not a valid URL."""
         monkeypatch.setenv("LLM_API_KEY", "sk-test")
         monkeypatch.setenv("LLM_API_BASE", "")
@@ -46,7 +57,7 @@ class TestSecretsLoading:
         with pytest.raises(ValidationError):
             Secrets(_env_file=None)
 
-    def test_case_insensitive_env_lookup(self, monkeypatch):
+    def test_case_insensitive_env_lookup(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("LLM_API_KEY", raising=False)
         monkeypatch.setenv("llm_api_key", "sk-lower")
 
@@ -56,7 +67,7 @@ class TestSecretsLoading:
 
 
 class TestSecretsRedaction:
-    def test_repr_redacts_secret_value(self, monkeypatch):
+    def test_repr_redacts_secret_value(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("LLM_API_KEY", "sk-leak-me")
 
         secrets = Secrets(_env_file=None)
@@ -64,7 +75,9 @@ class TestSecretsRedaction:
         assert "sk-leak-me" not in repr(secrets)
         assert "sk-leak-me" not in str(secrets)
 
-    def test_model_dump_json_redacts_secret_value(self, monkeypatch):
+    def test_model_dump_json_redacts_secret_value(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("LLM_API_KEY", "sk-leak-me")
 
         secrets = Secrets(_env_file=None)
@@ -76,7 +89,9 @@ class TestSecretsRedaction:
 
 
 class TestLoadSecretsHelper:
-    def test_load_secrets_returns_secrets_instance(self, monkeypatch, tmp_path):
+    def test_load_secrets_returns_secrets_instance(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         from simulation_harness.config import load_secrets
 
         monkeypatch.chdir(tmp_path)  # avoid picking up project .env
@@ -88,7 +103,9 @@ class TestLoadSecretsHelper:
         assert isinstance(secrets, Secrets)
         assert secrets.llm_api_key.get_secret_value() == "sk-via-helper"
 
-    def test_load_secrets_re_raises_validation_error(self, monkeypatch, tmp_path):
+    def test_load_secrets_re_raises_validation_error(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         from pydantic import ValidationError
 
         from simulation_harness.config import load_secrets
@@ -101,7 +118,9 @@ class TestLoadSecretsHelper:
 
 
 class TestGetSecretsAccessor:
-    def test_get_secrets_raises_before_load(self, monkeypatch):
+    def test_get_secrets_raises_before_load(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # Reset the module-level global to simulate fresh state.
         from simulation_harness.config import settings as settings_mod
 
@@ -110,7 +129,9 @@ class TestGetSecretsAccessor:
         with pytest.raises(RuntimeError, match="Secrets not loaded"):
             settings_mod.get_secrets()
 
-    def test_get_secrets_returns_loaded_instance(self, monkeypatch, tmp_path):
+    def test_get_secrets_returns_loaded_instance(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         from simulation_harness.config import get_secrets, load_secrets
 
         monkeypatch.chdir(tmp_path)
@@ -124,7 +145,9 @@ class TestGetSecretsAccessor:
 class TestStartupContract:
     """The split startup contract: load_config succeeds without key; load_secrets fails."""
 
-    def test_load_config_succeeds_without_llm_api_key(self, tmp_path, monkeypatch):
+    def test_load_config_succeeds_without_llm_api_key(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """load_config() must not raise even when LLM_API_KEY is absent."""
         import yaml
         from simulation_harness.config import load_config
@@ -154,7 +177,9 @@ class TestStartupContract:
         config = load_config(str(config_file))
         assert config.llm.provider == "openai"
 
-    def test_load_secrets_fails_without_llm_api_key(self, tmp_path, monkeypatch):
+    def test_load_secrets_fails_without_llm_api_key(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """load_secrets() must raise pydantic.ValidationError when LLM_API_KEY is absent."""
         from pydantic import ValidationError
         from simulation_harness.config import load_secrets

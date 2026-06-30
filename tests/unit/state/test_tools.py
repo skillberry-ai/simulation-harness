@@ -3,24 +3,26 @@
 import pytest
 
 from simulation_harness.state import StoreRegistry, create_state_tools
+from pathlib import Path
+from typing import Any
 
 # ``skill_dir`` is provided by tests/unit/state/conftest.py.
 
 
 @pytest.fixture
-def registry(skill_dir):
+def registry(skill_dir: Path) -> StoreRegistry:
     """Create a StoreRegistry instance."""
     return StoreRegistry(skill_dir)
 
 
 @pytest.fixture
-def mock_config(registry):
+def mock_config(registry: StoreRegistry) -> dict[str, Any]:
     """Create a mock RunnableConfig."""
     return {"configurable": {"store_registry": registry, "thread_id": "test_thread"}}
 
 
 @pytest.fixture
-def tools():
+def tools() -> Any:
     """Create the state tools."""
     return create_state_tools()
 
@@ -28,7 +30,7 @@ def tools():
 class TestToolCreation:
     """Test tool creation."""
 
-    def test_create_tools(self, tools):
+    def test_create_tools(self, tools: Any) -> None:
         """Test that create_state_tools returns 6 tools."""
         assert len(tools) == 6
 
@@ -44,7 +46,7 @@ class TestToolCreation:
 class TestStateGet:
     """Test state_get tool."""
 
-    def test_get_existing_entity(self, tools, mock_config):
+    def test_get_existing_entity(self, tools: Any, mock_config: dict[str, Any]) -> None:
         """Test getting an existing entity."""
         tool = next(t for t in tools if t.name == "state_get")
 
@@ -54,7 +56,9 @@ class TestStateGet:
         assert result["id"] == "rest_001"
         assert result["name"] == "The Italian Corner"
 
-    def test_get_nonexistent_entity(self, tools, mock_config):
+    def test_get_nonexistent_entity(
+        self, tools: Any, mock_config: dict[str, Any]
+    ) -> None:
         """Test getting a nonexistent entity returns error."""
         tool = next(t for t in tools if t.name == "state_get")
 
@@ -63,7 +67,7 @@ class TestStateGet:
         assert "error" in result
         assert result["error"] == "not_found"
 
-    def test_get_unknown_store(self, tools, mock_config):
+    def test_get_unknown_store(self, tools: Any, mock_config: dict[str, Any]) -> None:
         """Test getting from unknown store returns error."""
         tool = next(t for t in tools if t.name == "state_get")
 
@@ -76,7 +80,7 @@ class TestStateGet:
 class TestStateList:
     """Test state_list tool."""
 
-    def test_list_all(self, tools, mock_config):
+    def test_list_all(self, tools: Any, mock_config: dict[str, Any]) -> None:
         """Test listing all entities."""
         tool = next(t for t in tools if t.name == "state_list")
 
@@ -85,7 +89,7 @@ class TestStateList:
         assert isinstance(result, list)
         assert len(result) >= 3
 
-    def test_list_with_filter(self, tools, mock_config):
+    def test_list_with_filter(self, tools: Any, mock_config: dict[str, Any]) -> None:
         """Test listing with a filter."""
         tool = next(t for t in tools if t.name == "state_list")
 
@@ -96,7 +100,7 @@ class TestStateList:
         assert isinstance(result, list)
         assert all(r["cuisine"] == "Italian" for r in result)
 
-    def test_list_with_sort(self, tools, mock_config):
+    def test_list_with_sort(self, tools: Any, mock_config: dict[str, Any]) -> None:
         """Test listing with sort parameter (verifies list-to-tuple conversion)."""
         tool = next(t for t in tools if t.name == "state_list")
 
@@ -120,7 +124,9 @@ class TestStateList:
         ratings = [r["rating"] for r in result]
         assert ratings == sorted(ratings, reverse=True)
 
-    def test_list_with_malformed_sort(self, tools, mock_config):
+    def test_list_with_malformed_sort(
+        self, tools: Any, mock_config: dict[str, Any]
+    ) -> None:
         """Test that malformed sort parameter returns clear error."""
         tool = next(t for t in tools if t.name == "state_list")
 
@@ -140,7 +146,7 @@ class TestStateList:
         assert result["error"] == "bad_query"
         assert "must be [field, direction] pairs" in result["message"]
 
-    def test_list_with_limit(self, tools, mock_config):
+    def test_list_with_limit(self, tools: Any, mock_config: dict[str, Any]) -> None:
         """Test listing with a limit."""
         tool = next(t for t in tools if t.name == "state_list")
 
@@ -153,7 +159,7 @@ class TestStateList:
 class TestStateCount:
     """Test state_count tool."""
 
-    def test_count_all(self, tools, mock_config):
+    def test_count_all(self, tools: Any, mock_config: dict[str, Any]) -> None:
         """Test counting all entities."""
         tool = next(t for t in tools if t.name == "state_count")
 
@@ -162,7 +168,7 @@ class TestStateCount:
         assert isinstance(result, int)
         assert result >= 3
 
-    def test_count_with_filter(self, tools, mock_config):
+    def test_count_with_filter(self, tools: Any, mock_config: dict[str, Any]) -> None:
         """Test counting with a filter."""
         tool = next(t for t in tools if t.name == "state_count")
 
@@ -177,7 +183,7 @@ class TestStateCount:
 class TestStateInsert:
     """Test state_insert tool."""
 
-    def test_insert_valid_entity(self, tools, mock_config):
+    def test_insert_valid_entity(self, tools: Any, mock_config: dict[str, Any]) -> None:
         """Test inserting a valid entity."""
         tool = next(t for t in tools if t.name == "state_insert")
 
@@ -204,7 +210,9 @@ class TestStateInsert:
         assert "error" not in result
         assert result["id"] == "rest_test"
 
-    def test_insert_duplicate_key(self, tools, mock_config):
+    def test_insert_duplicate_key(
+        self, tools: Any, mock_config: dict[str, Any]
+    ) -> None:
         """Test inserting a duplicate key returns error."""
         tool = next(t for t in tools if t.name == "state_insert")
 
@@ -231,7 +239,9 @@ class TestStateInsert:
         assert "error" in result
         assert result["error"] == "duplicate_key"
 
-    def test_insert_invalid_entity(self, tools, mock_config):
+    def test_insert_invalid_entity(
+        self, tools: Any, mock_config: dict[str, Any]
+    ) -> None:
         """Test inserting an invalid entity returns error."""
         tool = next(t for t in tools if t.name == "state_insert")
 
@@ -250,7 +260,9 @@ class TestStateInsert:
 class TestStateUpdate:
     """Test state_update tool."""
 
-    def test_update_existing_entity(self, tools, mock_config):
+    def test_update_existing_entity(
+        self, tools: Any, mock_config: dict[str, Any]
+    ) -> None:
         """Test updating an existing entity."""
         tool = next(t for t in tools if t.name == "state_update")
 
@@ -265,7 +277,9 @@ class TestStateUpdate:
         assert result["rating"] == 4.9
         assert result["name"] == "The Italian Corner"  # Other fields unchanged
 
-    def test_update_nonexistent_entity(self, tools, mock_config):
+    def test_update_nonexistent_entity(
+        self, tools: Any, mock_config: dict[str, Any]
+    ) -> None:
         """Test updating a nonexistent entity returns error."""
         tool = next(t for t in tools if t.name == "state_update")
 
@@ -283,7 +297,9 @@ class TestStateUpdate:
 class TestStateDelete:
     """Test state_delete tool."""
 
-    def test_delete_existing_entity(self, tools, mock_config):
+    def test_delete_existing_entity(
+        self, tools: Any, mock_config: dict[str, Any]
+    ) -> None:
         """Test deleting an existing entity."""
         # First insert a test entity
         insert_tool = next(t for t in tools if t.name == "state_insert")
@@ -322,7 +338,9 @@ class TestStateDelete:
         )
         assert "error" in get_result
 
-    def test_delete_nonexistent_entity(self, tools, mock_config):
+    def test_delete_nonexistent_entity(
+        self, tools: Any, mock_config: dict[str, Any]
+    ) -> None:
         """Test deleting a nonexistent entity returns error."""
         tool = next(t for t in tools if t.name == "state_delete")
 
@@ -335,7 +353,9 @@ class TestStateDelete:
 class TestThreadIsolation:
     """Test that tools respect thread isolation."""
 
-    def test_different_threads_see_different_data(self, tools, registry):
+    def test_different_threads_see_different_data(
+        self, tools: Any, registry: StoreRegistry
+    ) -> None:
         """Test that different threads have isolated data."""
         config1 = {
             "configurable": {"store_registry": registry, "thread_id": "thread_1"}

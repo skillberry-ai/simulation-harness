@@ -9,7 +9,7 @@ from simulation_harness.core.simulation_record import (
 )
 
 
-def test_record_starts_pending_with_progress_timestamps():
+def test_record_starts_pending_with_progress_timestamps() -> None:
     record = SimulationRecord.declare(name="test-api")
     assert record.name == "test-api"
     assert record.status == SimulationStatus.PENDING
@@ -20,7 +20,7 @@ def test_record_starts_pending_with_progress_timestamps():
     assert record.instance is None
 
 
-def test_record_transitions_advance_updated_at():
+def test_record_transitions_advance_updated_at() -> None:
     record = SimulationRecord.declare(name="test-api")
     started = record.progress.started_at
 
@@ -35,7 +35,7 @@ def test_record_transitions_advance_updated_at():
     assert record.progress.phase == "agent_init"
 
 
-def test_record_fail_sets_error_and_status():
+def test_record_fail_sets_error_and_status() -> None:
     record = SimulationRecord.declare(name="test-api")
     record.fail(
         code="creation_timeout", message="exceeded 120s", details={"limit": 120}
@@ -47,20 +47,20 @@ def test_record_fail_sets_error_and_status():
     assert record.error.details == {"limit": 120}
 
 
-def test_invalid_forward_transition_raises():
+def test_invalid_forward_transition_raises() -> None:
     record = SimulationRecord.declare(name="test-api")
     with pytest.raises(ValueError):
         record.transition(SimulationStatus.PENDING)
 
 
-def test_terminal_status_cannot_transition():
+def test_terminal_status_cannot_transition() -> None:
     record = SimulationRecord.declare(name="test-api")
     record.fail(code="x", message="y")
     with pytest.raises(ValueError):
         record.transition(SimulationStatus.READY)
 
 
-def test_mark_ready_sets_instance_and_clears_phase():
+def test_mark_ready_sets_instance_and_clears_phase() -> None:
     from unittest.mock import MagicMock
 
     record = SimulationRecord.declare(name="test-api")
@@ -72,7 +72,7 @@ def test_mark_ready_sets_instance_and_clears_phase():
     assert record.progress.phase is None
 
 
-def test_set_phase_updates_phase_without_transition():
+def test_set_phase_updates_phase_without_transition() -> None:
     rec = SimulationRecord.declare(name="aha")
     rec.transition(SimulationStatus.GENERATING_SKILL, phase="skill_generation")
     before = rec.progress.updated_at

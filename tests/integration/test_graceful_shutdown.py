@@ -5,9 +5,12 @@ import os
 
 import yaml
 from fastapi.testclient import TestClient
+from pathlib import Path
+from typing import Any
+import pytest
 
 
-def _cfg(tmpdir) -> str:
+def _cfg(tmpdir: Any) -> str:
     cfg = {
         "llm": {
             "provider": "openai",
@@ -29,7 +32,9 @@ def _cfg(tmpdir) -> str:
     return path
 
 
-def test_readyz_flips_to_503_after_lifespan_shutdown(monkeypatch, tmp_path):
+def test_readyz_flips_to_503_after_lifespan_shutdown(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.setenv("HARNESS_CONFIG_PATH", _cfg(str(tmp_path)))
     monkeypatch.setenv("LLM_API_KEY", "test-key")
 

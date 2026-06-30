@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from collections.abc import Iterator
 
 # Lifecycle/MCP integration tests mock skill generation to return a SKILL.md
 # path without creating the directory on disk. Agent init then copies that
@@ -30,7 +31,7 @@ def _write_valid_skill(skill_dir: Path) -> None:
 
 
 @pytest.fixture(autouse=True)
-def mocked_skill_dirs():
+def mocked_skill_dirs() -> Iterator[None]:
     """Create the skill dirs that generate_skill mocks point at, then clean up.
 
     The integration tests patch ``SkillGenerator.generate_skill`` to return e.g.

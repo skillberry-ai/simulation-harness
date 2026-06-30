@@ -11,10 +11,12 @@ from simulation_harness.config.settings import load_config, load_secrets
 from simulation_harness.core.simulation_host import SimulationHost
 from simulation_harness.core.simulation_record import SimulationStatus
 from simulation_harness.utils.errors import SimulationAlreadyExistsError
+from collections.abc import Iterator
+from typing import Any
 
 
 @pytest.fixture(scope="module", autouse=True)
-def load_test_config():
+def load_test_config() -> Iterator[None]:
     """Load configuration and secrets before running tests."""
     from simulation_harness.config import settings as settings_mod
 
@@ -41,11 +43,16 @@ def load_test_config():
 
 
 @pytest.fixture
-def fake_skill_registry():
+def fake_skill_registry() -> MagicMock:
     reg = MagicMock()
     started = asyncio.Event()
 
-    async def ensure_skill(simulation_name, openapi_spec, regenerate, progress_cb=None):
+    async def ensure_skill(
+        simulation_name: Any,
+        openapi_spec: Any,
+        regenerate: Any,
+        progress_cb: Any = None,
+    ) -> Any:
         started.set()
         await asyncio.sleep(0.05)
         return Path(f"/tmp/skills/{simulation_name}/SKILL.md")
@@ -57,7 +64,7 @@ def fake_skill_registry():
 
 
 @pytest.fixture
-def fake_instance_factory():
+def fake_instance_factory() -> Any:
     instance = MagicMock()
     instance.shutdown = AsyncMock()
     instance.spec = MagicMock(name="test-api")
@@ -84,8 +91,8 @@ async def _wait_for_ready(host: SimulationHost, timeout: float = 3.0) -> None:
 
 
 async def test_declare_simulation_returns_pending_record_immediately(
-    fake_skill_registry, fake_instance_factory
-):
+    fake_skill_registry: MagicMock, fake_instance_factory: Any
+) -> None:
     factory, _ = fake_instance_factory
     host = SimulationHost()
     record = await host.declare_simulation(
@@ -107,8 +114,8 @@ async def test_declare_simulation_returns_pending_record_immediately(
 
 
 async def test_declare_simulation_when_record_exists_raises(
-    fake_skill_registry, fake_instance_factory
-):
+    fake_skill_registry: MagicMock, fake_instance_factory: Any
+) -> None:
     factory, _ = fake_instance_factory
     host = SimulationHost()
     await host.declare_simulation(
@@ -139,8 +146,8 @@ async def test_declare_simulation_when_record_exists_raises(
 
 
 async def test_record_progresses_to_ready_in_background(
-    fake_skill_registry, fake_instance_factory
-):
+    fake_skill_registry: MagicMock, fake_instance_factory: Any
+) -> None:
     factory, instance = fake_instance_factory
     host = SimulationHost()
     record = await host.declare_simulation(
@@ -168,8 +175,8 @@ async def test_record_progresses_to_ready_in_background(
 
 
 async def test_delete_during_pending_cancels_creation(
-    fake_skill_registry, fake_instance_factory
-):
+    fake_skill_registry: MagicMock, fake_instance_factory: Any
+) -> None:
     factory, _ = fake_instance_factory
     host = SimulationHost()
     await host.declare_simulation(
@@ -197,7 +204,9 @@ async def test_delete_during_pending_cancels_creation(
 # ---------------------------------------------------------------------------
 
 
-async def test_create_simulation_success(fake_skill_registry, fake_instance_factory):
+async def test_create_simulation_success(
+    fake_skill_registry: MagicMock, fake_instance_factory: Any
+) -> None:
     """Test creating a simulation successfully (via declare_simulation)."""
     factory, instance = fake_instance_factory
     host = SimulationHost()
@@ -223,8 +232,8 @@ async def test_create_simulation_success(fake_skill_registry, fake_instance_fact
 
 
 async def test_create_simulation_rejects_duplicate(
-    fake_skill_registry, fake_instance_factory
-):
+    fake_skill_registry: MagicMock, fake_instance_factory: Any
+) -> None:
     """Test that declaring a simulation when one exists raises error."""
     factory, _ = fake_instance_factory
     host = SimulationHost()
@@ -259,7 +268,7 @@ async def test_create_simulation_rejects_duplicate(
         await host.delete_simulation()
 
 
-async def test_get_simulation_returns_none_when_empty():
+async def test_get_simulation_returns_none_when_empty() -> None:
     """Test getting simulation when none exists."""
     host = SimulationHost()
 
@@ -268,7 +277,9 @@ async def test_get_simulation_returns_none_when_empty():
     assert result is None
 
 
-async def test_delete_simulation_success(fake_skill_registry, fake_instance_factory):
+async def test_delete_simulation_success(
+    fake_skill_registry: MagicMock, fake_instance_factory: Any
+) -> None:
     """Test deleting a simulation."""
     factory, _ = fake_instance_factory
     host = SimulationHost()
@@ -292,7 +303,7 @@ async def test_delete_simulation_success(fake_skill_registry, fake_instance_fact
     assert await host.get_record() is None
 
 
-async def test_delete_simulation_when_none_exists():
+async def test_delete_simulation_when_none_exists() -> None:
     """Test deleting when no simulation exists (should be idempotent)."""
     host = SimulationHost()
 
@@ -302,8 +313,8 @@ async def test_delete_simulation_when_none_exists():
 
 
 async def test_lifecycle_lock_serializes_operations(
-    fake_skill_registry, fake_instance_factory
-):
+    fake_skill_registry: MagicMock, fake_instance_factory: Any
+) -> None:
     """Test that lifecycle operations are serialized."""
     factory, _ = fake_instance_factory
     host = SimulationHost()
@@ -322,7 +333,7 @@ async def test_lifecycle_lock_serializes_operations(
     )
 
     # Try to create and delete concurrently - should be serialized
-    async def try_declare():
+    async def try_declare() -> None:
         try:
             await host.declare_simulation(
                 name="test-sim",
@@ -339,7 +350,7 @@ async def test_lifecycle_lock_serializes_operations(
         except SimulationAlreadyExistsError:
             pass
 
-    async def try_delete():
+    async def try_delete() -> None:
         await host.delete_simulation()
 
     # Run operations concurrently
@@ -351,11 +362,13 @@ async def test_lifecycle_lock_serializes_operations(
     assert result is None or result is not None
 
 
-async def test_create_simulation_passes_mcp_port_to_instance(fake_skill_registry):
+async def test_create_simulation_passes_mcp_port_to_instance(
+    fake_skill_registry: MagicMock,
+) -> None:
     """declare_simulation forwards mcp_port to the instance factory."""
     captured_kwargs: dict = {}
 
-    def capturing_factory(**kwargs):
+    def capturing_factory(**kwargs: Any) -> MagicMock:
         captured_kwargs.update(kwargs)
         inst = MagicMock()
         inst.shutdown = AsyncMock()
@@ -379,8 +392,8 @@ async def test_create_simulation_passes_mcp_port_to_instance(fake_skill_registry
 
 
 async def test_create_simulation_starts_sidecar_when_mcp_port_provided(
-    fake_skill_registry,
-):
+    fake_skill_registry: MagicMock,
+) -> None:
     """When mcp_port is set, _run_creation starts a SidecarMCPServer after READY."""
     from unittest.mock import patch
 
@@ -391,7 +404,7 @@ async def test_create_simulation_starts_sidecar_when_mcp_port_provided(
     mock_inst.shutdown = AsyncMock()
     mock_inst._sidecar = None
 
-    def factory(**kwargs):
+    def factory(**kwargs: Any) -> Any:
         return mock_inst
 
     host = SimulationHost()
@@ -422,7 +435,9 @@ async def test_create_simulation_starts_sidecar_when_mcp_port_provided(
             await host.delete_simulation()
 
 
-async def test_create_simulation_cleans_up_instance_on_port_in_use(fake_skill_registry):
+async def test_create_simulation_cleans_up_instance_on_port_in_use(
+    fake_skill_registry: MagicMock,
+) -> None:
     """When sidecar.start() raises PortInUseError, instance is shut down and record fails."""
     from unittest.mock import patch
     from simulation_harness.utils.errors import PortInUseError
@@ -434,7 +449,7 @@ async def test_create_simulation_cleans_up_instance_on_port_in_use(fake_skill_re
     mock_inst.shutdown = AsyncMock()
     mock_inst._sidecar = None
 
-    def factory(**kwargs):
+    def factory(**kwargs: Any) -> Any:
         return mock_inst
 
     host = SimulationHost()
@@ -475,7 +490,7 @@ async def test_create_simulation_cleans_up_instance_on_port_in_use(fake_skill_re
 
 
 class TestReplaceDatabase:
-    async def test_replace_database_writes_and_resets(self):
+    async def test_replace_database_writes_and_resets(self) -> None:
         from unittest.mock import AsyncMock, MagicMock
 
         from simulation_harness.core.simulation_record import (
@@ -502,21 +517,21 @@ class TestReplaceDatabase:
         host._record = record
 
         skill_registry = MagicMock()
-        new_db = {"items": []}
+        new_db: dict[str, Any] = {"items": []}
 
         await host.replace_database(new_db=new_db, skill_registry=skill_registry)
 
         skill_registry.write_db.assert_called_once_with("demo", new_db)
         instance.reset_session.assert_awaited_once()
 
-    async def test_replace_database_no_simulation_raises(self):
+    async def test_replace_database_no_simulation_raises(self) -> None:
         from simulation_harness.utils.errors import SimulationNotFoundError
 
         host = SimulationHost()
         with pytest.raises(SimulationNotFoundError):
             await host.replace_database(new_db={}, skill_registry=MagicMock())
 
-    async def test_replace_database_not_ready_raises(self):
+    async def test_replace_database_not_ready_raises(self) -> None:
         from simulation_harness.core.simulation_record import SimulationRecord
         from simulation_harness.utils.errors import SimulationNotReadyError
 
@@ -526,7 +541,7 @@ class TestReplaceDatabase:
         with pytest.raises(SimulationNotReadyError):
             await host.replace_database(new_db={}, skill_registry=MagicMock())
 
-    async def test_replace_database_busy_raises(self):
+    async def test_replace_database_busy_raises(self) -> None:
         from unittest.mock import MagicMock
 
         from simulation_harness.core.simulation_record import (
@@ -558,7 +573,7 @@ class TestReplaceDatabase:
         assert exc.value.queue_depth == 2
         skill_registry.write_db.assert_not_called()
 
-    async def test_replace_database_does_not_reset_when_write_fails(self):
+    async def test_replace_database_does_not_reset_when_write_fails(self) -> None:
         from unittest.mock import AsyncMock, MagicMock
 
         from simulation_harness.core.simulation_record import (

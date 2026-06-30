@@ -6,10 +6,12 @@ from unittest.mock import Mock, AsyncMock, patch
 from simulation_harness.agent.deep_agent import DeepAgent, _READONLY_FS_RULES
 from simulation_harness.openapi.parser import OpenAPISpec, OpenAPIOperation
 from deepagents.middleware.permissions import _check_fs_permission
+from pathlib import Path
+from unittest.mock import MagicMock
 
 
 @pytest.fixture
-def mock_spec():
+def mock_spec() -> MagicMock:
     """Create a mock OpenAPI spec."""
     spec = Mock(spec=OpenAPISpec)
     spec.info = {"title": "Test API", "version": "1.0.0", "description": "Test"}
@@ -18,7 +20,7 @@ def mock_spec():
 
 
 @pytest.fixture
-def mock_operation():
+def mock_operation() -> MagicMock:
     """Create a mock OpenAPI operation."""
     op = Mock(spec=OpenAPIOperation)
     op.method = "get"
@@ -35,7 +37,9 @@ def mock_operation():
     return op
 
 
-def test_deep_agent_initialization(mock_spec, mock_operation):
+def test_deep_agent_initialization(
+    mock_spec: MagicMock, mock_operation: MagicMock
+) -> None:
     """Test DeepAgent initializes correctly."""
     agent = DeepAgent(
         api_key=SecretStr("test-key"),
@@ -56,7 +60,9 @@ def test_deep_agent_initialization(mock_spec, mock_operation):
     assert agent.session_manager is not None
 
 
-def test_deep_agent_initialization_with_base_url(mock_spec, mock_operation):
+def test_deep_agent_initialization_with_base_url(
+    mock_spec: MagicMock, mock_operation: MagicMock
+) -> None:
     """Test DeepAgent initializes with custom base URL."""
     agent = DeepAgent(
         api_key=SecretStr("test-key"),
@@ -72,7 +78,9 @@ def test_deep_agent_initialization_with_base_url(mock_spec, mock_operation):
 
 
 @pytest.mark.asyncio
-async def test_generate_response_basic(mock_spec, mock_operation):
+async def test_generate_response_basic(
+    mock_spec: MagicMock, mock_operation: MagicMock
+) -> None:
     """Test generating a basic response."""
     agent = DeepAgent(
         api_key=SecretStr("test-key"),
@@ -100,7 +108,9 @@ async def test_generate_response_basic(mock_spec, mock_operation):
 
 
 @pytest.mark.asyncio
-async def test_generate_response_with_default_thread(mock_spec, mock_operation):
+async def test_generate_response_with_default_thread(
+    mock_spec: MagicMock, mock_operation: MagicMock
+) -> None:
     """Test generating response with default thread ID."""
     agent = DeepAgent(
         api_key=SecretStr("test-key"),
@@ -126,7 +136,9 @@ async def test_generate_response_with_default_thread(mock_spec, mock_operation):
 
 
 @pytest.mark.asyncio
-async def test_generate_response_invalid_json(mock_spec, mock_operation):
+async def test_generate_response_invalid_json(
+    mock_spec: MagicMock, mock_operation: MagicMock
+) -> None:
     """Test handling invalid JSON response."""
     agent = DeepAgent(
         api_key=SecretStr("test-key"),
@@ -153,7 +165,9 @@ async def test_generate_response_invalid_json(mock_spec, mock_operation):
 
 
 @pytest.mark.asyncio
-async def test_generate_response_tool_not_found(mock_spec, mock_operation):
+async def test_generate_response_tool_not_found(
+    mock_spec: MagicMock, mock_operation: MagicMock
+) -> None:
     """Test handling tool not found error."""
     agent = DeepAgent(
         api_key=SecretStr("test-key"),
@@ -170,7 +184,9 @@ async def test_generate_response_tool_not_found(mock_spec, mock_operation):
 
 
 @pytest.mark.asyncio
-async def test_reset_specific_thread(mock_spec, mock_operation):
+async def test_reset_specific_thread(
+    mock_spec: MagicMock, mock_operation: MagicMock
+) -> None:
     """Test resetting a specific thread."""
     agent = DeepAgent(
         api_key=SecretStr("test-key"),
@@ -193,7 +209,9 @@ async def test_reset_specific_thread(mock_spec, mock_operation):
 
 
 @pytest.mark.asyncio
-async def test_reset_all_threads(mock_spec, mock_operation):
+async def test_reset_all_threads(
+    mock_spec: MagicMock, mock_operation: MagicMock
+) -> None:
     """Test resetting all threads."""
     agent = DeepAgent(
         api_key=SecretStr("test-key"),
@@ -217,7 +235,7 @@ async def test_reset_all_threads(mock_spec, mock_operation):
 
 
 @pytest.mark.asyncio
-async def test_shutdown(mock_spec, mock_operation):
+async def test_shutdown(mock_spec: MagicMock, mock_operation: MagicMock) -> None:
     """Test shutting down the agent."""
     agent = DeepAgent(
         api_key=SecretStr("test-key"),
@@ -239,7 +257,7 @@ async def test_shutdown(mock_spec, mock_operation):
     assert agent.session_manager._running is False
 
 
-def test_readonly_fs_rules_deny_writes_including_dotpaths():
+def test_readonly_fs_rules_deny_writes_including_dotpaths() -> None:
     """_READONLY_FS_RULES must deny writes to both normal and dot-prefixed paths.
 
     Approach: call deepagents' internal `_check_fs_permission` helper directly
@@ -266,8 +284,8 @@ def test_readonly_fs_rules_deny_writes_including_dotpaths():
 
 
 def test_stateful_branch_wires_lean_create_agent_with_skills(
-    tmp_path, mock_spec, mock_operation
-):
+    tmp_path: Path, mock_spec: MagicMock, mock_operation: MagicMock
+) -> None:
     """skill_dir present -> create_agent with skills/filesystem/permission middleware."""
     skill_dir = tmp_path / "petstore"
     skill_dir.mkdir()
@@ -325,7 +343,9 @@ def test_stateful_branch_wires_lean_create_agent_with_skills(
 
 
 @pytest.mark.asyncio
-async def test_shutdown_removes_skill_staging_dir(tmp_path, mock_spec, mock_operation):
+async def test_shutdown_removes_skill_staging_dir(
+    tmp_path: Path, mock_spec: MagicMock, mock_operation: MagicMock
+) -> None:
     """The per-simulation staging dir is created on init and removed on shutdown."""
     skill_dir = tmp_path / "petstore"
     skill_dir.mkdir()
@@ -362,8 +382,8 @@ async def test_shutdown_removes_skill_staging_dir(tmp_path, mock_spec, mock_oper
 
 
 def test_empty_string_base_url_is_forwarded_not_silently_dropped(
-    mock_spec, mock_operation
-):
+    mock_spec: MagicMock, mock_operation: MagicMock
+) -> None:
     """base_url='' must reach ChatOpenAI, not be silently omitted by a falsy check."""
     with patch("simulation_harness.agent.deep_agent.ChatOpenAI") as mock_chat:
         mock_chat.return_value = Mock()

@@ -6,12 +6,13 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parents[3] / "utils"))
 import simulate
 
 
-def test_load_config_returns_parsed_yaml(tmp_path):
+def test_load_config_returns_parsed_yaml(tmp_path: Path) -> None:
     yaml_content = "server:\n  host: localhost\n  port: 9000\n"
     config_file = tmp_path / "harness.yaml"
     config_file.write_text(yaml_content)
@@ -19,17 +20,17 @@ def test_load_config_returns_parsed_yaml(tmp_path):
     assert result == {"server": {"host": "localhost", "port": 9000}}
 
 
-def test_get_server_url_standard():
+def test_get_server_url_standard() -> None:
     config = {"server": {"host": "localhost", "port": 8086}}
     assert simulate.get_server_url(config) == "http://localhost:8086"
 
 
-def test_get_server_url_replaces_bind_address():
+def test_get_server_url_replaces_bind_address() -> None:
     config = {"server": {"host": "0.0.0.0", "port": 8086}}
     assert simulate.get_server_url(config) == "http://localhost:8086"
 
 
-def test_get_server_url_defaults():
+def test_get_server_url_defaults() -> None:
     assert simulate.get_server_url({}) == "http://localhost:8086"
 
 
@@ -64,7 +65,7 @@ SAMPLE_RESPONSE = {
 }
 
 
-def _make_args(tmp_path, extra=None):
+def _make_args(tmp_path: Path, extra: Any = None) -> Any:
     spec_file = tmp_path / "spec.json"
     spec_file.write_text(json.dumps(SAMPLE_SPEC))
     config_file = tmp_path / "harness.yaml"
@@ -72,7 +73,7 @@ def _make_args(tmp_path, extra=None):
     return [str(spec_file), "--config", str(config_file)] + (extra or [])
 
 
-def _make_mock_response(payload):
+def _make_mock_response(payload: Any) -> MagicMock:
     resp = MagicMock()
     resp.read.return_value = json.dumps(payload).encode()
     resp.__enter__ = lambda s: s
@@ -80,10 +81,12 @@ def _make_mock_response(payload):
     return resp
 
 
-def test_main_success_prints_json(tmp_path, capsys):
+def test_main_success_prints_json(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     call_count = [0]
 
-    def fake_urlopen(req):
+    def fake_urlopen(req: Any) -> Any:
         call_count[0] += 1
         if req.method == "POST":
             return _make_mock_response(SAMPLE_PENDING)
@@ -98,10 +101,10 @@ def test_main_success_prints_json(tmp_path, capsys):
     assert json.loads(out[json_start:]) == SAMPLE_RESPONSE
 
 
-def test_main_passes_name_flag(tmp_path):
+def test_main_passes_name_flag(tmp_path: Path) -> None:
     captured_request = {}
 
-    def fake_urlopen(req):
+    def fake_urlopen(req: Any) -> Any:
         if req.method == "POST":
             captured_request["body"] = json.loads(req.data.decode())
             return _make_mock_response(SAMPLE_PENDING)
@@ -116,10 +119,10 @@ def test_main_passes_name_flag(tmp_path):
     assert captured_request["body"]["name"] == "my-sim"
 
 
-def test_main_passes_regenerate_skill_flag(tmp_path):
+def test_main_passes_regenerate_skill_flag(tmp_path: Path) -> None:
     captured_request = {}
 
-    def fake_urlopen(req):
+    def fake_urlopen(req: Any) -> Any:
         if req.method == "POST":
             captured_request["body"] = json.loads(req.data.decode())
             return _make_mock_response(SAMPLE_PENDING)
@@ -134,14 +137,16 @@ def test_main_passes_regenerate_skill_flag(tmp_path):
     assert captured_request["body"]["regenerate_skill"] is True
 
 
-def test_main_http_error_exits_nonzero(tmp_path, capsys):
+def test_main_http_error_exits_nonzero(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     from urllib.error import HTTPError
 
     err = HTTPError(
         url="http://x",
         code=409,
         msg="Conflict",
-        hdrs={},
+        hdrs={},  # type: ignore[arg-type]
         fp=io.BytesIO(b"already exists"),
     )
 
@@ -154,7 +159,9 @@ def test_main_http_error_exits_nonzero(tmp_path, capsys):
     assert "409" in capsys.readouterr().err
 
 
-def test_main_connection_error_exits_nonzero(tmp_path, capsys):
+def test_main_connection_error_exits_nonzero(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     from urllib.error import URLError
 
     with patch("sys.argv", ["simulate.py"] + _make_args(tmp_path)):

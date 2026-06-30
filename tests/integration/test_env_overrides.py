@@ -4,9 +4,12 @@ import importlib
 import os
 
 import yaml
+from pathlib import Path
+from typing import Any
+import pytest
 
 
-def _base_yaml(tmpdir) -> str:
+def _base_yaml(tmpdir: Any) -> str:
     cfg = {
         "llm": {
             "provider": "openai",
@@ -29,7 +32,9 @@ def _base_yaml(tmpdir) -> str:
     return path
 
 
-def test_env_overrides_applied_at_startup(monkeypatch, tmp_path):
+def test_env_overrides_applied_at_startup(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """When HARNESS_SERVER_PORT is set, the imported config reflects it."""
     cfg_path = _base_yaml(str(tmp_path))
     monkeypatch.setenv("HARNESS_CONFIG_PATH", cfg_path)

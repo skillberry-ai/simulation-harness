@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 from pydantic import SecretStr
@@ -63,8 +64,8 @@ SCHEMA = {
 }
 
 
-async def test_full_generation_writes_valid_bundle(tmp_path: Path):
-    phases = []
+async def test_full_generation_writes_valid_bundle(tmp_path: Path) -> None:
+    phases: list[Any] = []
     with (
         patch.object(A, "extract_data_model", AsyncMock(return_value=DATA_MODEL)),
         patch.object(A, "classify_batch", AsyncMock(return_value=CLASSIFY_RECORDS)),
@@ -117,7 +118,7 @@ async def test_full_generation_writes_valid_bundle(tmp_path: Path):
     assert "assembling" in phases
 
 
-async def test_full_generation_disabled_scenarios(tmp_path: Path):
+async def test_full_generation_disabled_scenarios(tmp_path: Path) -> None:
     from simulation_harness.config.models import GenerationConfig
 
     with (

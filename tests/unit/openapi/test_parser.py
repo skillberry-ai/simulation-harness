@@ -15,10 +15,11 @@ from simulation_harness.openapi.parser import (
     validate_openapi_spec,
 )
 from simulation_harness.utils.errors import OpenAPIValidationError
+from collections.abc import Iterator
 
 
 @pytest.fixture
-def temp_dir():
+def temp_dir() -> Iterator[Any]:
     """Create temporary directory for test files."""
     with TemporaryDirectory() as tmpdir:
         yield Path(tmpdir)
@@ -148,7 +149,7 @@ def full_openapi_spec() -> dict[str, Any]:
 
 def test_load_minimal_openapi_30_spec(
     temp_dir: Path, minimal_openapi_30_spec: dict[str, Any]
-):
+) -> None:
     """Test loading minimal OpenAPI 3.0 specification."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -164,7 +165,7 @@ def test_load_minimal_openapi_30_spec(
 
 def test_load_minimal_openapi_31_spec(
     temp_dir: Path, minimal_openapi_31_spec: dict[str, Any]
-):
+) -> None:
     """Test loading minimal OpenAPI 3.1 specification."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -178,7 +179,7 @@ def test_load_minimal_openapi_31_spec(
     assert len(spec.operations) == 0
 
 
-def test_load_full_spec(temp_dir: Path, full_openapi_spec: dict[str, Any]):
+def test_load_full_spec(temp_dir: Path, full_openapi_spec: dict[str, Any]) -> None:
     """Test loading full OpenAPI specification with operations."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -192,7 +193,7 @@ def test_load_full_spec(temp_dir: Path, full_openapi_spec: dict[str, Any]):
     assert len(spec.servers) == 1
 
 
-def test_parse_operations(temp_dir: Path, full_openapi_spec: dict[str, Any]):
+def test_parse_operations(temp_dir: Path, full_openapi_spec: dict[str, Any]) -> None:
     """Test parsing operations from specification."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -207,7 +208,7 @@ def test_parse_operations(temp_dir: Path, full_openapi_spec: dict[str, Any]):
     assert "getUser" in operation_ids
 
 
-def test_get_operation_by_id(temp_dir: Path, full_openapi_spec: dict[str, Any]):
+def test_get_operation_by_id(temp_dir: Path, full_openapi_spec: dict[str, Any]) -> None:
     """Test getting operation by ID."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -222,7 +223,9 @@ def test_get_operation_by_id(temp_dir: Path, full_openapi_spec: dict[str, Any]):
     assert operation.summary == "List all users"
 
 
-def test_get_operations_by_tag(temp_dir: Path, full_openapi_spec: dict[str, Any]):
+def test_get_operations_by_tag(
+    temp_dir: Path, full_openapi_spec: dict[str, Any]
+) -> None:
     """Test getting operations by tag."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -234,7 +237,9 @@ def test_get_operations_by_tag(temp_dir: Path, full_openapi_spec: dict[str, Any]
     assert len(user_operations) == 3
 
 
-def test_operation_request_schema(temp_dir: Path, full_openapi_spec: dict[str, Any]):
+def test_operation_request_schema(
+    temp_dir: Path, full_openapi_spec: dict[str, Any]
+) -> None:
     """Test getting request schema from operation."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -255,7 +260,9 @@ def test_operation_request_schema(temp_dir: Path, full_openapi_spec: dict[str, A
     assert list_op.get_request_schema() is None
 
 
-def test_operation_response_schema(temp_dir: Path, full_openapi_spec: dict[str, Any]):
+def test_operation_response_schema(
+    temp_dir: Path, full_openapi_spec: dict[str, Any]
+) -> None:
     """Test getting response schema from operation."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -271,7 +278,9 @@ def test_operation_response_schema(temp_dir: Path, full_openapi_spec: dict[str, 
     assert response_schema["type"] == "array"
 
 
-def test_operation_parameters(temp_dir: Path, full_openapi_spec: dict[str, Any]):
+def test_operation_parameters(
+    temp_dir: Path, full_openapi_spec: dict[str, Any]
+) -> None:
     """Test getting operation parameters."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -294,7 +303,7 @@ def test_operation_parameters(temp_dir: Path, full_openapi_spec: dict[str, Any])
     assert len(get_op.get_optional_parameters()) == 0
 
 
-def test_get_schema(temp_dir: Path, full_openapi_spec: dict[str, Any]):
+def test_get_schema(temp_dir: Path, full_openapi_spec: dict[str, Any]) -> None:
     """Test getting schema definition."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -309,7 +318,7 @@ def test_get_schema(temp_dir: Path, full_openapi_spec: dict[str, Any]):
     assert "name" in user_schema["properties"]
 
 
-def test_resolve_ref(temp_dir: Path, full_openapi_spec: dict[str, Any]):
+def test_resolve_ref(temp_dir: Path, full_openapi_spec: dict[str, Any]) -> None:
     """Test resolving $ref references."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -322,7 +331,7 @@ def test_resolve_ref(temp_dir: Path, full_openapi_spec: dict[str, Any]):
     assert resolved["type"] == "object"
 
 
-def test_missing_spec_file(temp_dir: Path):
+def test_missing_spec_file(temp_dir: Path) -> None:
     """Test error when spec file doesn't exist."""
     spec_file = temp_dir / "nonexistent.json"
 
@@ -330,7 +339,7 @@ def test_missing_spec_file(temp_dir: Path):
         load_openapi_spec(spec_file)
 
 
-def test_invalid_json(temp_dir: Path):
+def test_invalid_json(temp_dir: Path) -> None:
     """Test error with invalid JSON."""
     spec_file = temp_dir / "openapi.json"
     spec_file.write_text("invalid json")
@@ -339,7 +348,7 @@ def test_invalid_json(temp_dir: Path):
         load_openapi_spec(spec_file)
 
 
-def test_invalid_spec_structure(temp_dir: Path):
+def test_invalid_spec_structure(temp_dir: Path) -> None:
     """Test error with invalid spec structure."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -349,7 +358,9 @@ def test_invalid_spec_structure(temp_dir: Path):
         load_openapi_spec(spec_file, validate_spec=True)
 
 
-def test_validate_spec_success(temp_dir: Path, minimal_openapi_30_spec: dict[str, Any]):
+def test_validate_spec_success(
+    temp_dir: Path, minimal_openapi_30_spec: dict[str, Any]
+) -> None:
     """Test successful spec validation."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -358,7 +369,7 @@ def test_validate_spec_success(temp_dir: Path, minimal_openapi_30_spec: dict[str
     assert validate_openapi_spec(spec_file) is True
 
 
-def test_validate_spec_failure(temp_dir: Path):
+def test_validate_spec_failure(temp_dir: Path) -> None:
     """Test spec validation failure."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -368,7 +379,7 @@ def test_validate_spec_failure(temp_dir: Path):
         validate_openapi_spec(spec_file)
 
 
-def test_skip_validation(temp_dir: Path):
+def test_skip_validation(temp_dir: Path) -> None:
     """Test loading spec without validation."""
     spec_file = temp_dir / "openapi.json"
     with open(spec_file, "w") as f:
@@ -400,35 +411,35 @@ def _spec_with_operation_ids(paths: dict[str, Any]) -> OpenAPISpec:
 class TestSanitizeOperationId:
     """Unit tests for sanitize_operation_id."""
 
-    def test_path_style_id_becomes_underscore_separated(self):
+    def test_path_style_id_becomes_underscore_separated(self) -> None:
         result = sanitize_operation_id(
             "/accommodations/search", method="post", path="/accommodations/search"
         )
         assert result == "accommodations_search"
 
-    def test_leading_and_trailing_separators_stripped(self):
+    def test_leading_and_trailing_separators_stripped(self) -> None:
         result = sanitize_operation_id(
             "orders/preview", method="post", path="/orders/preview"
         )
         assert result == "orders_preview"
 
-    def test_already_valid_id_unchanged(self):
+    def test_already_valid_id_unchanged(self) -> None:
         result = sanitize_operation_id("getUser", method="get", path="/users/{id}")
         assert result == "getUser"
 
-    def test_hyphen_and_underscore_preserved(self):
+    def test_hyphen_and_underscore_preserved(self) -> None:
         result = sanitize_operation_id("list_users-v2", method="get", path="/users")
         assert result == "list_users-v2"
 
-    def test_empty_id_falls_back_to_method_and_path(self):
+    def test_empty_id_falls_back_to_method_and_path(self) -> None:
         result = sanitize_operation_id("", method="get", path="/users/{id}")
         assert result == "get_users_id"
 
-    def test_all_invalid_id_falls_back_to_method_and_path(self):
+    def test_all_invalid_id_falls_back_to_method_and_path(self) -> None:
         result = sanitize_operation_id("/", method="get", path="/users/{id}")
         assert result == "get_users_id"
 
-    def test_result_is_valid_mcp_tool_name(self):
+    def test_result_is_valid_mcp_tool_name(self) -> None:
         result = sanitize_operation_id(
             "/common/locations/airports",
             method="post",
@@ -436,7 +447,7 @@ class TestSanitizeOperationId:
         )
         assert re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", result)
 
-    def test_length_capped_at_64(self):
+    def test_length_capped_at_64(self) -> None:
         long_raw = "/" + "/".join(["segment"] * 20)
         result = sanitize_operation_id(long_raw, method="get", path=long_raw)
         assert len(result) <= 64
@@ -446,7 +457,7 @@ class TestSanitizeOperationId:
 class TestParserSanitizesOperationIds:
     """Integration: the parser sanitizes operationIds when building operations."""
 
-    def test_slash_operation_ids_are_sanitized(self):
+    def test_slash_operation_ids_are_sanitized(self) -> None:
         spec = _spec_with_operation_ids(
             {
                 "/accommodations/search": {
@@ -462,7 +473,7 @@ class TestParserSanitizesOperationIds:
         assert ids == ["accommodations_search", "orders_preview"]
         assert all("/" not in oid for oid in ids)
 
-    def test_get_operation_by_id_uses_sanitized_id(self):
+    def test_get_operation_by_id_uses_sanitized_id(self) -> None:
         spec = _spec_with_operation_ids(
             {
                 "/accommodations/search": {
@@ -476,7 +487,7 @@ class TestParserSanitizesOperationIds:
         assert op.path == "/accommodations/search"
         assert op.method == "post"
 
-    def test_colliding_ids_are_disambiguated(self):
+    def test_colliding_ids_are_disambiguated(self) -> None:
         spec = _spec_with_operation_ids(
             {
                 "/a": {"post": {"operationId": "foo/bar", "responses": {}}},
@@ -488,7 +499,7 @@ class TestParserSanitizesOperationIds:
         assert ids == ["foo_bar", "foo_bar_2"]
         assert len(set(ids)) == len(ids)
 
-    def test_missing_operation_id_sanitized_fallback(self):
+    def test_missing_operation_id_sanitized_fallback(self) -> None:
         spec = _spec_with_operation_ids({"/users/{id}": {"get": {"responses": {}}}})
 
         ids = [op.operation_id for op in spec.operations]

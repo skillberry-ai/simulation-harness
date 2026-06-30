@@ -1,7 +1,7 @@
 from simulation_harness.config.models import GenerationConfig
 
 
-def test_generation_config_scenario_defaults():
+def test_generation_config_scenario_defaults() -> None:
     cfg = GenerationConfig()
     assert cfg.scenarios_enabled is True
     assert cfg.scenarios_count == 5

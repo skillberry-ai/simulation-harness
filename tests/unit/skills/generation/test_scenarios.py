@@ -13,7 +13,7 @@ from simulation_harness.skills.generation.repair import GenerationStageError
 from simulation_harness.skills.generation.stages import scenarios as SC
 
 
-def _ir():
+def _ir() -> SpecModel:
     return SpecModel(
         api_name="Aha",
         slug="aha",
@@ -40,7 +40,7 @@ def _ir():
     )
 
 
-async def test_generate_scenarios_parses_and_drops_unknown_ops():
+async def test_generate_scenarios_parses_and_drops_unknown_ops() -> None:
     payload = {
         "scenarios": [
             {
@@ -57,7 +57,7 @@ async def test_generate_scenarios_parses_and_drops_unknown_ops():
     assert result[0].operations == ["getFeature"]  # ghostOp dropped
 
 
-async def test_generate_scenarios_raises_when_empty():
+async def test_generate_scenarios_raises_when_empty() -> None:
     with patch.object(SC, "call_json", AsyncMock(return_value={"scenarios": []})):
         with pytest.raises(GenerationStageError):
             await SC.generate_scenarios(_ir(), llm=object(), count=3, retries=0)
