@@ -1,0 +1,765 @@
+{
+  "components": {
+    "schemas": {
+      "CreateSimulationRequest": {
+        "description": "Request model for creating a simulation.",
+        "properties": {
+          "mcp_port": {
+            "anyOf": [
+              {
+                "maximum": 65535.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Port to expose the MCP server on. Defaults to the harness port.",
+            "title": "Mcp Port"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Simulation name override; defaults to spec info.title",
+            "title": "Name"
+          },
+          "openapi_spec": {
+            "additionalProperties": true,
+            "description": "OpenAPI specification as a dictionary",
+            "title": "Openapi Spec",
+            "type": "object"
+          },
+          "regenerate_skill": {
+            "default": false,
+            "description": "Whether to regenerate the skill even if it exists",
+            "title": "Regenerate Skill",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "openapi_spec"
+        ],
+        "title": "CreateSimulationRequest",
+        "type": "object"
+      },
+      "ErrorPayload": {
+        "description": "Error payload embedded in SimulationResponse for failed simulations.",
+        "properties": {
+          "code": {
+            "description": "Stable error code",
+            "title": "Code",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "description": "Additional structured fields",
+            "title": "Details",
+            "type": "object"
+          },
+          "message": {
+            "description": "Human-readable error message",
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorPayload",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "ProgressPayload": {
+        "description": "Progress payload embedded in SimulationResponse.",
+        "properties": {
+          "phase": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Current phase: skill_generation | agent_init | None",
+            "title": "Phase"
+          },
+          "started_at": {
+            "description": "Creation start time",
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "updated_at": {
+            "description": "Last status change time",
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "started_at",
+          "updated_at"
+        ],
+        "title": "ProgressPayload",
+        "type": "object"
+      },
+      "SessionState": {
+        "description": "Current session state with counters and limits.",
+        "properties": {
+          "idle_timeout_seconds": {
+            "description": "Idle timeout in seconds",
+            "exclusiveMinimum": 0.0,
+            "title": "Idle Timeout Seconds",
+            "type": "integer"
+          },
+          "last_activity": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Timestamp of last activity (None if timer hasn't started)",
+            "title": "Last Activity"
+          },
+          "max_messages": {
+            "description": "Maximum number of messages allowed in this session",
+            "exclusiveMinimum": 0.0,
+            "title": "Max Messages",
+            "type": "integer"
+          },
+          "max_queue_depth": {
+            "description": "Maximum queue depth allowed",
+            "exclusiveMinimum": 0.0,
+            "title": "Max Queue Depth",
+            "type": "integer"
+          },
+          "queue_depth": {
+            "description": "Current queue depth",
+            "minimum": 0.0,
+            "title": "Queue Depth",
+            "type": "integer"
+          },
+          "seconds_since_last_call": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Compute seconds since last tool call.",
+            "readOnly": true,
+            "title": "Seconds Since Last Call"
+          },
+          "tool_call_count": {
+            "description": "Number of tool calls made in this session",
+            "minimum": 0.0,
+            "title": "Tool Call Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tool_call_count",
+          "max_messages",
+          "idle_timeout_seconds",
+          "last_activity",
+          "queue_depth",
+          "max_queue_depth",
+          "seconds_since_last_call"
+        ],
+        "title": "SessionState",
+        "type": "object"
+      },
+      "SimulationResponse": {
+        "description": "Response model for simulation status.",
+        "properties": {
+          "created_at": {
+            "description": "Timestamp when simulation was declared",
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorPayload"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Failure details \u2014 populated only when status=failed."
+          },
+          "mcp_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Full MCP endpoint URL \u2014 populated only when status=ready.",
+            "title": "Mcp Url"
+          },
+          "name": {
+            "description": "Name of the simulation",
+            "title": "Name",
+            "type": "string"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/ProgressPayload",
+            "description": "Creation progress info"
+          },
+          "session_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SessionState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Session state \u2014 populated only when status=ready."
+          },
+          "status": {
+            "description": "One of: pending | generating_skill | initializing | ready | failed",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "status",
+          "created_at",
+          "progress"
+        ],
+        "title": "SimulationResponse",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "contact": {
+      "name": "Simulation Harness"
+    },
+    "description": "Spin up a stateful [MCP](https://modelcontextprotocol.io/) server that simulates any REST API described by an OpenAPI specification \u2014 without hitting real backends.\n\n## Workflow\n\n1. **Create a simulation** \u2014 `POST /api/v1/simulation` with your OpenAPI spec. The harness validates the spec, generates an LLM skill, and starts an MCP server.\n2. **Connect your MCP client** \u2014 point it at the MCP transport endpoint below.\n3. **Call tools** \u2014 each tool maps 1-to-1 with an OpenAPI operation; responses are synthesised by an LLM using the spec's schemas and examples.\n4. **Reset or delete** the simulation when you're done.\n\n## MCP Transports\n\n| Transport | Connect | Messages |\n|-----------|---------|----------|\n| SSE *(default)* | `GET /mcp/sse` | `POST /mcp/messages` |\n| Streamable HTTP | `POST /mcp` | \u2014 |\n\nOnly **one simulation** can be active at a time.",
+    "title": "Simulation Harness",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/simulation": {
+      "delete": {
+        "description": "Cancel in-flight creation or shut down the active simulation. After this call, `GET /simulation` returns 404.",
+        "operationId": "delete_simulation_api_v1_simulation_delete",
+        "responses": {
+          "204": {
+            "description": "Simulation deleted (or cancelled mid-creation)"
+          },
+          "404": {
+            "description": "No simulation exists"
+          }
+        },
+        "summary": "Delete simulation",
+        "tags": [
+          "simulations"
+        ]
+      },
+      "get": {
+        "description": "Return the current simulation record including status, progress, and (when ready) session counters. Used by clients to poll until status=ready or failed.",
+        "operationId": "get_simulation_api_v1_simulation_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No simulation has been declared"
+          }
+        },
+        "summary": "Get simulation",
+        "tags": [
+          "simulations"
+        ]
+      },
+      "post": {
+        "description": "Declare a new simulation. Returns immediately with `status=pending` while skill generation and agent initialization run in the background. Poll `GET /api/v1/simulation` until status becomes `ready` or `failed`.\n\nOnly one simulation can be active per process \u2014 a second POST while one exists returns 409.",
+        "operationId": "create_simulation_api_v1_simulation_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSimulationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulationResponse"
+                }
+              }
+            },
+            "description": "Simulation declared; poll GET /simulation for progress"
+          },
+          "409": {
+            "description": "A simulation already exists \u2014 delete it first"
+          },
+          "413": {
+            "description": "Request body exceeds the 10 MB limit"
+          },
+          "422": {
+            "description": "Invalid OpenAPI specification"
+          }
+        },
+        "summary": "Create simulation (async)",
+        "tags": [
+          "simulations"
+        ]
+      }
+    },
+    "/api/v1/simulation/database": {
+      "get": {
+        "description": "Return the contents of the active skill's `db.json` file from disk. This is distinct from `/simulation/state`, which returns the in-memory store snapshot for a thread. Use this to inspect the seed.",
+        "operationId": "get_simulation_database_api_v1_simulation_database_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Simulation Database Api V1 Simulation Database Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No simulation exists"
+          },
+          "500": {
+            "description": "Skill bundle is incomplete (db.json missing)"
+          },
+          "503": {
+            "description": "Simulation exists but is not ready yet"
+          }
+        },
+        "summary": "Get on-disk database (db.json) for the active skill",
+        "tags": [
+          "simulations"
+        ]
+      },
+      "put": {
+        "description": "Atomically overwrite the active skill's `db.json` with the request body. The body is validated against the skill's `schema.json` before the write; validation failures return 422 and the file on disk is unchanged. On success, the running simulation is reset (agent thread and in-memory stores are cleared) so the next `tools/call` reloads from the new seed.\n\nRefuses with 409 while tool calls are in flight.",
+        "operationId": "put_simulation_database_api_v1_simulation_database_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Put Simulation Database Api V1 Simulation Database Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Database replaced; simulation reset"
+          },
+          "404": {
+            "description": "No simulation exists"
+          },
+          "409": {
+            "description": "Tool calls are in flight; retry"
+          },
+          "422": {
+            "description": "Body does not validate against schema.json"
+          },
+          "503": {
+            "description": "Simulation exists but is not ready yet"
+          }
+        },
+        "summary": "Replace on-disk database (db.json) and reset the simulation",
+        "tags": [
+          "simulations"
+        ]
+      }
+    },
+    "/api/v1/simulation/reset": {
+      "post": {
+        "operationId": "reset_session_api_v1_simulation_reset_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Reset Session Api V1 Simulation Reset Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No simulation exists"
+          },
+          "503": {
+            "description": "Simulation exists but is not ready yet"
+          }
+        },
+        "summary": "Reset session",
+        "tags": [
+          "simulations"
+        ]
+      }
+    },
+    "/api/v1/simulation/schema": {
+      "get": {
+        "description": "Return the contents of the active skill's `schema.json`. Read-only. Clients producing payloads for `PUT /simulation/database` should fetch this first to learn the expected shape.",
+        "operationId": "get_simulation_schema_api_v1_simulation_schema_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Simulation Schema Api V1 Simulation Schema Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No simulation exists"
+          },
+          "500": {
+            "description": "Skill bundle is incomplete (schema.json missing)"
+          },
+          "503": {
+            "description": "Simulation exists but is not ready yet"
+          }
+        },
+        "summary": "Get JSON Schema for the active skill's database",
+        "tags": [
+          "simulations"
+        ]
+      }
+    },
+    "/api/v1/simulation/state": {
+      "get": {
+        "operationId": "get_simulation_state_api_v1_simulation_state_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "thread_id",
+            "required": false,
+            "schema": {
+              "default": "default",
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Simulation State Api V1 Simulation State Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No simulation exists"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Simulation exists but is not ready yet"
+          }
+        },
+        "summary": "Get simulation state",
+        "tags": [
+          "simulations"
+        ]
+      }
+    },
+    "/api/v1/simulation/tools": {
+      "get": {
+        "operationId": "list_simulation_tools_api_v1_simulation_tools_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Simulation Tools Api V1 Simulation Tools Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No simulation exists"
+          },
+          "503": {
+            "description": "Simulation exists but is not ready yet"
+          }
+        },
+        "summary": "List simulation tools",
+        "tags": [
+          "simulations"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "description": "Health check endpoint.",
+        "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Health Check Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health Check",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/healthz": {
+      "get": {
+        "description": "Kubernetes liveness probe \u2014 returns 200 once the process is up.",
+        "operationId": "liveness_probe_healthz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Liveness Probe Healthz Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Liveness Probe",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/mcp/messages": {
+      "post": {
+        "description": "Send a single MCP protocol message over the SSE transport. Requires an open SSE connection established via `GET /mcp/sse`.",
+        "operationId": "mcp_messages_endpoint_mcp_messages_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No simulation has been declared"
+          },
+          "503": {
+            "description": "Simulation exists but is not ready yet"
+          }
+        },
+        "summary": "MCP SSE \u2014 send message",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/mcp/sse": {
+      "get": {
+        "description": "Open a long-lived Server-Sent Events stream that carries MCP protocol messages. Keep this connection open for the duration of the MCP session, then send individual messages via `POST /mcp/messages`.\n\nRequires an active simulation (created via `POST /api/v1/simulation`).",
+        "operationId": "mcp_sse_endpoint_mcp_sse_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No simulation has been declared"
+          },
+          "503": {
+            "description": "Simulation exists but is not ready yet"
+          }
+        },
+        "summary": "MCP SSE \u2014 connect",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/readyz": {
+      "get": {
+        "description": "Kubernetes readiness probe \u2014 503 once the app starts draining on shutdown.",
+        "operationId": "readiness_probe_readyz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Readiness Probe",
+        "tags": [
+          "health"
+        ]
+      }
+    }
+  },
+  "tags": [
+    {
+      "description": "Manage the active simulation lifecycle \u2014 create, inspect, reset, and delete.",
+      "name": "simulations"
+    },
+    {
+      "description": "MCP transport endpoints. Connect your MCP client here after creating a simulation. The active transport type is configured in `harness.yaml`.",
+      "name": "mcp"
+    },
+    {
+      "description": "Liveness probe.",
+      "name": "health"
+    }
+  ]
+}

@@ -12,6 +12,16 @@ This project uses **uv** for environment and dependency management. Always prefi
 - Run the server module: `uv run python -m simulation_harness`
 - Install dev deps: `make dev-install` (wraps `uv sync --extra dev`)
 
+### Single-file verification (fast inner loop)
+
+Lint and type-check one file without a full build — each runs in well under 5s:
+
+- Lint one file: `uv run ruff check src/simulation_harness/core/simulation_host.py`
+- Format one file: `uv run ruff format src/simulation_harness/core/simulation_host.py`
+- Type-check one file: `uv run mypy src/simulation_harness/core/simulation_host.py`
+
+mypy uses a lenient baseline (`[tool.mypy]` in `pyproject.toml`): modules with pre-existing type errors are listed under an `ignore_errors` override so the gate enforces *no new* untyped breakage. When you fully annotate a module, drop it from that override list.
+
 ## Common commands
 
 | Task | Command |
@@ -25,7 +35,9 @@ This project uses **uv** for environment and dependency management. Always prefi
 | Coverage | `make test-cov` (HTML at `htmlcov/index.html`) |
 | Lint | `make lint` (ruff) |
 | Format | `make format` |
-| CI check | `make check` (lint + format-check) |
+| Type-check | `make type-check` (mypy) |
+| CI check | `make check` (lint + type-check + format-check) |
+| Refresh OpenAPI spec | `make openapi` (regenerates `openapi.json`) |
 
 `pytest.ini_options` sets `asyncio_mode = "auto"`, so async tests don't need `@pytest.mark.asyncio`.
 
@@ -77,3 +89,21 @@ MCP `tools/call` errors return two content blocks: a human-readable text message
 - `SimulationHost` mutates state only inside `_lifecycle_lock`; new lifecycle operations should follow the same pattern.
 - The MCP transport (SSE vs streamable HTTP) is fixed at startup via `mcp.transport` in YAML; both transports must keep identical `tools/list` / `tools/call` semantics.
 - Logs are written per-process to `logs/<timestamp>_pid<PID>_simulation-harness.log`.
+
+## Pattern References
+
+For the common change types, copy the shape of an existing example rather than inventing a new one:
+
+- **New REST endpoint** → follow `src/simulation_harness/api/v1/simulations.py` (request/response Pydantic models in `models/`, raise domain errors, let `main.py` map them to HTTP).
+- **New domain error** → add the exception in `src/simulation_harness/utils/errors.py`, then add its HTTP/MCP mapping in `src/simulation_harness/main.py` (keep mapping centralized; preserve the stable MCP `reason` codes).
+- **New state tool the agent can call** → see `src/simulation_harness/state/tools.py` (registered via `state/registry.py`, backed by `state/store.py`).
+- **New skill-generation stage** → mirror an existing stage in `src/simulation_harness/skills/generation/stages/` (e.g. `operations.py`); wire it into the pipeline in `skills/generator.py`.
+- **New prompt/skill template** → add a Jinja2 file under `src/simulation_harness/agent/templates/` or `src/simulation_harness/skills/assets/` and register it in `pyproject.toml` `package-data`.
+
+## Code-quality automation
+
+- **Pre-commit** (`.pre-commit-config.yaml`): ruff lint+format, detect-secrets, and Conventional Commit message enforcement. Install once: `uv run pre-commit install --install-hooks && uv run pre-commit install --hook-type commit-msg`.
+- **Agent hook** (`.claude/settings.json` → `.claude/hooks/format-python.sh`): auto-formats and autofixes Python files after every Edit/Write.
+- **CI** (`.github/workflows/ci.yml`): lint, type-check, import-boundary, and test gates on every PR. CodeQL + Dependabot cover security scanning.
+- **Import boundaries** (`[tool.importlinter]` in `pyproject.toml`): `make lint-imports` keeps `models`/`utils`/`openapi`/`state` from depending on higher layers.
+- **Progressive disclosure**: detailed change patterns live in `.claude/skills/`; path-scoped module rules in `.claude/rules/`. Security analysis is in `THREAT_MODEL.md`.

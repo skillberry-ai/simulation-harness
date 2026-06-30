@@ -1,4 +1,4 @@
-.PHONY: help install dev-install start stop restart test test-unit test-integration test-cov lint format check clean \
+.PHONY: help install dev-install start stop restart test test-unit test-integration test-cov lint format type-check lint-imports check openapi clean \
         docker-build docker-build-dev docker-clean docker-clean-dev
 
 IMAGE_NAME ?= simulation-harness
@@ -26,7 +26,10 @@ help:
 	@echo "  Code Quality:"
 	@echo "    lint             Run ruff linter"
 	@echo "    format           Format code with ruff"
-	@echo "    check            Run lint and format check (CI mode)"
+	@echo "    type-check       Run mypy type checker"
+	@echo "    lint-imports     Check architectural import boundaries"
+	@echo "    check            Run lint, type-check, import + format check (CI mode)"
+	@echo "    openapi          Regenerate openapi.json from the FastAPI app"
 	@echo ""
 	@echo "  Cleanup:"
 	@echo "    clean            Remove generated files and caches"
@@ -92,10 +95,21 @@ lint:
 format:
 	uv run ruff format src/ tests/
 
-check: lint
+type-check:
+	uv run mypy
+
+lint-imports:
+	uv run lint-imports
+
+check: lint type-check lint-imports
 	uv run ruff format --check src/ tests/
 	@echo ""
 	@echo "✓ All checks passed"
+
+# Regenerate the static OpenAPI spec from the FastAPI app
+openapi:
+	uv run python -m simulation_harness.openapi_export > openapi.json
+	@echo "Wrote openapi.json"
 
 # Cleanup target
 clean:

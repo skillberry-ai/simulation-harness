@@ -36,6 +36,9 @@ dev = [
     "pytest-cov>=4.1.0",
     "coverage>=7.0.0",
     "ruff>=0.1.0",
+    "mypy>=1.8.0",
+    "pre-commit>=3.5.0",
+    "import-linter>=2.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -55,3 +58,96 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 asyncio_mode = "auto"
+
+[tool.mypy]
+python_version = "3.11"
+# Lenient global baseline so the type-check gate passes on today's code while
+# annotation coverage grows. Tighten these (and shrink the override list below)
+# as modules are annotated. See `make type-check`.
+ignore_missing_imports = true
+warn_unused_configs = true
+warn_redundant_casts = true
+files = ["src/simulation_harness"]
+
+# Burn-down backlog: modules with pre-existing type errors are exempted so the
+# gate enforces "no NEW untyped breakage". Remove a module from this list once
+# `uv run mypy <path>` is clean for it.
+[[tool.mypy.overrides]]
+module = [
+    "simulation_harness.__main__",
+    "simulation_harness.main",
+    "simulation_harness.agent.deep_agent",
+    "simulation_harness.config.models",
+    "simulation_harness.config.settings",
+    "simulation_harness.core.simulation_host",
+    "simulation_harness.core.simulation_instance",
+    "simulation_harness.mcp_integration.sidecar_server",
+    "simulation_harness.models.domain",
+    "simulation_harness.skills.generator",
+    "simulation_harness.skills.generation.stages.assemble",
+    "simulation_harness.skills.generation.stages.operations",
+    "simulation_harness.skills.generation.stages.scenarios",
+    "simulation_harness.skills.generation.stages.schema",
+    "simulation_harness.skills.generation.stages.seed",
+    "simulation_harness.skills.generation.stages.analyze.classify",
+    "simulation_harness.skills.generation.stages.analyze.extract",
+    "simulation_harness.utils.logging",
+]
+ignore_errors = true
+
+[tool.importlinter]
+root_package = "simulation_harness"
+
+# Layered architecture: api → core → (skills/agent/state/openapi) → models/utils.
+# These contracts pin the leaf layers so lower modules can't reach back up into
+# higher ones. Run with `make lint-imports` (or `uv run lint-imports`).
+[[tool.importlinter.contracts]]
+name = "models is a dependency-free leaf"
+type = "forbidden"
+source_modules = ["simulation_harness.models"]
+forbidden_modules = [
+    "simulation_harness.api",
+    "simulation_harness.core",
+    "simulation_harness.mcp_integration",
+    "simulation_harness.agent",
+    "simulation_harness.skills",
+    "simulation_harness.state",
+    "simulation_harness.openapi",
+    "simulation_harness.utils",
+]
+
+[[tool.importlinter.contracts]]
+name = "utils does not depend on higher layers"
+type = "forbidden"
+source_modules = ["simulation_harness.utils"]
+forbidden_modules = [
+    "simulation_harness.api",
+    "simulation_harness.core",
+    "simulation_harness.mcp_integration",
+    "simulation_harness.agent",
+    "simulation_harness.skills",
+    "simulation_harness.openapi",
+]
+
+[[tool.importlinter.contracts]]
+name = "openapi parsing does not depend on runtime layers"
+type = "forbidden"
+source_modules = ["simulation_harness.openapi"]
+forbidden_modules = [
+    "simulation_harness.api",
+    "simulation_harness.core",
+    "simulation_harness.mcp_integration",
+    "simulation_harness.agent",
+    "simulation_harness.skills",
+    "simulation_harness.state",
+]
+
+[[tool.importlinter.contracts]]
+name = "state store does not depend on api/core/transport"
+type = "forbidden"
+source_modules = ["simulation_harness.state"]
+forbidden_modules = [
+    "simulation_harness.api",
+    "simulation_harness.core",
+    "simulation_harness.mcp_integration",
+]
