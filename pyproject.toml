@@ -27,6 +27,7 @@ dependencies = [
     "fastapi>=0.100.0",
     "sse-starlette>=1.6.0",
     "uvicorn>=0.20.0",
+    "structlog>=24.0.0",
 ]
 
 [project.optional-dependencies]
@@ -39,6 +40,8 @@ dev = [
     "mypy>=1.8.0",
     "pre-commit>=3.5.0",
     "import-linter>=2.0",
+    "pip-audit>=2.7.0",
+    "bandit>=1.7.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -58,6 +61,11 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 asyncio_mode = "auto"
+
+[tool.bandit]
+# SAST scan scope is src/ only (tests use asserts/fixtures that trip false
+# positives). CI runs `bandit -c pyproject.toml -r src/`.
+exclude_dirs = ["tests"]
 
 [tool.mypy]
 python_version = "3.11"

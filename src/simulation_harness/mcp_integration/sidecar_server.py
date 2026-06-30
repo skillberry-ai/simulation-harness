@@ -26,7 +26,7 @@ def _check_port_available(port: int) -> None:
     """
     sock = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
     try:
-        sock.bind(("0.0.0.0", port))
+        sock.bind(("0.0.0.0", port))  # nosec B104 - transient probe socket to test port availability; closed immediately
     except OSError:
         raise PortInUseError(f"Port {port} is already in use")
     finally:
@@ -59,7 +59,7 @@ class SidecarMCPServer:
         app = self._create_app()
         config = uvicorn.Config(
             app,
-            host="0.0.0.0",
+            host="0.0.0.0",  # nosec B104 - sidecar MCP server must be reachable; runs behind network-level isolation per DESIGN.md
             port=self._port,
             log_level="warning",
             log_config=None,

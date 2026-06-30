@@ -32,7 +32,7 @@ def _load_template() -> Template:
         )
 
         # Create Jinja2 environment
-        env = Environment(
+        env = Environment(  # nosec B701 - renders plain-text LLM prompts, not HTML; autoescaping would corrupt prompt content
             autoescape=False,  # Don't escape for text templates
             trim_blocks=True,
             lstrip_blocks=True,

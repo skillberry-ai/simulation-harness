@@ -1,14 +1,26 @@
-"""Structured logging utilities for simulation harness."""
+"""Structured logging utilities for simulation harness.
 
-import json
+Logging is rendered as machine-parseable JSON via ``structlog``. ``configure_logging``
+installs a :class:`structlog.stdlib.ProcessorFormatter` on the root handlers so that
+*every* log record — whether emitted through the standard library ``logging`` API
+(``get_logger``) or as a native structlog event (``log_tool_call``) — is serialized
+through the same JSON pipeline.
+"""
+
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, Literal, Optional
+
+import structlog
 
 from simulation_harness.models.domain import SessionState
 
-# Get logger for this module
+# Stdlib logger for this module (used by the legacy tool-call helper).
 logger = logging.getLogger(__name__)
+
+# Native structlog logger for structured tool-call events.
+_tool_logger = structlog.get_logger("simulation_harness.tool_call")
 
 # Outcome taxonomy per REQUIREMENTS.md §2.4
 OutcomeType = Literal[
@@ -22,8 +34,66 @@ OutcomeType = Literal[
 ]
 
 
+def configure_logging(level: int, log_file: Path) -> None:
+    """Configure structlog + stdlib logging to emit JSON to console and a file.
+
+    Both the foreign (stdlib ``logging``) and native (structlog) paths share a
+    single :class:`~structlog.stdlib.ProcessorFormatter` rendering JSON, so the
+    output is uniform regardless of which API produced the record.
+
+    Args:
+        level: Logging level (e.g. ``logging.INFO``).
+        log_file: Destination file for the file handler.
+    """
+    timestamper = structlog.processors.TimeStamper(fmt="iso")
+    # Processors applied to records originating from the stdlib logging module.
+    foreign_pre_chain = [
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.add_logger_name,
+        timestamper,
+    ]
+
+    structlog.configure(
+        processors=[
+            structlog.contextvars.merge_contextvars,
+            structlog.stdlib.add_log_level,
+            structlog.stdlib.add_logger_name,
+            timestamper,
+            # Hand off to the ProcessorFormatter shared with stdlib handlers.
+            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+        ],
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        wrapper_class=structlog.stdlib.BoundLogger,
+        cache_logger_on_first_use=True,
+    )
+
+    formatter = structlog.stdlib.ProcessorFormatter(
+        foreign_pre_chain=foreign_pre_chain,
+        processors=[
+            structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+            structlog.processors.JSONRenderer(),
+        ],
+    )
+
+    handlers: list[logging.Handler] = [
+        logging.StreamHandler(),  # Console output
+        logging.FileHandler(log_file),  # File output
+    ]
+    for handler in handlers:
+        handler.setFormatter(formatter)
+
+    root = logging.getLogger()
+    root.handlers.clear()
+    for handler in handlers:
+        root.addHandler(handler)
+    root.setLevel(level)
+
+
 def get_logger(name: str) -> logging.Logger:
     """Get a logger instance for the given name.
+
+    Returns a standard-library logger; its records are rendered as JSON by the
+    :class:`~structlog.stdlib.ProcessorFormatter` installed in ``configure_logging``.
 
     Args:
         name: Logger name (typically __name__ of the calling module)
@@ -69,7 +139,13 @@ def log_tool_call(
         "transport": transport,
     }
 
-    logger.info(json.dumps(log_entry))
+    # Emit as a native structlog event. The "timestamp" field is omitted from the
+    # event kwargs because structlog's TimeStamper adds one; it is retained in the
+    # returned dict for callers/tests that assert on the full entry.
+    _tool_logger.info(
+        "tool_call",
+        **{k: v for k, v in log_entry.items() if k != "timestamp"},
+    )
     return log_entry
 
 

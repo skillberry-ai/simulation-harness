@@ -32,7 +32,7 @@ from simulation_harness.utils.errors import (
     SimulationNotFoundError,
     SimulationNotReadyError,
 )
-from simulation_harness.utils.logging import get_logger
+from simulation_harness.utils.logging import configure_logging, get_logger
 
 # Read HARNESS_CONFIG_PATH from .env if not already in the process env.
 # Use dotenv_values (no side-effects) rather than load_dotenv (mutates os.environ).
@@ -65,15 +65,8 @@ timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 pid = os.getpid()
 log_file = log_dir / f"{timestamp}_pid{pid}_simulation-harness.log"
 
-# Configure logging with both console and file handlers
-logging.basicConfig(
-    level=log_level,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(),  # Console output
-        logging.FileHandler(log_file),  # File output
-    ],
-)
+# Configure structured (JSON) logging to both console and file.
+configure_logging(log_level, log_file)
 
 logger = get_logger(__name__)
 logger.info(f"Logging configured: level={config.logging.level}, file={log_file}")

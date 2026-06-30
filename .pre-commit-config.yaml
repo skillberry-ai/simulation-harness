@@ -28,6 +28,15 @@ repos:
       - id: detect-secrets
         args: [--baseline, .secrets.baseline]
 
+  # Static security analysis (SAST) over application code.
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.10
+    hooks:
+      - id: bandit
+        name: bandit (SAST)
+        args: [-c, pyproject.toml]
+        files: ^src/
+
   # Enforce Conventional Commit messages (feat:, fix:, chore:, ...).
   - repo: https://github.com/compilerla/conventional-pre-commit
     rev: v3.4.0

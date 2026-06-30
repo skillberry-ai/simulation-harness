@@ -35,12 +35,15 @@ env/
 # Testing
 .pytest_cache/
 .coverage
+coverage.xml
 htmlcov/
 .tox/
 .hypothesis/
 
-# Lint
+# Lint / type-check caches
 .ruff_cache/
+.mypy_cache/
+.dmypy.json
 
 # IDEs
 .vscode/

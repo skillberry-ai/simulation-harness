@@ -54,6 +54,27 @@ jobs:
       - name: mypy
         run: uv run mypy
 
+  security:
+    name: Dependency & code security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dev dependencies
+        run: uv sync --extra dev
+
+      - name: Dependency vulnerability scan (pip-audit)
+        run: uv run pip-audit
+
+      - name: Static security analysis (bandit)
+        run: uv run bandit -c pyproject.toml -r src/
+
   test:
     name: Test (pytest)
     runs-on: ubuntu-latest
