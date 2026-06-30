@@ -18,11 +18,7 @@ from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.graph.state import CompiledStateGraph
 from pydantic import SecretStr
 from deepagents.backends.filesystem import FilesystemBackend
-from deepagents.middleware.filesystem import FilesystemMiddleware
-from deepagents.middleware.permissions import (
-    FilesystemPermission,
-    _PermissionMiddleware,
-)
+from deepagents.middleware.filesystem import FilesystemMiddleware, FilesystemPermission
 from deepagents.middleware.skills import SkillsMiddleware
 
 from simulation_harness.openapi.parser import OpenAPIOperation, OpenAPISpec
@@ -167,12 +163,14 @@ class DeepAgent:
             self._skill_staging_dir = Path(root_dir)
             backend = FilesystemBackend(root_dir=root_dir, virtual_mode=True)
 
+            # Read-only filesystem enforcement: deepagents 0.6.x folded the
+            # standalone _PermissionMiddleware into FilesystemMiddleware via the
+            # (still private) `_permissions` parameter.
             middleware = [
                 SkillsMiddleware(backend=backend, sources=sources),
-                FilesystemMiddleware(backend=backend),
-                _PermissionMiddleware(
-                    rules=_READONLY_FS_RULES,
+                FilesystemMiddleware(
                     backend=backend,
+                    _permissions=_READONLY_FS_RULES,
                 ),
             ]
 

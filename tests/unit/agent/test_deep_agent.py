@@ -5,7 +5,7 @@ from pydantic import SecretStr
 from unittest.mock import Mock, AsyncMock, patch
 from simulation_harness.agent.deep_agent import DeepAgent, _READONLY_FS_RULES
 from simulation_harness.openapi.parser import OpenAPISpec, OpenAPIOperation
-from deepagents.middleware.permissions import _check_fs_permission
+from deepagents.middleware.filesystem import _check_fs_permission
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -263,7 +263,8 @@ def test_readonly_fs_rules_deny_writes_including_dotpaths() -> None:
     Approach: call deepagents' internal `_check_fs_permission` helper directly
     against the module-level `_READONLY_FS_RULES` constant.  This tests the
     *actual* glob-match behavior (not just the string content of the paths list)
-    and uses the same code path that `_PermissionMiddleware` uses at runtime.
+    and uses the same code path that FilesystemMiddleware's `_permissions`
+    enforcement uses at runtime.
     """
     # Writes to dot-prefixed paths (the gap in the old `/**`-only rule)
     assert (
@@ -286,7 +287,11 @@ def test_readonly_fs_rules_deny_writes_including_dotpaths() -> None:
 def test_stateful_branch_wires_lean_create_agent_with_skills(
     tmp_path: Path, mock_spec: MagicMock, mock_operation: MagicMock
 ) -> None:
-    """skill_dir present -> create_agent with skills/filesystem/permission middleware."""
+    """skill_dir present -> create_agent with skills + filesystem middleware.
+
+    Read-only enforcement is wired into FilesystemMiddleware via its private
+    `_permissions` parameter (deepagents 0.6.x), not a standalone middleware.
+    """
     skill_dir = tmp_path / "petstore"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(
@@ -328,12 +333,16 @@ def test_stateful_branch_wires_lean_create_agent_with_skills(
     kwargs = mock_create_agent.call_args.kwargs
     assert kwargs["checkpointer"] is agent.checkpointer
     assert kwargs["system_prompt"] == agent.system_prompt
-    middleware_types = [type(m).__name__ for m in kwargs["middleware"]]
+    middleware = kwargs["middleware"]
+    middleware_types = [type(m).__name__ for m in middleware]
     assert middleware_types == [
         "SkillsMiddleware",
         "FilesystemMiddleware",
-        "_PermissionMiddleware",
     ]
+    # Read-only rules are enforced inside FilesystemMiddleware (no standalone
+    # permission middleware in deepagents 0.6.x).
+    fs_middleware = middleware[1]
+    assert fs_middleware._permissions == _READONLY_FS_RULES
 
     # The model must be passed UNBOUND — bind_tools must NOT have been called
     # before handing the llm to create_agent.

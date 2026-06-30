@@ -532,7 +532,7 @@ wheels = [
 
 [[package]]
 name = "deepagents"
-version = "0.5.4"
+version = "0.6.12"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "langchain" },
@@ -542,9 +542,9 @@ dependencies = [
     { name = "langsmith" },
     { name = "wcmatch" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4d/b2/2ecbe82c8e4f8a1b27c8507c92db0b128e485c0a4af533594098f0f0a04e/deepagents-0.5.4.tar.gz", hash = "sha256:242e8163c1e598e377a0071d7189c1880b276393bff1271416aee31caf774fd3", size = 160376, upload-time = "2026-04-29T02:59:56.408Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e0/db/a6acdc72a9e90c3f07ed10de35c951734a02d4facb693bb59684ad368801/deepagents-0.6.12.tar.gz", hash = "sha256:1f281c0bc5a63132f62e2ee345c1dc593b23188da6e23016401f6879fbe54b5f", size = 211364, upload-time = "2026-06-25T17:26:52.775Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/17/0c/e85498ab479f0ee760bf56e1bb8f5ef494b923280de3fe495528b6046a54/deepagents-0.5.4-py3-none-any.whl", hash = "sha256:135950f4fbdf7462a10951618cebf05405fbe13e8b6b21f32d4ebd32ed1b55f6", size = 183451, upload-time = "2026-04-29T02:59:54.963Z" },
+    { url = "https://files.pythonhosted.org/packages/98/49/af7219b3c13520fee047bb807cfaefba17f8e4584c551d946773589a4f08/deepagents-0.6.12-py3-none-any.whl", hash = "sha256:28b8fa0119ca0a689e3e18e288c4634e4046062acfc87a1cb34289d3af3a1c88", size = 236120, upload-time = "2026-06-25T17:26:51.736Z" },
 ]
 
 [[package]]
@@ -2571,7 +2571,7 @@ dev = [
 requires-dist = [
     { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.7.0" },
     { name = "coverage", marker = "extra == 'dev'", specifier = ">=7.0.0" },
-    { name = "deepagents", specifier = ">=0.5.3,<=0.5.4" },
+    { name = "deepagents", specifier = ">=0.5.3,<=0.6.12" },
     { name = "fastapi", specifier = ">=0.100.0" },
     { name = "import-linter", marker = "extra == 'dev'", specifier = ">=2.0" },
     { name = "jinja2", specifier = ">=3.0.0" },
