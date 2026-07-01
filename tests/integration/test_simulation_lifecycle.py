@@ -4,8 +4,11 @@ Tests the complete lifecycle of simulations from creation through deletion,
 including skill generation, reuse, and session management.
 """
 
+import json
 import os
+import shutil
 import tempfile
+import time
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -710,6 +713,89 @@ def test_delete_during_pending_returns_404_on_subsequent_get(
 
     g = app_client.get("/api/v1/simulation")
     assert g.status_code == 404
+
+
+def _poll_until(client: TestClient, target: str, timeout: float = 30.0) -> dict:
+    """Poll GET /api/v1/simulation until status == target (or failed)."""
+    deadline = time.monotonic() + timeout
+    last: dict = {}
+    while time.monotonic() < deadline:
+        resp = client.get("/api/v1/simulation")
+        if resp.status_code == 200:
+            last = resp.json()
+            if last["status"] in (target, "failed"):
+                return last
+        time.sleep(0.1)
+    raise AssertionError(
+        f"Simulation did not reach '{target}' within {timeout}s; last={last}"
+    )
+
+
+async def _fake_generate_writing_artifacts(
+    *,
+    openapi_spec: dict[str, Any],
+    simulation_name: str,
+    skills_folder: Path,
+    progress_cb: Any = None,
+) -> Path:
+    """Stand-in for SkillGenerator.generate_skill that writes the four artifacts.
+
+    Mirrors the module's convention of not hitting the real LLM, but produces a
+    complete on-disk skill bundle so setup/start can read it back.
+    """
+    d = Path(skills_folder) / simulation_name
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "SKILL.md").write_text(
+        f"---\nname: {simulation_name}\ndescription: Test skill\n---\n# skill\n"
+    )
+    (d / "schema.json").write_text(json.dumps({"type": "object", "properties": {}}))
+    (d / "db.json").write_text(json.dumps({}))
+    (d / "api.json").write_text(json.dumps(openapi_spec))
+    return d / "SKILL.md"
+
+
+def test_setup_then_start_then_tool_call(
+    app_client: Any, valid_openapi_spec: dict[str, Any]
+) -> None:
+    """Two-phase flow: setup generates artifacts, start opens a session from them."""
+    from simulation_harness.config.settings import get_config
+
+    skills_dir = Path(get_config().skills.folder)
+    try:
+        with patch(
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
+        ) as mock_gen:
+            mock_gen.side_effect = _fake_generate_writing_artifacts
+
+            # 1. setup → poll GENERATED
+            r = app_client.post(
+                "/api/v1/simulation/setup",
+                json={"openapi_spec": valid_openapi_spec},
+            )
+            assert r.status_code == 202
+            gen = _poll_until(app_client, "generated")
+            assert gen["status"] == "generated", f"expected generated, got: {gen}"
+
+            # 2. start (no spec) → poll READY
+            name = app_client.get("/api/v1/simulation").json()["name"]
+            r = app_client.post("/api/v1/simulation/start", json={"name": name})
+            assert r.status_code == 202
+            final = poll_until_ready(app_client, timeout=30.0)
+            assert final["status"] == "ready", f"expected ready, got: {final}"
+
+            # 3. tools/call works
+            tools = app_client.get("/api/v1/simulation/tools")
+            assert tools.status_code == 200
+            assert len(tools.json()) > 0
+    finally:
+        shutil.rmtree(skills_dir / "test-api", ignore_errors=True)
+
+
+def test_start_without_artifacts_returns_404(app_client: Any) -> None:
+    """Start with a name that has no baked artifacts returns 404."""
+    r = app_client.post("/api/v1/simulation/start", json={"name": "does-not-exist"})
+    assert r.status_code == 404
 
 
 # Made with Bob

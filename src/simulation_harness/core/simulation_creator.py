@@ -14,6 +14,8 @@ from simulation_harness.utils.errors import SimulationArtifactsNotFoundError
 from simulation_harness.utils.logging import get_logger
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from simulation_harness.core.simulation_instance import SimulationInstance
     from simulation_harness.core.skill_registry import SkillRegistry
 
@@ -94,8 +96,6 @@ class SimulationCreator:
             )
 
     async def _pipeline(self) -> None:
-        skill_dir = self._skill_registry.skills_folder / self._record.name
-
         if self._generate:
             # If the skill is already complete on disk and we are not regenerating,
             # collapse the status sequence: pending -> initializing -> ready.
@@ -105,12 +105,13 @@ class SimulationCreator:
                 self._record.transition(
                     SimulationStatus.GENERATING_SKILL, phase="skill_generation"
                 )
-            await self._skill_registry.ensure_skill(
+            skill_file: "Path" = await self._skill_registry.ensure_skill(
                 simulation_name=self._record.name,
                 openapi_spec=self._openapi_spec,
                 regenerate=self._regenerate,
                 progress_cb=self._record.set_phase,
             )
+            skill_dir = skill_file.parent
         else:
             # Start-only: never generate. Guard on complete artifacts.
             if not self._skill_registry.is_complete(self._record.name):
@@ -118,6 +119,7 @@ class SimulationCreator:
                     name=self._record.name,
                     missing=self._skill_registry.missing_files(self._record.name),
                 )
+            skill_dir = self._skill_registry.skills_folder / self._record.name
 
         if not self._start:
             self._record.mark_generated()
