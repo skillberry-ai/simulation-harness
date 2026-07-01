@@ -107,5 +107,10 @@ class TestApplyEnvOverrides:
         apply_env_overrides(_base())
         assert get_config().skills.folder == "/data/skills-store-override"
 
+    def test_autostart_env_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("HARNESS_AUTOSTART_SIMULATION", "acme")
+        out = apply_env_overrides(_base())
+        assert out.startup.autostart_simulation == "acme"
+
 
 # Made with Bob

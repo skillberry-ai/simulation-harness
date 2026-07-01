@@ -114,6 +114,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Singletons initialized")
     logger.info(f"Skills folder: {skill_registry.skills_folder}")
 
+    app.state.autostart_failed = False
+    from simulation_harness.core.autostart import (
+        AutostartConfigError,
+        resolve_autostart_target,
+    )
+
+    try:
+        target = resolve_autostart_target(
+            config.startup.autostart_simulation, skill_registry
+        )
+        if target is not None:
+            logger.info(f"Auto-starting simulation from artifacts: {target}")
+            await simulation_host.start_simulation(
+                name=target, mcp_port=None, skill_registry=skill_registry
+            )
+    except AutostartConfigError as e:
+        logger.error(f"Auto-start failed: {e}")
+        app.state.autostart_failed = True
+
     yield
 
     # Shutdown
@@ -530,8 +549,10 @@ async def liveness_probe() -> dict[str, str]:
 
 @app.get("/readyz", tags=["health"])
 async def readiness_probe() -> JSONResponse:
-    """Kubernetes readiness probe — 503 once the app starts draining on shutdown."""
-    if getattr(app.state, "draining", False):
+    """Kubernetes readiness probe — 503 while draining or if autostart failed."""
+    if getattr(app.state, "draining", False) or getattr(
+        app.state, "autostart_failed", False
+    ):
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             content={"status": "draining"},

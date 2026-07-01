@@ -125,6 +125,17 @@ class GenerationConfig(BaseModel):
     )
 
 
+class StartupConfig(BaseModel):
+    """Boot-time auto-start configuration."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    autostart_simulation: Optional[str] = Field(
+        default=None,
+        description="Skill name to auto-start on boot. If unset, auto-discovers baked skills.",
+    )
+
+
 class MCPConfig(BaseModel):
     """MCP transport configuration."""
 
@@ -176,6 +187,10 @@ class HarnessConfig(BaseModel):
     )
     logging: LoggingConfig = Field(
         default_factory=LoggingConfig, description="Logging configuration"
+    )
+    startup: StartupConfig = Field(
+        default_factory=StartupConfig,
+        description="Boot-time auto-start configuration.",
     )
 
 

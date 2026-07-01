@@ -55,4 +55,10 @@ logging:
   level: INFO
   destination_folder: ./logs
 
+startup:
+  # Skill name to auto-start on boot. If null, the harness auto-discovers baked
+  # skills: 0 → idle, 1 → that skill, >1 → most recently generated (logs a warning).
+  # Override at runtime with HARNESS_AUTOSTART_SIMULATION.
+  autostart_simulation: null
+
 # Made with Bob

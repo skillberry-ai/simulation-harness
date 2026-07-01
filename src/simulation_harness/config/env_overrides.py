@@ -69,6 +69,10 @@ def apply_env_overrides(config: HarnessConfig) -> HarnessConfig:
     if queue_depth is not None:
         data["sessions"]["max_concurrent_queue_depth"] = queue_depth
 
+    autostart = os.getenv("HARNESS_AUTOSTART_SIMULATION")
+    if autostart is not None:
+        data["startup"]["autostart_simulation"] = autostart
+
     overridden = HarnessConfig(**data)
 
     # Replace the cached singleton so get_config() returns the overridden values
