@@ -15,6 +15,7 @@ from simulation_harness.core.skill_registry import SkillRegistry
 from simulation_harness.mcp_integration.sidecar_server import SidecarMCPServer
 from simulation_harness.utils.errors import (
     SimulationAlreadyExistsError,
+    SimulationArtifactsNotFoundError,
     SimulationBusyError,
     SimulationNotFoundError,
     SimulationNotReadyError,
@@ -89,29 +90,140 @@ class SimulationHost:
 
             record = SimulationRecord.declare(name=name, mcp_port=mcp_port)
             self._record = record
-
-            def _skill_exists(simulation_name: str) -> bool:
-                folder = skill_registry.skills_folder / simulation_name
-                return (
-                    (folder / "SKILL.md").exists()
-                    and (folder / "schema.json").exists()
-                    and (folder / "db.json").exists()
-                    and (folder / "api.json").exists()
-                )
-
-            creator = SimulationCreator(
+            self._launch_creator(
                 record=record,
                 skill_registry=skill_registry,
                 instance_factory=instance_factory,
                 openapi_spec=openapi_spec,
                 regenerate=regenerate,
                 max_duration_seconds=max_duration_seconds,
-                skill_exists=_skill_exists,
                 mcp_port=mcp_port,
+                generate=True,
+                start=True,
             )
+            return record
 
-            self._creation_task = asyncio.create_task(
-                self._run_creation(creator, mcp_port)
+    def _launch_creator(
+        self,
+        *,
+        record: SimulationRecord,
+        skill_registry: SkillRegistry,
+        instance_factory: Callable[..., SimulationInstance],
+        openapi_spec: dict[str, Any],
+        regenerate: bool,
+        max_duration_seconds: float,
+        mcp_port: int | None,
+        generate: bool,
+        start: bool,
+    ) -> None:
+        """Build a SimulationCreator with explicit flags and spawn the background task.
+
+        Caller must hold _lifecycle_lock and have already set self._record.
+        """
+
+        def _skill_exists(simulation_name: str) -> bool:
+            return skill_registry.is_complete(simulation_name)
+
+        creator = SimulationCreator(
+            record=record,
+            skill_registry=skill_registry,
+            instance_factory=instance_factory,
+            openapi_spec=openapi_spec,
+            regenerate=regenerate,
+            max_duration_seconds=max_duration_seconds,
+            skill_exists=_skill_exists,
+            mcp_port=mcp_port,
+            generate=generate,
+            start=start,
+        )
+        self._creation_task = asyncio.create_task(
+            self._run_creation(creator, mcp_port if start else None)
+        )
+
+    async def setup_simulation(
+        self,
+        *,
+        name: str,
+        openapi_spec: dict[str, Any],
+        regenerate: bool,
+        skill_registry: SkillRegistry,
+        instance_factory: Callable[..., SimulationInstance] = _default_instance_factory,
+        max_duration_seconds: float | None = None,
+    ) -> SimulationRecord:
+        """Generate artifacts without starting an instance. Ends at GENERATED."""
+        async with self._lifecycle_lock:
+            if self._record is not None:
+                raise SimulationAlreadyExistsError(
+                    "A simulation already exists. Delete it before creating a new one."
+                )
+            if max_duration_seconds is None:
+                max_duration_seconds = float(get_config().creation.max_duration_seconds)
+
+            record = SimulationRecord.declare(name=name)
+            self._record = record
+            self._launch_creator(
+                record=record,
+                skill_registry=skill_registry,
+                instance_factory=instance_factory,
+                openapi_spec=openapi_spec,
+                regenerate=regenerate,
+                max_duration_seconds=max_duration_seconds,
+                mcp_port=None,
+                generate=True,
+                start=False,
+            )
+            return record
+
+    async def start_simulation(
+        self,
+        *,
+        name: str,
+        mcp_port: int | None,
+        skill_registry: SkillRegistry,
+        instance_factory: Callable[..., SimulationInstance] = _default_instance_factory,
+        max_duration_seconds: float | None = None,
+    ) -> SimulationRecord:
+        """Start a session from baked artifacts. No generation.
+
+        Raises:
+            SimulationArtifactsNotFoundError: artifacts for `name` are incomplete.
+            SimulationAlreadyExistsError: a READY simulation already occupies the slot.
+        """
+        async with self._lifecycle_lock:
+            # Guard synchronously so the request path can return 404.
+            if not skill_registry.is_complete(name):
+                raise SimulationArtifactsNotFoundError(
+                    name=name, missing=skill_registry.missing_files(name)
+                )
+
+            existing = self._record
+            if existing is not None:
+                if not (
+                    existing.status == SimulationStatus.GENERATED
+                    and existing.name == name
+                ):
+                    raise SimulationAlreadyExistsError(
+                        "A simulation already exists. Delete it before starting a new one."
+                    )
+                record = existing  # consume the GENERATED record
+            else:
+                record = SimulationRecord.declare(name=name, mcp_port=mcp_port)
+                self._record = record
+
+            if max_duration_seconds is None:
+                max_duration_seconds = float(get_config().creation.max_duration_seconds)
+
+            openapi_spec = skill_registry.read_api(name)
+            self._launch_creator(
+                record=record,
+                skill_registry=skill_registry,
+                instance_factory=instance_factory,
+                openapi_spec=openapi_spec,
+                regenerate=False,
+                max_duration_seconds=max_duration_seconds,
+                mcp_port=mcp_port,
+                generate=False,
+                start=True,
             )
             return record
 

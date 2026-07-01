@@ -1,6 +1,7 @@
 """Tests for SimulationHost."""
 
 import asyncio
+import json
 import os
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -10,7 +11,10 @@ import pytest
 from simulation_harness.config.settings import load_config, load_secrets
 from simulation_harness.core.simulation_host import SimulationHost
 from simulation_harness.core.simulation_record import SimulationStatus
-from simulation_harness.utils.errors import SimulationAlreadyExistsError
+from simulation_harness.utils.errors import (
+    SimulationAlreadyExistsError,
+    SimulationArtifactsNotFoundError,
+)
 from collections.abc import Iterator
 from typing import Any
 
@@ -606,6 +610,84 @@ class TestReplaceDatabase:
         with pytest.raises(DatabaseValidationError):
             await host.replace_database(new_db={}, skill_registry=skill_registry)
         instance.reset_session.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# setup_simulation / start_simulation tests
+# ---------------------------------------------------------------------------
+
+
+def _bake_artifacts(folder: Path, name: str) -> None:
+    d = folder / name
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "SKILL.md").write_text("# skill")
+    (d / "schema.json").write_text(json.dumps({"type": "object"}))
+    (d / "db.json").write_text(json.dumps({}))
+    (d / "api.json").write_text(
+        json.dumps({"openapi": "3.0.0", "info": {"title": name, "version": "1"}})
+    )
+
+
+async def test_setup_simulation_reaches_generated(
+    fake_skill_registry: MagicMock, fake_instance_factory: Any
+) -> None:
+    factory, _ = fake_instance_factory
+    host = SimulationHost()
+    record = await host.setup_simulation(
+        name="acme",
+        openapi_spec={"openapi": "3.0.0", "info": {"title": "acme", "version": "1"}},
+        regenerate=False,
+        skill_registry=fake_skill_registry,
+        instance_factory=factory,
+    )
+    await host._creation_task  # type: ignore[arg-type]
+    assert record.status == SimulationStatus.GENERATED
+    assert record.instance is None
+    factory.assert_not_called()
+
+
+async def test_start_simulation_from_artifacts_reaches_ready(
+    tmp_path: Path, fake_instance_factory: Any
+) -> None:
+    from simulation_harness.core.skill_registry import SkillRegistry
+
+    factory, instance = fake_instance_factory
+    _bake_artifacts(tmp_path, "acme")
+    registry = SkillRegistry(skills_folder=tmp_path, generator=MagicMock())
+    host = SimulationHost()
+
+    record = await host.start_simulation(
+        name="acme",
+        mcp_port=None,
+        skill_registry=registry,
+        instance_factory=factory,
+    )
+    await host._creation_task  # type: ignore[arg-type]
+
+    assert record.status == SimulationStatus.READY
+    factory.assert_called_once()
+    # Spec was loaded from api.json, not passed by a caller.
+    kwargs = factory.call_args.kwargs
+    assert kwargs["openapi_spec"]["info"]["title"] == "acme"
+
+
+async def test_start_simulation_missing_artifacts_raises(
+    tmp_path: Path, fake_instance_factory: Any
+) -> None:
+    from simulation_harness.core.skill_registry import SkillRegistry
+
+    factory, _ = fake_instance_factory
+    registry = SkillRegistry(skills_folder=tmp_path, generator=MagicMock())
+    host = SimulationHost()
+
+    with pytest.raises(SimulationArtifactsNotFoundError):
+        await host.start_simulation(
+            name="ghost",
+            mcp_port=None,
+            skill_registry=registry,
+            instance_factory=factory,
+        )
+    assert await host.get_record() is None
 
 
 # Made with Bob
