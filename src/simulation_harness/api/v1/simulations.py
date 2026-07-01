@@ -12,7 +12,10 @@ from simulation_harness.core.simulation_record import (
     SimulationStatus,
 )
 from simulation_harness.mcp_integration.mcp_server import MCPServerWrapper
-from simulation_harness.models.requests import CreateSimulationRequest
+from simulation_harness.models.requests import (
+    CreateSimulationRequest,
+    StartSimulationRequest,
+)
 from simulation_harness.models.responses import (
     ErrorPayload,
     ProgressPayload,
@@ -160,6 +163,87 @@ async def create_simulation(
     except SimulationAlreadyExistsError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
+    return _record_to_response(record, request)
+
+
+@router.post(
+    "/simulation/setup",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=SimulationResponse,
+    summary="Set up a simulation (generate artifacts, no session)",
+    description=(
+        "Generate the skill artifacts from an OpenAPI spec without starting a session. "
+        "Returns 202 with status=pending; poll GET /simulation until status=generated or failed."
+    ),
+    responses={
+        202: {"description": "Setup declared; poll GET /simulation for progress"},
+        409: {"description": "A simulation already exists — delete it first"},
+        413: {"description": "Request body exceeds the 10 MB limit"},
+        422: {"description": "Invalid OpenAPI specification"},
+    },
+)
+async def setup_simulation(
+    request: Request,
+    body: CreateSimulationRequest,
+    simulation_host: SimulationHostDep,
+    skill_registry: SkillRegistryDep,
+) -> SimulationResponse:
+    await validate_body_size(request)
+    try:
+        validate_openapi_dict(body.openapi_spec)
+        OpenAPISpec(body.openapi_spec)
+    except OpenAPIValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
+        )
+
+    if body.name:
+        simulation_name = sanitize_skill_name(body.name)
+    else:
+        simulation_name = sanitize_skill_name(
+            body.openapi_spec.get("info", {}).get("title", "simulation")
+        )
+
+    record = await simulation_host.setup_simulation(
+        name=simulation_name,
+        openapi_spec=body.openapi_spec,
+        regenerate=body.regenerate_skill,
+        skill_registry=skill_registry,
+    )
+    return _record_to_response(record, request)
+
+
+@router.post(
+    "/simulation/start",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=SimulationResponse,
+    summary="Start a simulation from baked artifacts",
+    description=(
+        "Open a session from a skill's existing artifacts (no OpenAPI spec required). "
+        "Returns 202 with status=pending; poll GET /simulation until status=ready or failed."
+    ),
+    responses={
+        202: {"description": "Start declared; poll GET /simulation for progress"},
+        404: {"description": "No complete artifacts exist for the given name"},
+        409: {"description": "A simulation is already running — delete it first"},
+    },
+)
+async def start_simulation(
+    request: Request,
+    body: StartSimulationRequest,
+    simulation_host: SimulationHostDep,
+    skill_registry: SkillRegistryDep,
+) -> SimulationResponse:
+    simulation_name = sanitize_skill_name(body.name)
+    record = await simulation_host.start_simulation(
+        name=simulation_name,
+        mcp_port=body.mcp_port,
+        skill_registry=skill_registry,
+    )
     return _record_to_response(record, request)
 
 

@@ -263,6 +263,35 @@
         "title": "SimulationResponse",
         "type": "object"
       },
+      "StartSimulationRequest": {
+        "description": "Request model for starting a simulation from baked artifacts.",
+        "properties": {
+          "mcp_port": {
+            "anyOf": [
+              {
+                "maximum": 65535.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Port to expose the MCP server on. Defaults to the harness port.",
+            "title": "Mcp Port"
+          },
+          "name": {
+            "description": "Name of the skill whose artifacts to start",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "StartSimulationRequest",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -535,6 +564,95 @@
           }
         },
         "summary": "Get JSON Schema for the active skill's database",
+        "tags": [
+          "simulations"
+        ]
+      }
+    },
+    "/api/v1/simulation/setup": {
+      "post": {
+        "description": "Generate the skill artifacts from an OpenAPI spec without starting a session. Returns 202 with status=pending; poll GET /simulation until status=generated or failed.",
+        "operationId": "setup_simulation_api_v1_simulation_setup_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSimulationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulationResponse"
+                }
+              }
+            },
+            "description": "Setup declared; poll GET /simulation for progress"
+          },
+          "409": {
+            "description": "A simulation already exists \u2014 delete it first"
+          },
+          "413": {
+            "description": "Request body exceeds the 10 MB limit"
+          },
+          "422": {
+            "description": "Invalid OpenAPI specification"
+          }
+        },
+        "summary": "Set up a simulation (generate artifacts, no session)",
+        "tags": [
+          "simulations"
+        ]
+      }
+    },
+    "/api/v1/simulation/start": {
+      "post": {
+        "description": "Open a session from a skill's existing artifacts (no OpenAPI spec required). Returns 202 with status=pending; poll GET /simulation until status=ready or failed.",
+        "operationId": "start_simulation_api_v1_simulation_start_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartSimulationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulationResponse"
+                }
+              }
+            },
+            "description": "Start declared; poll GET /simulation for progress"
+          },
+          "404": {
+            "description": "No complete artifacts exist for the given name"
+          },
+          "409": {
+            "description": "A simulation is already running \u2014 delete it first"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start a simulation from baked artifacts",
         "tags": [
           "simulations"
         ]

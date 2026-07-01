@@ -26,4 +26,16 @@ class CreateSimulationRequest(BaseModel):
     )
 
 
+class StartSimulationRequest(BaseModel):
+    """Request model for starting a simulation from baked artifacts."""
+
+    name: str = Field(..., description="Name of the skill whose artifacts to start")
+    mcp_port: int | None = Field(
+        default=None,
+        ge=1,
+        le=65535,
+        description="Port to expose the MCP server on. Defaults to the harness port.",
+    )
+
+
 # Made with Bob

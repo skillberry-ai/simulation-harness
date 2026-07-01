@@ -39,6 +39,8 @@ def mock_simulation_host() -> MagicMock:
     """Mock SimulationHost for testing."""
     host = MagicMock()
     host.declare_simulation = AsyncMock()
+    host.setup_simulation = AsyncMock()
+    host.start_simulation = AsyncMock()
     host.get_record = AsyncMock(return_value=None)
     host.get_simulation = AsyncMock(return_value=None)
     host.delete_simulation = AsyncMock()
@@ -100,10 +102,20 @@ def app(mock_simulation_host: MagicMock, mock_skill_registry: MagicMock) -> Fast
 
     from simulation_harness.utils.errors import (
         DatabaseValidationError,
+        SimulationArtifactsNotFoundError,
         SimulationBusyError,
     )
 
     # Add domain error handlers (mirrors main.py)
+    @app.exception_handler(SimulationArtifactsNotFoundError)
+    async def artifacts_not_found_handler(
+        request: pytest.FixtureRequest, exc: SimulationArtifactsNotFoundError
+    ) -> Any:
+        return JSONResponse(
+            status_code=404,
+            content={"detail": str(exc), "name": exc.name, "missing": exc.missing},
+        )
+
     @app.exception_handler(SimulationNotReadyError)
     async def not_ready_handler(
         request: pytest.FixtureRequest, exc: SimulationNotReadyError
@@ -948,6 +960,79 @@ class TestPutSimulationDatabase:
         mock_simulation_host.get_record = AsyncMock(return_value=record)
         resp = client.put("/api/v1/simulation/database", json=[1, 2, 3])
         assert resp.status_code in (400, 422)
+
+
+class TestSetupSimulation:
+    """Tests for POST /api/v1/simulation/setup endpoint."""
+
+    async def test_setup_endpoint_returns_202_and_generated(
+        self,
+        client: TestClient,
+        valid_openapi_spec: dict[str, Any],
+        mock_simulation_host: MagicMock,
+        mock_skill_registry: MagicMock,
+    ) -> None:
+        record = SimulationRecord.declare(name="test-api")
+        record.mark_generated()
+        mock_simulation_host.setup_simulation = AsyncMock(return_value=record)
+
+        response = client.post(
+            "/api/v1/simulation/setup",
+            json={"openapi_spec": valid_openapi_spec, "regenerate_skill": False},
+        )
+
+        assert response.status_code == 202
+        data = response.json()
+        assert data["name"] == "test-api"
+        assert data["status"] == "generated"
+        assert data["session_state"] is None
+        mock_simulation_host.setup_simulation.assert_called_once()
+
+    async def test_setup_endpoint_invalid_spec_returns_422(
+        self,
+        client: TestClient,
+        mock_simulation_host: MagicMock,
+    ) -> None:
+        response = client.post(
+            "/api/v1/simulation/setup",
+            json={"openapi_spec": {"openapi": "3.0.0"}},
+        )
+        assert response.status_code == 422
+
+
+class TestStartSimulation:
+    """Tests for POST /api/v1/simulation/start endpoint."""
+
+    async def test_start_endpoint_missing_artifacts_returns_404(
+        self,
+        client: TestClient,
+        mock_simulation_host: MagicMock,
+    ) -> None:
+        from simulation_harness.utils.errors import SimulationArtifactsNotFoundError
+
+        mock_simulation_host.start_simulation = AsyncMock(
+            side_effect=SimulationArtifactsNotFoundError(
+                name="ghost", missing=["db.json"]
+            )
+        )
+
+        resp = client.post("/api/v1/simulation/start", json={"name": "ghost"})
+        assert resp.status_code == 404
+
+    async def test_start_endpoint_returns_202(
+        self,
+        client: TestClient,
+        mock_simulation_host: MagicMock,
+    ) -> None:
+        record = SimulationRecord.declare(name="acme")
+        mock_simulation_host.start_simulation = AsyncMock(return_value=record)
+
+        resp = client.post("/api/v1/simulation/start", json={"name": "acme"})
+        assert resp.status_code == 202
+        data = resp.json()
+        assert data["name"] == "acme"
+        assert data["status"] == "pending"
+        mock_simulation_host.start_simulation.assert_called_once()
 
 
 # Made with Bob
