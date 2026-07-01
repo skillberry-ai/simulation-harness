@@ -28,6 +28,7 @@ from simulation_harness.utils.errors import (
     PortInUseError,
     SessionExpiredError,
     SimulationAlreadyExistsError,
+    SimulationArtifactsNotFoundError,
     SimulationBusyError,
     SimulationNotFoundError,
     SimulationNotReadyError,
@@ -404,6 +405,18 @@ async def simulation_not_found_handler(
     return JSONResponse(
         status_code=status.HTTP_404_NOT_FOUND,
         content={"detail": str(exc)},
+    )
+
+
+@app.exception_handler(SimulationArtifactsNotFoundError)
+async def simulation_artifacts_not_found_handler(
+    request: Request, exc: SimulationArtifactsNotFoundError
+) -> JSONResponse:
+    """Handle SimulationArtifactsNotFoundError with 404 Not Found."""
+    logger.warning(f"Simulation artifacts not found: {exc}")
+    return JSONResponse(
+        status_code=status.HTTP_404_NOT_FOUND,
+        content={"detail": str(exc), "name": exc.name, "missing": exc.missing},
     )
 
 

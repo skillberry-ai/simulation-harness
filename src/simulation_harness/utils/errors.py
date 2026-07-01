@@ -115,4 +115,18 @@ class SimulationBusyError(Exception):
         )
 
 
+class SimulationArtifactsNotFoundError(Exception):
+    """Raised when start is requested but the skill's baked artifacts are missing/incomplete."""
+
+    def __init__(
+        self, *, name: str, missing: list[str], message: str | None = None
+    ) -> None:
+        self.name = name
+        self.missing = missing
+        super().__init__(
+            message
+            or f"Simulation '{name}' has no complete artifacts; missing: {', '.join(missing) or '<unknown>'}."
+        )
+
+
 # Made with Bob
