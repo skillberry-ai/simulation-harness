@@ -10,10 +10,10 @@ from simulation_harness.core.simulation_record import (
     SimulationRecord,
     SimulationStatus,
 )
+from simulation_harness.utils.errors import SimulationArtifactsNotFoundError
 from simulation_harness.utils.logging import get_logger
 
 if TYPE_CHECKING:
-    from pathlib import Path
     from simulation_harness.core.simulation_instance import SimulationInstance
     from simulation_harness.core.skill_registry import SkillRegistry
 
@@ -34,6 +34,8 @@ class SimulationCreator:
         max_duration_seconds: float,
         skill_exists: Callable[[str], bool],
         mcp_port: int | None = None,
+        generate: bool = True,
+        start: bool = True,
     ) -> None:
         self._record = record
         self._skill_registry = skill_registry
@@ -43,6 +45,8 @@ class SimulationCreator:
         self._max_duration_seconds = max_duration_seconds
         self._skill_exists = skill_exists
         self._mcp_port = mcp_port
+        self._generate = generate
+        self._start = start
 
     async def run(self) -> None:
         """Run the creation pipeline; mutates the record in place.
@@ -73,7 +77,8 @@ class SimulationCreator:
             # by inspecting the current phase the record is in.
             code = (
                 "skill_generation_failed"
-                if self._record.status
+                if self._generate
+                and self._record.status
                 in (SimulationStatus.PENDING, SimulationStatus.GENERATING_SKILL)
                 else "instance_init_failed"
             )
@@ -89,23 +94,34 @@ class SimulationCreator:
             )
 
     async def _pipeline(self) -> None:
-        # If the skill is already complete on disk and we are not regenerating,
-        # collapse the status sequence: pending -> initializing -> ready.
-        # Otherwise: pending -> generating_skill -> initializing -> ready.
-        reuse = self._skill_exists(self._record.name) and not self._regenerate
+        skill_dir = self._skill_registry.skills_folder / self._record.name
 
-        if not reuse:
-            self._record.transition(
-                SimulationStatus.GENERATING_SKILL, phase="skill_generation"
+        if self._generate:
+            # If the skill is already complete on disk and we are not regenerating,
+            # collapse the status sequence: pending -> initializing -> ready.
+            # Otherwise: pending -> generating_skill -> initializing -> ready.
+            reuse = self._skill_exists(self._record.name) and not self._regenerate
+            if not reuse:
+                self._record.transition(
+                    SimulationStatus.GENERATING_SKILL, phase="skill_generation"
+                )
+            await self._skill_registry.ensure_skill(
+                simulation_name=self._record.name,
+                openapi_spec=self._openapi_spec,
+                regenerate=self._regenerate,
+                progress_cb=self._record.set_phase,
             )
+        else:
+            # Start-only: never generate. Guard on complete artifacts.
+            if not self._skill_registry.is_complete(self._record.name):
+                raise SimulationArtifactsNotFoundError(
+                    name=self._record.name,
+                    missing=self._skill_registry.missing_files(self._record.name),
+                )
 
-        skill_file: "Path" = await self._skill_registry.ensure_skill(
-            simulation_name=self._record.name,
-            openapi_spec=self._openapi_spec,
-            regenerate=self._regenerate,
-            progress_cb=self._record.set_phase,
-        )
-        skill_dir = skill_file.parent
+        if not self._start:
+            self._record.mark_generated()
+            return
 
         self._record.transition(SimulationStatus.INITIALIZING, phase="agent_init")
 

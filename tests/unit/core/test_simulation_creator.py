@@ -176,3 +176,82 @@ async def test_timeout_marks_failed_with_creation_timeout(
     assert record.status == SimulationStatus.FAILED
     assert record.error is not None
     assert record.error.code == "creation_timeout"
+
+
+async def test_setup_only_stops_at_generated(
+    record: Any, skill_registry: MagicMock, instance_factory: Any
+) -> None:
+    factory, _ = instance_factory
+    skill_registry.skills_folder = Path("/tmp/skills")
+    creator = SimulationCreator(
+        record=record,
+        skill_registry=skill_registry,
+        instance_factory=factory,
+        openapi_spec={"openapi": "3.0.0", "info": {"title": "x", "version": "1"}},
+        regenerate=False,
+        max_duration_seconds=10,
+        skill_exists=lambda name: False,
+        generate=True,
+        start=False,
+    )
+
+    await creator.run()
+
+    assert record.status == SimulationStatus.GENERATED
+    assert record.instance is None
+    skill_registry.ensure_skill.assert_awaited_once()
+    factory.assert_not_called()
+
+
+async def test_start_only_with_artifacts_reaches_ready_without_generating(
+    record: Any, skill_registry: MagicMock, instance_factory: Any
+) -> None:
+    factory, instance = instance_factory
+    skill_registry.skills_folder = Path("/tmp/skills")
+    skill_registry.is_complete = MagicMock(return_value=True)
+    creator = SimulationCreator(
+        record=record,
+        skill_registry=skill_registry,
+        instance_factory=factory,
+        openapi_spec={"openapi": "3.0.0", "info": {"title": "x", "version": "1"}},
+        regenerate=False,
+        max_duration_seconds=10,
+        skill_exists=lambda name: True,
+        generate=False,
+        start=True,
+    )
+
+    await creator.run()
+
+    assert record.status == SimulationStatus.READY
+    assert record.instance is instance
+    skill_registry.ensure_skill.assert_not_awaited()
+    factory.assert_called_once()
+
+
+async def test_start_only_missing_artifacts_fails(
+    record: Any, skill_registry: MagicMock, instance_factory: Any
+) -> None:
+    factory, _ = instance_factory
+    skill_registry.skills_folder = Path("/tmp/skills")
+    skill_registry.is_complete = MagicMock(return_value=False)
+    skill_registry.missing_files = MagicMock(return_value=["db.json"])
+    creator = SimulationCreator(
+        record=record,
+        skill_registry=skill_registry,
+        instance_factory=factory,
+        openapi_spec={"openapi": "3.0.0", "info": {"title": "x", "version": "1"}},
+        regenerate=False,
+        max_duration_seconds=10,
+        skill_exists=lambda name: False,
+        generate=False,
+        start=True,
+    )
+
+    await creator.run()
+
+    assert record.status == SimulationStatus.FAILED
+    assert record.error is not None
+    assert record.error.code == "instance_init_failed"
+    skill_registry.ensure_skill.assert_not_awaited()
+    factory.assert_not_called()
