@@ -640,7 +640,8 @@ async def test_setup_simulation_reaches_generated(
         skill_registry=fake_skill_registry,
         instance_factory=factory,
     )
-    await host._creation_task  # type: ignore[arg-type]
+    assert host._creation_task is not None
+    await host._creation_task
     assert record.status == SimulationStatus.GENERATED
     assert record.instance is None
     factory.assert_not_called()
@@ -662,7 +663,8 @@ async def test_start_simulation_from_artifacts_reaches_ready(
         skill_registry=registry,
         instance_factory=factory,
     )
-    await host._creation_task  # type: ignore[arg-type]
+    assert host._creation_task is not None
+    await host._creation_task
 
     assert record.status == SimulationStatus.READY
     factory.assert_called_once()

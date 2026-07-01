@@ -278,4 +278,15 @@ class TestSimulationBusyError:
         assert "in-flight" in str(err).lower() or "busy" in str(err).lower()
 
 
+class TestSimulationArtifactsNotFoundError:
+    def test_artifacts_not_found_carries_name_and_missing(self) -> None:
+        from simulation_harness.utils.errors import SimulationArtifactsNotFoundError
+
+        err = SimulationArtifactsNotFoundError(name="acme", missing=["db.json"])
+        assert err.name == "acme"
+        assert err.missing == ["db.json"]
+        assert "acme" in str(err)
+        assert "db.json" in str(err)
+
+
 # Made with Bob

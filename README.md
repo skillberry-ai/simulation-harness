@@ -163,6 +163,38 @@ curl -sS -X POST "$BASE/api/v1/simulation/reset"
 curl -sS -X DELETE "$BASE/api/v1/simulation"
 ```
 
+### Two-phase flow: setup then start
+
+`POST /api/v1/simulation` is the convenience path (generate artifacts **and**
+open a session in one call). For build/deploy pipelines you can split the two
+phases so artifact generation happens once, offline, and each boot merely opens
+a session from the baked artifacts:
+
+```bash
+# Build time (offline, no server) — generate the four artifacts
+# (SKILL.md, schema.json, db.json, api.json) into the skills folder.
+uv run python -m simulation_harness.setup_cli path/to/openapi.json \
+  [--name my-api] [--regenerate]
+
+# …or against a running server: generate artifacts, no session.
+# Returns 202; poll GET /simulation until status becomes "generated".
+curl -sS -X POST "$BASE/api/v1/simulation/setup" \
+  -H 'content-type: application/json' -d @path/to/openapi.json
+
+# Start a session from baked artifacts — no OpenAPI spec required.
+# The spec is reconstructed from the baked api.json. 404 if artifacts are missing.
+curl -sS -X POST "$BASE/api/v1/simulation/start" \
+  -H 'content-type: application/json' -d '{"name": "my-api"}'
+```
+
+**Auto-start on boot.** Set `startup.autostart_simulation` in
+`config/harness.yaml` (or the `HARNESS_AUTOSTART_SIMULATION` env var) to open a
+session from baked artifacts automatically when the server starts. Resolution
+precedence when no name is given: **0** baked skills → boot idle; **1** → start
+it; **more than one** → start the most recently generated one and log a warning.
+An explicitly-named skill with no complete artifacts fails readiness (`/readyz`
+returns 503).
+
 Once a simulation is ready, MCP clients connect according to the configured
 transport:
 
