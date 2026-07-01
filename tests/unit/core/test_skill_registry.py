@@ -550,3 +550,64 @@ async def test_ensure_skill_forwards_progress_cb(tmp_path: Path) -> None:
 
     await reg.ensure_skill("aha", {"openapi": "3.0.0"}, regenerate=True, progress_cb=cb)
     assert gen.generate_skill.call_args.kwargs["progress_cb"] is cb
+
+
+def _write_complete_skill(folder: Path, name: str, spec: dict[str, Any]) -> None:
+    d = folder / name
+    d.mkdir(parents=True)
+    (d / "SKILL.md").write_text("# skill")
+    (d / "schema.json").write_text(json.dumps({"type": "object"}))
+    (d / "db.json").write_text(json.dumps({}))
+    (d / "api.json").write_text(json.dumps(spec))
+
+
+@pytest.fixture
+def discovery_registry(tmp_path: Path) -> SkillRegistry:
+    return SkillRegistry(skills_folder=tmp_path, generator=MagicMock())
+
+
+def test_read_api_returns_spec(
+    discovery_registry: SkillRegistry, tmp_path: Path
+) -> None:
+    spec = {"openapi": "3.0.0", "info": {"title": "acme", "version": "1"}}
+    _write_complete_skill(tmp_path, "acme", spec)
+    assert discovery_registry.read_api("acme") == spec
+
+
+def test_read_api_missing_raises(discovery_registry: SkillRegistry) -> None:
+    with pytest.raises(FileNotFoundError):
+        discovery_registry.read_api("nope")
+
+
+def test_is_complete_and_missing_files(
+    discovery_registry: SkillRegistry, tmp_path: Path
+) -> None:
+    _write_complete_skill(tmp_path, "acme", {"openapi": "3.0.0"})
+    assert discovery_registry.is_complete("acme") is True
+    assert discovery_registry.missing_files("acme") == []
+    (tmp_path / "acme" / "db.json").unlink()
+    assert discovery_registry.is_complete("acme") is False
+    assert discovery_registry.missing_files("acme") == ["db.json"]
+
+
+def test_list_complete_skills(
+    discovery_registry: SkillRegistry, tmp_path: Path
+) -> None:
+    _write_complete_skill(tmp_path, "a", {"openapi": "3.0.0"})
+    _write_complete_skill(tmp_path, "b", {"openapi": "3.0.0"})
+    (tmp_path / "c").mkdir()  # incomplete
+    assert sorted(discovery_registry.list_complete_skills()) == ["a", "b"]
+
+
+def test_most_recent_complete_skill(
+    discovery_registry: SkillRegistry, tmp_path: Path
+) -> None:
+    import os
+
+    _write_complete_skill(tmp_path, "old", {"openapi": "3.0.0"})
+    _write_complete_skill(tmp_path, "new", {"openapi": "3.0.0"})
+    old_skill = tmp_path / "old" / "SKILL.md"
+    new_skill = tmp_path / "new" / "SKILL.md"
+    os.utime(old_skill, (1_000_000, 1_000_000))
+    os.utime(new_skill, (2_000_000, 2_000_000))
+    assert discovery_registry.most_recent_complete_skill() == "new"

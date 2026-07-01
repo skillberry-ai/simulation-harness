@@ -14,6 +14,8 @@ from simulation_harness.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+_REQUIRED_FILES = ("SKILL.md", "schema.json", "db.json", "api.json")
+
 
 class SkillRegistry:
     """Manages skill generation and reuse for simulations."""
@@ -59,17 +61,9 @@ class SkillRegistry:
         """
         skill_dir = self.skills_folder / simulation_name
         skill_file = skill_dir / "SKILL.md"
-        schema_file = skill_dir / "schema.json"
-        db_file = skill_dir / "db.json"
-        api_file = skill_dir / "api.json"
 
         # Check if skill is complete (all 4 files exist)
-        skill_complete = (
-            skill_file.exists()
-            and schema_file.exists()
-            and db_file.exists()
-            and api_file.exists()
-        )
+        skill_complete = self.is_complete(simulation_name)
 
         if skill_complete and not regenerate:
             # Log warning with human-readable mtime and regeneration reminder
@@ -83,16 +77,7 @@ class SkillRegistry:
 
         # Log which files are missing if incomplete
         if not regenerate and skill_dir.exists():
-            missing_files = []
-            if not skill_file.exists():
-                missing_files.append("SKILL.md")
-            if not schema_file.exists():
-                missing_files.append("schema.json")
-            if not db_file.exists():
-                missing_files.append("db.json")
-            if not api_file.exists():
-                missing_files.append("api.json")
-
+            missing_files = self.missing_files(simulation_name)
             if missing_files:
                 logger.warning(
                     f"Skill '{simulation_name}' is incomplete. "
@@ -139,6 +124,42 @@ class SkillRegistry:
         if not path.exists():
             raise FileNotFoundError(f"db.json not found for skill '{simulation_name}'")
         return json.loads(path.read_text())
+
+    def read_api(self, simulation_name: str) -> dict[str, Any]:
+        """Read api.json (the raw OpenAPI spec) for a skill. Raises FileNotFoundError if missing."""
+        path = self._skill_path(simulation_name, "api.json")
+        if not path.exists():
+            raise FileNotFoundError(f"api.json not found for skill '{simulation_name}'")
+        return json.loads(path.read_text())
+
+    def missing_files(self, simulation_name: str) -> list[str]:
+        """Return the required artifact files that are absent for this skill."""
+        skill_dir = self.skills_folder / simulation_name
+        return [f for f in _REQUIRED_FILES if not (skill_dir / f).exists()]
+
+    def is_complete(self, simulation_name: str) -> bool:
+        """True when all four required artifacts exist for this skill."""
+        return not self.missing_files(simulation_name)
+
+    def list_complete_skills(self) -> list[str]:
+        """Names of skill directories that contain all four required artifacts."""
+        if not self.skills_folder.exists():
+            return []
+        return [
+            d.name
+            for d in self.skills_folder.iterdir()
+            if d.is_dir() and not d.name.startswith(".") and self.is_complete(d.name)
+        ]
+
+    def most_recent_complete_skill(self) -> str | None:
+        """The complete skill with the newest SKILL.md mtime, or None if none exist."""
+        complete = self.list_complete_skills()
+        if not complete:
+            return None
+        return max(
+            complete,
+            key=lambda name: (self.skills_folder / name / "SKILL.md").stat().st_mtime,
+        )
 
     def write_db(self, simulation_name: str, db: dict[str, Any]) -> None:
         """Validate db against the skill's schema.json, then atomically replace db.json.
