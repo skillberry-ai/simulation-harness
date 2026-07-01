@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 class SimulationStatus(str, Enum):
     PENDING = "pending"
     GENERATING_SKILL = "generating_skill"
+    GENERATED = "generated"
     INITIALIZING = "initializing"
     READY = "ready"
     FAILED = "failed"
@@ -26,10 +27,16 @@ _TERMINAL = {SimulationStatus.READY, SimulationStatus.FAILED}
 _NEXT: dict[SimulationStatus, set[SimulationStatus]] = {
     SimulationStatus.PENDING: {
         SimulationStatus.GENERATING_SKILL,
+        SimulationStatus.GENERATED,
         SimulationStatus.INITIALIZING,
         SimulationStatus.FAILED,
     },
     SimulationStatus.GENERATING_SKILL: {
+        SimulationStatus.GENERATED,
+        SimulationStatus.INITIALIZING,
+        SimulationStatus.FAILED,
+    },
+    SimulationStatus.GENERATED: {
         SimulationStatus.INITIALIZING,
         SimulationStatus.FAILED,
     },
@@ -101,6 +108,11 @@ class SimulationRecord:
         self.transition(SimulationStatus.READY)
         self.progress.phase = None  # clear phase on completion
         self.instance = instance
+
+    def mark_generated(self) -> None:
+        """Transition to GENERATED (artifacts produced, no running instance)."""
+        self.transition(SimulationStatus.GENERATED)
+        self.progress.phase = None
 
     def fail(
         self,

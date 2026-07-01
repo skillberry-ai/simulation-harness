@@ -80,3 +80,34 @@ def test_set_phase_updates_phase_without_transition() -> None:
     assert rec.progress.phase == "generating_ops 3/10"
     assert rec.status == SimulationStatus.GENERATING_SKILL
     assert rec.progress.updated_at >= before
+
+
+def test_generated_status_value() -> None:
+    assert SimulationStatus.GENERATED.value == "generated"
+
+
+def test_pending_can_transition_to_generated() -> None:
+    record = SimulationRecord.declare(name="x")
+    record.transition(SimulationStatus.GENERATED, phase="generated")
+    assert record.status == SimulationStatus.GENERATED
+
+
+def test_generating_skill_can_transition_to_generated() -> None:
+    record = SimulationRecord.declare(name="x")
+    record.transition(SimulationStatus.GENERATING_SKILL)
+    record.transition(SimulationStatus.GENERATED)
+    assert record.status == SimulationStatus.GENERATED
+
+
+def test_generated_can_advance_to_initializing_then_ready() -> None:
+    record = SimulationRecord.declare(name="x")
+    record.transition(SimulationStatus.GENERATED)
+    record.transition(SimulationStatus.INITIALIZING)
+    assert record.status == SimulationStatus.INITIALIZING
+
+
+def test_mark_generated_sets_status_and_no_instance() -> None:
+    record = SimulationRecord.declare(name="x")
+    record.mark_generated()
+    assert record.status == SimulationStatus.GENERATED
+    assert record.instance is None
