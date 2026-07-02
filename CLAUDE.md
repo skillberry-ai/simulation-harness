@@ -20,7 +20,7 @@ Lint and type-check one file without a full build — each runs in well under 5s
 - Format one file: `uv run ruff format src/simulation_harness/core/simulation_host.py`
 - Type-check one file: `uv run mypy src/simulation_harness/core/simulation_host.py`
 
-mypy (with the `pydantic.mypy` plugin) type-checks **both `src/` and `tests/`**. A few `src` modules with pre-existing type errors are listed under an `ignore_errors` override in `[tool.mypy]` so the gate enforces *no new* untyped breakage — when you fully annotate one, drop it from that override list. New test files should carry full annotations (fixtures included); `scripts/annotate_tests.py` is the idempotent helper that backfilled the existing suite.
+mypy (with the `pydantic.mypy` plugin) type-checks **both `src/` and `tests/`**. A few `src` modules with pre-existing type errors are listed under an `ignore_errors` override in `[tool.mypy]` so the gate enforces *no new* untyped breakage — when you fully annotate one, drop it from that override list. New test files should carry full annotations (fixtures included).
 
 ## Common commands
 
