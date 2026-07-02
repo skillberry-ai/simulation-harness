@@ -16,10 +16,19 @@ points to code, but does not reproduce implementation detail. Use it as a map.
 
 ## 1. Assumptions on the input
 
-The only input to generation is an OpenAPI specification supplied as a JSON
-object in the `POST /api/v1/simulation` request body. Before any generation
-runs, the request handler validates it
-(`api/v1/simulations.py:127-141`):
+The only input to generation is an OpenAPI specification. It reaches the
+generator through any of three entry points, all converging on the same reuse
+gate (`SkillRegistry.ensure_skill`, §2):
+
+- `POST /api/v1/simulation` — combined create (generate **and** start).
+- `POST /api/v1/simulation/setup` — generate artifacts only, then rest at the
+  `generated` status (see [docs/api.md](api.md)).
+- `uv run python -m simulation_harness.setup_cli <spec>` — offline, server-less
+  generation for build time; exits non-zero on a bad spec.
+
+For the two HTTP paths the spec is a JSON object in the request body; the CLI
+loads it from a `.json`/`.yaml` file. Before any generation runs, the spec is
+validated (`api/v1/simulations.py`, `setup_cli.py`):
 
 - **Must be a valid OpenAPI 3.x document.** It is checked with
   `validate_openapi_dict()` (`openapi/parser.py:325`), which delegates to
@@ -46,22 +55,28 @@ Generation also assumes an LLM is reachable: `LLM_API_KEY` (and optional
 
 ## 2. Pipeline overview
 
-Generation is gated, then delegated, then orchestrated:
+Generation is gated, then delegated, then orchestrated. Three entry points
+converge on the reuse gate:
 
 ```
-POST /api/v1/simulation
-  └─ SimulationHost.declare_simulation              core/simulation_host.py
-       └─ SimulationCreator._pipeline               core/simulation_creator.py
-            └─ SkillRegistry.ensure_skill           core/skill_registry.py     ← reuse vs generate gate
-                 └─ SkillGenerator.generate_skill    skills/generator.py        ← atomic file writer
-                      └─ run_pipeline                skills/generation/pipeline.py  ← stage orchestrator
+POST /api/v1/simulation        ─┐  (SimulationHost.declare_simulation — generate + start)
+POST /api/v1/simulation/setup  ─┤  (SimulationHost.setup_simulation   — generate only)
+python -m simulation_harness.setup_cli ─┘  (offline — no host, no running instance)
+  └─ SkillRegistry.ensure_skill           core/skill_registry.py     ← reuse vs generate gate
+       └─ SkillGenerator.generate_skill    skills/generator.py        ← atomic file writer
+            └─ run_pipeline                skills/generation/pipeline.py  ← stage orchestrator
 ```
+
+The two HTTP paths route through `SimulationCreator._pipeline`
+(`core/simulation_creator.py`), which calls `ensure_skill`; the CLI calls
+`ensure_skill` directly. Only the combined path continues past generation into
+instance startup.
 
 **Reuse gate.** `SkillRegistry.ensure_skill` (`core/skill_registry.py:31`)
 reuses an existing skill only if all four core files (`SKILL.md`,
 `schema.json`, `db.json`, `api.json`) are present *and* `regenerate` is false.
-Otherwise it regenerates. (`regenerate` originates from the request's
-`regenerate_skill` flag.)
+Otherwise it regenerates. (`regenerate` originates from the `regenerate_skill`
+flag on the create/setup requests, or the CLI's `--regenerate`.)
 
 **Orchestrator.** `run_pipeline` (`skills/generation/pipeline.py:42`) is a
 deterministic async orchestrator: it sequences the LLM stages, fans work out
@@ -216,7 +231,7 @@ The resulting `<skills_folder>/<name>/` directory contains:
 | `schema.json` | `generate_schema` (Stage 4) | JSON Schema (Draft 2020-12) describing every collection — the authoritative shape of the state store. |
 | `db.json` | `generate_seed` (Stage 6) | Initial seed entities, schema-valid, loaded into the state store on first use. |
 | `scenarios.json` | `generate_scenarios` (Stage 5) | Representative user stories (`title`, `intent`, `operations`). **Only written when scenarios were generated** — omitted otherwise. |
-| `api.json` | input spec (`generator.py:103`) | Verbatim copy of the input OpenAPI spec, kept for reference and reuse checks. |
+| `api.json` | input spec (`generator.py:103`) | Verbatim copy of the input OpenAPI spec, kept for reference, reuse checks, and so `POST /api/v1/simulation/start` can reconstruct the spec at run time without a fresh submission. |
 
 The reuse gate (§2) treats a skill as complete only when `SKILL.md`,
 `schema.json`, `db.json`, and `api.json` all exist; `scenarios.json` is

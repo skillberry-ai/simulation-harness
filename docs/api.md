@@ -12,12 +12,17 @@ or `/openapi.json` on the running harness.
 - [Base URL and authentication](#base-url-and-authentication)
 - [End-to-end walkthrough](#end-to-end-walkthrough)
 - [REST endpoints](#rest-endpoints)
-  - [`POST /api/v1/simulation`](#post-apiv1simulation) — create
+  - [`POST /api/v1/simulation`](#post-apiv1simulation) — create (setup + start)
+  - [`POST /api/v1/simulation/setup`](#post-apiv1simulationsetup) — generate artifacts only
+  - [`POST /api/v1/simulation/start`](#post-apiv1simulationstart) — run from baked artifacts
   - [`GET /api/v1/simulation`](#get-apiv1simulation) — status
   - [`DELETE /api/v1/simulation`](#delete-apiv1simulation) — tear down
   - [`POST /api/v1/simulation/reset`](#post-apiv1simulationreset) — reset session
   - [`GET /api/v1/simulation/tools`](#get-apiv1simulationtools) — list MCP tools
   - [`GET /api/v1/simulation/state`](#get-apiv1simulationstate) — state snapshot
+  - [`GET /api/v1/simulation/database`](#get-apiv1simulationdatabase) — read seed `db.json`
+  - [`GET /api/v1/simulation/schema`](#get-apiv1simulationschema) — read `schema.json`
+  - [`PUT /api/v1/simulation/database`](#put-apiv1simulationdatabase) — replace `db.json` + reset
   - [`GET /health`, `/healthz`, `/readyz`](#health-and-probe-endpoints)
 - [MCP transport](#mcp-transport)
   - [SSE](#sse-transport-default)
@@ -39,6 +44,18 @@ The harness has two surfaces:
 **Only one simulation is active per harness process at a time.** Creating a new
 one while another is active returns `409`. Either `DELETE` first or pass
 `regenerate_skill: true` to refresh the existing simulation's skill in place.
+
+`POST /api/v1/simulation` couples two steps — **setup** (generate the skill
+artifacts from the spec, the slow LLM-driven half) and **start** (open a running
+session from those artifacts, the fast deterministic half). They are also
+exposed separately: [`POST /api/v1/simulation/setup`](#post-apiv1simulationsetup)
+generates artifacts and stops at `generated`, and
+[`POST /api/v1/simulation/start`](#post-apiv1simulationstart) opens a session
+from artifacts already on disk (no spec required). This split maps onto a
+build-then-run lifecycle — generate once at build time, start on every boot. The
+build-time equivalent of setup is the offline CLI
+`uv run python -m simulation_harness.setup_cli <spec>`. The generation pipeline
+itself is documented in [docs/simulation-generation.md](simulation-generation.md).
 
 ## Base URL and authentication
 
@@ -135,6 +152,7 @@ Possible `status` values:
 |---|---|
 | `pending` | Accepted; background task has not started yet. |
 | `generating_skill` | LLM is generating the skill from the spec. |
+| `generated` | Artifacts generated and resting on disk; no running instance. Reached only via `POST /api/v1/simulation/setup`; `start` advances from here to `ready`. |
 | `initializing` | Skill is ready; agent thread is being set up. |
 | `ready` | Simulation is fully operational; MCP tools are available. |
 | `failed` | Creation failed; see `error` for details. |
@@ -169,7 +187,7 @@ The `mcp_url` field is only populated when `status == "ready"`. Where you
 actually connect depends on the configured `mcp.transport` — see
 [MCP transport](#mcp-transport).
 
-### 4. List the tools the simulation exposes
+### 3. List the tools the simulation exposes
 
 ```bash
 curl -sS "$BASE/api/v1/simulation/tools"
@@ -191,7 +209,7 @@ curl -sS "$BASE/api/v1/simulation/tools"
 
 Tool names are taken verbatim from each operation's `operationId`.
 
-### 5. Call a tool over MCP
+### 4. Call a tool over MCP
 
 Using SSE (default), with the `mcp` Python SDK:
 
@@ -215,7 +233,7 @@ asyncio.run(main())
 The agent synthesises a schema-valid response from the spec — for example a
 JSON array of two or three pet objects in the `text` content block.
 
-### 6. Reset the session counters
+### 5. Reset the session counters
 
 After a test run, reset counters without tearing the simulation down:
 
@@ -228,7 +246,7 @@ This zeroes `tool_call_count` and `queue_depth` and clears `last_activity`. The
 underlying agent thread is reset as well, so subsequent calls start with a
 fresh context.
 
-### 7. Tear down
+### 6. Tear down
 
 ```bash
 curl -sS -X DELETE "$BASE/api/v1/simulation" -o /dev/null -w "%{http_code}\n"
@@ -270,6 +288,84 @@ curl -sS -X POST "$BASE/api/v1/simulation" \
   -H 'content-type: application/json' \
   -d @petstore.openapi.json
 ```
+
+### `POST /api/v1/simulation/setup`
+
+Generate the skill artifacts (`SKILL.md`, `schema.json`, `db.json`, `api.json`)
+from an OpenAPI spec **without** starting a session. This is the slow,
+LLM-driven half of `POST /api/v1/simulation` on its own — use it to bake
+artifacts ahead of time (e.g. at container-build time) so `start` can open a
+session later with no LLM cost or cross-replica drift.
+
+**Request body** — identical to
+[`POST /api/v1/simulation`](#post-apiv1simulation) (`openapi_spec`, optional
+`name`, `regenerate_skill`). `mcp_port` is not used (no session is started).
+
+**Body limit:** 10 MB. Larger bodies return `413`.
+
+**Responses**
+
+- `202 Accepted` — `SimulationResponse` with `status: "pending"`. Generation
+  runs in the background; poll `GET /api/v1/simulation` until `status` is
+  `"generated"` (success) or `"failed"`. A `generated` record holds the single
+  simulation slot but runs no agent, so `session_state` and `mcp_url` stay `null`.
+- `409 Conflict` — a simulation record already exists (any status). `DELETE` it first.
+- `413 Payload Too Large` — body exceeds 10 MB.
+- `422 Unprocessable Entity` — OpenAPI validation or parsing failed.
+
+```bash
+curl -sS -X POST "$BASE/api/v1/simulation/setup" \
+  -H 'content-type: application/json' \
+  -d @petstore.openapi.json
+# 202; poll GET /api/v1/simulation until status == "generated"
+```
+
+The offline, server-less equivalent is the setup CLI, which writes the same
+artifacts and **exits non-zero** on a bad spec (so a build fails fast):
+
+```bash
+uv run python -m simulation_harness.setup_cli petstore.openapi.json \
+  --name petstore [--regenerate] [--config config/harness.yaml]
+# prints the artifact directory on success
+```
+
+### `POST /api/v1/simulation/start`
+
+Open a running session from a skill's **already-generated** artifacts. This
+never calls the LLM generator; the OpenAPI spec is reconstructed from the baked
+`api.json`, so **no spec is sent** in the request.
+
+**Request body**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `name` | string | required | Name of the skill whose artifacts to start. Sanitized like the create `name`. |
+| `mcp_port` | integer (1–65535) | harness port | If set, the MCP server is started on this dedicated port instead of being mounted on the harness app. |
+
+**Responses**
+
+- `202 Accepted` — `SimulationResponse` with `status: "pending"`. Poll
+  `GET /api/v1/simulation` until `status` is `"ready"` or `"failed"`. If a
+  `generated` record for `name` already exists, `start` consumes it (advancing
+  the same record); otherwise it opens a fresh session from disk.
+- `404 Not Found` — no complete artifacts exist for `name`
+  (`SimulationArtifactsNotFoundError`; the response body lists the `missing` files).
+- `409 Conflict` — a `ready` simulation already occupies the slot. `DELETE` it first.
+
+```bash
+curl -sS -X POST "$BASE/api/v1/simulation/start" \
+  -H 'content-type: application/json' \
+  -d '{"name": "petstore"}'
+# 202; poll GET /api/v1/simulation until status == "ready"
+```
+
+**Auto-start on boot.** The harness can open a session automatically at startup
+from `startup.autostart_simulation` in `harness.yaml` (or the
+`HARNESS_AUTOSTART_SIMULATION` env var). With no name configured it discovers
+baked skills: **0** complete skills → boot idle; **1** → start it; **more than
+one** → start the most recently generated skill and log a warning. A configured
+name whose artifacts are missing fails readiness (see
+[`/readyz`](#health-and-probe-endpoints)).
 
 ### `GET /api/v1/simulation`
 
@@ -419,7 +515,7 @@ curl -sS -X PUT "$BASE/api/v1/simulation/database" \
 |---|---|---|
 | `GET /health` | Generic liveness check. | `200 {"status":"healthy"}` |
 | `GET /healthz` | Kubernetes liveness probe. Returns 200 once the process is up. | `200 {"status":"ok"}` |
-| `GET /readyz` | Kubernetes readiness probe. Returns 503 once the app starts draining on shutdown. | `200 {"status":"ready"}` or `503 {"status":"draining"}` |
+| `GET /readyz` | Kubernetes readiness probe. Returns 503 while draining on shutdown, or if a configured `startup.autostart_simulation` failed to start on boot. | `200 {"status":"ready"}` or `503 {"status":"draining"}` |
 
 ## MCP transport
 
@@ -504,6 +600,7 @@ exceptions are mapped by handlers in `main.py`:
 | `SimulationAlreadyExistsError` | `409` | `POST /simulation` while one is already active. |
 | `PortInUseError` | `409` | The `mcp_port` requested at create time is bound by another process. |
 | `SimulationNotFoundError` | `404` | Operations on a non-existent simulation. |
+| `SimulationArtifactsNotFoundError` | `404` | `POST /simulation/start` for a name with no complete baked artifacts. Response body includes `name` and the `missing` files. |
 | `SimulationNotReadyError` | `503` | Calling tools/state/reset or MCP transports while simulation status is not yet `ready`. Response includes `Retry-After: 2`. |
 | `OpenAPIValidationError` | `422` | The submitted spec failed OpenAPI 3.x validation. |
 | `SessionExpiredError` | `410` | Session exceeded `max_messages` or `idle_timeout_seconds`. |
