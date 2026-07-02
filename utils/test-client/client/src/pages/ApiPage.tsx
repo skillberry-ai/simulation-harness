@@ -64,6 +64,11 @@ export function ApiPage({
   const [creating, setCreating] = useState(false);
   const [createResult, setCreateResult] = useState<SimulationResponse | null>(null);
 
+  const [starting, setStarting] = useState(false);
+  const [startName, setStartName] = useState('');
+  const [startPort, setStartPort] = useState('');
+  const [startResult, setStartResult] = useState<SimulationResponse | null>(null);
+
   const [dbText, setDbText] = useState('');
   const [opResult, setOpResult] = useState<Record<string, { data: unknown } | null>>({});
 
@@ -97,6 +102,78 @@ export function ApiPage({
           'danger',
           `Simulation creation failed: ${err?.code ?? 'unknown'} — ${err?.message ?? ''}`,
         );
+    } else {
+      sim.setFromResponse(final);
+    }
+  };
+
+  const setup = async () => {
+    if (!spec) return;
+    setCreating(true);
+    setCreateResult(null);
+    const res = await runApi<SimulationResponse>({
+      method: 'POST',
+      endpoint: '/proxy/simulation/setup',
+      requestData: { openapi_spec: spec, name: name || null, regenerate_skill: regenerate },
+      call: () => harness.setupSimulation(spec, name || null, regenerate),
+    });
+    if (res === null) {
+      setCreating(false);
+      return; // error already surfaced as a toast by runApi
+    }
+    let final: SimulationResponse | null = res;
+    if (res.status === 'pending') {
+      final = await poll({ ...pollOptions, until: ['generated', 'failed'] });
+    }
+    setCreating(false);
+    if (!final) {
+      useNotifications.getState().notify('warning', 'Setup did not reach a terminal state in time');
+      return;
+    }
+    setCreateResult(final);
+    if (final.status === 'failed') {
+      const err = final.error;
+      useNotifications
+        .getState()
+        .notify('danger', `Setup failed: ${err?.code ?? 'unknown'} — ${err?.message ?? ''}`);
+    } else {
+      sim.setFromResponse(final);
+      setStartName(final.name);
+      useNotifications.getState().notify('success', `Artifacts generated for '${final.name}'`);
+    }
+  };
+
+  const start = async () => {
+    const nm = startName.trim();
+    if (!nm) return;
+    const port = startPort.trim() ? Number(startPort.trim()) : null;
+    setStarting(true);
+    setStartResult(null);
+    const res = await runApi<SimulationResponse>({
+      method: 'POST',
+      endpoint: '/proxy/simulation/start',
+      requestData: { name: nm, mcp_port: port },
+      call: () => harness.startSimulation(nm, port),
+    });
+    if (res === null) {
+      setStarting(false);
+      return; // error already surfaced as a toast by runApi
+    }
+    let final: SimulationResponse | null = res;
+    if (res.status === 'pending') {
+      final = await poll(pollOptions);
+    }
+    setStarting(false);
+    if (!final) {
+      useNotifications.getState().notify('warning', 'Start did not reach a terminal state in time');
+      return;
+    }
+    setStartResult(final);
+    if (final.status === 'failed') {
+      const err = final.error;
+      useNotifications
+        .getState()
+        .notify('danger', `Start failed: ${err?.code ?? 'unknown'} — ${err?.message ?? ''}`);
     } else {
       sim.setFromResponse(final);
     }
@@ -173,9 +250,14 @@ export function ApiPage({
               isChecked={regenerate}
               onChange={(_e, v) => setRegenerate(v)}
             />
-            <Button variant="primary" isDisabled={!spec || creating} onClick={create}>
-              Create simulation
-            </Button>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <Button variant="secondary" isDisabled={!spec || creating} onClick={setup}>
+                Set up (generate)
+              </Button>
+              <Button variant="primary" isDisabled={!spec || creating} onClick={create}>
+                Create simulation
+              </Button>
+            </div>
             {creating && (
               <Progress
                 aria-label="Creating simulation"
@@ -188,7 +270,41 @@ export function ApiPage({
       </StackItem>
 
       <StackItem>
-        <OperationCard title="2. Get simulation status">
+        <OperationCard title="2. Start from artifacts">
+          <Form>
+            <FormGroup label="Skill name" fieldId="start-name">
+              <TextInput
+                id="start-name"
+                value={startName}
+                onChange={(_e, v) => setStartName(v)}
+                placeholder={sim.name ?? 'Name of a generated skill'}
+              />
+            </FormGroup>
+            <FormGroup label="MCP port (optional)" fieldId="start-port">
+              <TextInput
+                id="start-port"
+                type="number"
+                value={startPort}
+                onChange={(_e, v) => setStartPort(v)}
+                placeholder="Defaults to the harness port"
+              />
+            </FormGroup>
+            <Button variant="primary" isDisabled={!startName.trim() || starting} onClick={start}>
+              Start
+            </Button>
+            {starting && (
+              <Progress
+                aria-label="Starting simulation"
+                title="Waiting for simulation to become ready…"
+              />
+            )}
+            {startResult && <JsonViewer data={startResult} title="Start result" />}
+          </Form>
+        </OperationCard>
+      </StackItem>
+
+      <StackItem>
+        <OperationCard title="3. Get simulation status">
           <Button
             onClick={runOp('get', 'GET', '/proxy/simulation', harness.getSimulation, (d) =>
               sim.setFromResponse(d as SimulationResponse),
@@ -201,7 +317,7 @@ export function ApiPage({
       </StackItem>
 
       <StackItem>
-        <OperationCard title="3. Reset session">
+        <OperationCard title="4. Reset session">
           <Button
             onClick={runOp('reset', 'POST', '/proxy/simulation/reset', harness.resetSession, () =>
               useNotifications.getState().notify('success', 'Session reset'),
@@ -214,7 +330,7 @@ export function ApiPage({
       </StackItem>
 
       <StackItem>
-        <OperationCard title="4. Get simulation state">
+        <OperationCard title="5. Get simulation state">
           <Button
             onClick={runOp('state', 'GET', '/proxy/simulation/state', () => harness.getState())}
           >
@@ -225,7 +341,7 @@ export function ApiPage({
       </StackItem>
 
       <StackItem>
-        <OperationCard title="5. Get database schema">
+        <OperationCard title="6. Get database schema">
           <Button onClick={runOp('schema', 'GET', '/proxy/simulation/schema', harness.getSchema)}>
             Get schema
           </Button>
@@ -234,7 +350,7 @@ export function ApiPage({
       </StackItem>
 
       <StackItem>
-        <OperationCard title="6. Get database">
+        <OperationCard title="7. Get database">
           <Button onClick={runOp('db', 'GET', '/proxy/simulation/database', harness.getDatabase)}>
             Get database
           </Button>
@@ -243,7 +359,7 @@ export function ApiPage({
       </StackItem>
 
       <StackItem>
-        <OperationCard title="7. Replace database">
+        <OperationCard title="8. Replace database">
           <Form>
             <FormGroup label="New database JSON" fieldId="db-json">
               <textarea
@@ -289,7 +405,7 @@ export function ApiPage({
       </StackItem>
 
       <StackItem>
-        <OperationCard title="8. Delete simulation">
+        <OperationCard title="9. Delete simulation">
           <Button variant="danger" onClick={deleteSim}>
             Delete simulation
           </Button>

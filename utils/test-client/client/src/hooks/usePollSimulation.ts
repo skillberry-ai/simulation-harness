@@ -20,16 +20,19 @@ export async function pollUntilTerminal(
     intervalMs?: number;
     deadlineMs?: number;
     signal?: AbortSignal;
+    /** Statuses that end polling. Defaults to the running-simulation terminals. */
+    until?: string[];
   } = {},
 ): Promise<SimulationResponse | null> {
   const intervalMs = opts.intervalMs ?? 500;
   const deadlineMs = opts.deadlineMs ?? 180000;
+  const until = opts.until ?? ['ready', 'failed'];
   // Date.now() (not performance.now()) so Vitest fake timers can drive the deadline.
   const start = Date.now();
   while (Date.now() - start < deadlineMs) {
     if (opts.signal?.aborted) return null;
     const res = await getSimulation();
-    if (res.data.status === 'ready' || res.data.status === 'failed') return res.data;
+    if (until.includes(res.data.status)) return res.data;
     await sleep(intervalMs, opts.signal);
   }
   return null;
@@ -38,7 +41,7 @@ export async function pollUntilTerminal(
 export function usePollSimulation() {
   const ref = useRef<AbortController | null>(null);
   useEffect(() => () => ref.current?.abort(), []);
-  return (overrides?: { intervalMs?: number; deadlineMs?: number }) => {
+  return (overrides?: { intervalMs?: number; deadlineMs?: number; until?: string[] }) => {
     ref.current?.abort();
     ref.current = new AbortController();
     return pollUntilTerminal({ ...overrides, signal: ref.current.signal });

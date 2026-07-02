@@ -5,9 +5,10 @@ export const READY_SIMULATION = {
   name: 'demo-api',
   status: 'ready',
   created_at: '2026-06-22T10:00:00+00:00',
-  mcp_endpoint: 'http://localhost:8086/mcp/sse',
+  mcp_url: 'http://localhost:8086/mcp/sse',
 };
-export const PENDING_SIMULATION = { ...READY_SIMULATION, status: 'pending', mcp_endpoint: null };
+export const PENDING_SIMULATION = { ...READY_SIMULATION, status: 'pending', mcp_url: null };
+export const GENERATED_SIMULATION = { ...READY_SIMULATION, status: 'generated', mcp_url: null };
 export const FAILED_SIMULATION = {
   ...READY_SIMULATION,
   status: 'failed',
@@ -42,6 +43,12 @@ export function harnessHandlers(baseUrl: string) {
   return [
     http.get(u('/health'), () => HttpResponse.json(HEALTH_OK)),
     http.post(u('/api/v1/simulation'), () =>
+      HttpResponse.json(PENDING_SIMULATION, { status: 202 }),
+    ),
+    http.post(u('/api/v1/simulation/setup'), () =>
+      HttpResponse.json(PENDING_SIMULATION, { status: 202 }),
+    ),
+    http.post(u('/api/v1/simulation/start'), () =>
       HttpResponse.json(PENDING_SIMULATION, { status: 202 }),
     ),
     http.get(u('/api/v1/simulation'), () => HttpResponse.json(READY_SIMULATION)),

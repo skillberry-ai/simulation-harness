@@ -6,9 +6,9 @@ export interface McpTool {
 
 export interface SimulationResponse {
   name: string;
-  status: 'pending' | 'ready' | 'failed';
+  status: 'pending' | 'generating_skill' | 'generated' | 'initializing' | 'ready' | 'failed';
   created_at: string;
-  mcp_endpoint: string | null;
+  mcp_url: string | null;
   error?: { code: string; message: string };
 }
 

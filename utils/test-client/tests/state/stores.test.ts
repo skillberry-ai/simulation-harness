@@ -56,7 +56,7 @@ describe('simulation store', () => {
   it('hydrates from a response and clears', () => {
     useSimulationStore
       .getState()
-      .setFromResponse({ name: 'demo', status: 'ready', created_at: 't', mcp_endpoint: 'e' });
+      .setFromResponse({ name: 'demo', status: 'ready', created_at: 't', mcp_url: 'e' });
     expect(useSimulationStore.getState()).toMatchObject({
       name: 'demo',
       status: 'ready',

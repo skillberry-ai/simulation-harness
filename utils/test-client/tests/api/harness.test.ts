@@ -47,6 +47,48 @@ describe('harness api', () => {
     expect('name' in received).toBe(false);
   });
 
+  it('setupSimulation posts to /simulation/setup with spec/name/regenerate', async () => {
+    let received: unknown;
+    server.use(
+      http.post(`${ORIGIN}/proxy/simulation/setup`, async ({ request }) => {
+        received = await request.json();
+        return HttpResponse.json(PENDING_SIMULATION, { status: 202 });
+      }),
+    );
+    const res = await harness.setupSimulation({ openapi: '3.0.0' }, 'demo', true);
+    expect(res.status).toBe(202);
+    expect(received).toEqual({
+      openapi_spec: { openapi: '3.0.0' },
+      name: 'demo',
+      regenerate_skill: true,
+    });
+  });
+
+  it('startSimulation posts to /simulation/start with name and mcp_port', async () => {
+    let received: unknown;
+    server.use(
+      http.post(`${ORIGIN}/proxy/simulation/start`, async ({ request }) => {
+        received = await request.json();
+        return HttpResponse.json(PENDING_SIMULATION, { status: 202 });
+      }),
+    );
+    await harness.startSimulation('demo-api', 9000);
+    expect(received).toEqual({ name: 'demo-api', mcp_port: 9000 });
+  });
+
+  it('startSimulation omits mcp_port when not provided', async () => {
+    let received: Record<string, unknown> = {};
+    server.use(
+      http.post(`${ORIGIN}/proxy/simulation/start`, async ({ request }) => {
+        received = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json(PENDING_SIMULATION, { status: 202 });
+      }),
+    );
+    await harness.startSimulation('demo-api');
+    expect(received).toEqual({ name: 'demo-api' });
+    expect('mcp_port' in received).toBe(false);
+  });
+
   it('getSimulation/getSchema forward and parse', async () => {
     server.use(
       http.get(`${ORIGIN}/proxy/simulation`, () => HttpResponse.json(READY_SIMULATION)),

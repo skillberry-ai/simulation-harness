@@ -25,7 +25,7 @@ const EMPTY = {
 export const useSimulationStore = create<SimulationState>()((set) => ({
   ...EMPTY,
   setFromResponse: (r) =>
-    set({ name: r.name, status: r.status, createdAt: r.created_at, mcpEndpoint: r.mcp_endpoint }),
+    set({ name: r.name, status: r.status, createdAt: r.created_at, mcpEndpoint: r.mcp_url }),
   setTools: (mcpTools) => set({ mcpTools, mcpToolsLoaded: true }),
   clear: () => set({ ...EMPTY }),
 }));

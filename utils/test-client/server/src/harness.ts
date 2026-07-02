@@ -50,6 +50,14 @@ export function createHarnessRouter(config: ProxyConfig): Router {
     '/simulation',
     f({ method: 'POST', upstreamPath: () => '/api/v1/simulation', hasBody: true }),
   );
+  router.post(
+    '/simulation/setup',
+    f({ method: 'POST', upstreamPath: () => '/api/v1/simulation/setup', hasBody: true }),
+  );
+  router.post(
+    '/simulation/start',
+    f({ method: 'POST', upstreamPath: () => '/api/v1/simulation/start', hasBody: true }),
+  );
   router.get('/simulation', f({ method: 'GET', upstreamPath: () => '/api/v1/simulation' }));
   router.delete('/simulation', f({ method: 'DELETE', upstreamPath: () => '/api/v1/simulation' }));
   router.post(

@@ -80,6 +80,45 @@ describe('harness router', () => {
     expect(res.status).toBe(202);
   });
 
+  it('POST /proxy/simulation/setup forwards to the upstream setup endpoint', async () => {
+    let hit = false;
+    msw.use(
+      http.post('http://harness.test/api/v1/simulation/setup', async ({ request }) => {
+        hit = true;
+        expect(await request.json()).toEqual({ openapi_spec: {} });
+        return HttpResponse.json({ name: 'x', status: 'pending' }, { status: 202 });
+      }),
+    );
+    const res = await call(makeApp(), 'POST', '/proxy/simulation/setup', { openapi_spec: {} });
+    expect(res.status).toBe(202);
+    expect(hit).toBe(true);
+  });
+
+  it('POST /proxy/simulation/start forwards to the upstream start endpoint', async () => {
+    let hit = false;
+    msw.use(
+      http.post('http://harness.test/api/v1/simulation/start', async ({ request }) => {
+        hit = true;
+        expect(await request.json()).toEqual({ name: 'demo' });
+        return HttpResponse.json({ name: 'demo', status: 'pending' }, { status: 202 });
+      }),
+    );
+    const res = await call(makeApp(), 'POST', '/proxy/simulation/start', { name: 'demo' });
+    expect(res.status).toBe(202);
+    expect(hit).toBe(true);
+  });
+
+  it('mirrors a 404 from start (no baked artifacts) as harness_error', async () => {
+    msw.use(
+      http.post('http://harness.test/api/v1/simulation/start', () =>
+        HttpResponse.json({ detail: 'no artifacts', missing: ['db.json'] }, { status: 404 }),
+      ),
+    );
+    const res = await call(makeApp(), 'POST', '/proxy/simulation/start', { name: 'ghost' });
+    expect(res.status).toBe(404);
+    expect((res.json as { error: string }).error).toBe('harness_error');
+  });
+
   it('honors the X-Harness-Url header override', async () => {
     msw.use(
       http.get('http://override.test/api/v1/simulation', () =>

@@ -7,7 +7,12 @@ import { ApiPage } from '@client/pages/ApiPage';
 import { setHarnessUrlGetter } from '@client/api/http';
 import { useSimulationStore } from '@client/state/useSimulationStore';
 import { useHistoryStore } from '@client/state/useHistoryStore';
-import { PENDING_SIMULATION, READY_SIMULATION, FAILED_SIMULATION } from '../mocks/harness';
+import {
+  PENDING_SIMULATION,
+  READY_SIMULATION,
+  GENERATED_SIMULATION,
+  FAILED_SIMULATION,
+} from '../mocks/harness';
 
 const ORIGIN = 'http://localhost:3000';
 
@@ -61,6 +66,68 @@ describe('ApiPage create flow', () => {
     expect(
       await screen.findByText(/skill_generation_failed/i, {}, { timeout: 5000 }),
     ).toBeInTheDocument();
+    expect(useSimulationStore.getState().status).not.toBe('ready');
+  });
+});
+
+describe('ApiPage setup/start flow', () => {
+  it('sets up (generate only) and polls to generated', async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.post(`${ORIGIN}/proxy/simulation/setup`, () =>
+        HttpResponse.json(PENDING_SIMULATION, { status: 202 }),
+      ),
+      http.get(`${ORIGIN}/proxy/simulation`, () => HttpResponse.json(GENERATED_SIMULATION)),
+    );
+    render(<ApiPage pollOptions={{ intervalMs: 20, deadlineMs: 2000 }} />);
+    await user.type(
+      screen.getByLabelText(/openapi spec/i),
+      'openapi: 3.0.0\ninfo:\n  title: demo-api',
+    );
+    await user.click(screen.getByRole('button', { name: /set up \(generate\)/i }));
+    await vi.waitFor(() => expect(useSimulationStore.getState().status).toBe('generated'), {
+      timeout: 5000,
+    });
+  });
+
+  it('starts from artifacts and polls to ready', async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.post(`${ORIGIN}/proxy/simulation/start`, () =>
+        HttpResponse.json(PENDING_SIMULATION, { status: 202 }),
+      ),
+      http.get(`${ORIGIN}/proxy/simulation`, () => HttpResponse.json(READY_SIMULATION)),
+    );
+    render(<ApiPage pollOptions={{ intervalMs: 20, deadlineMs: 2000 }} />);
+    await user.type(screen.getByLabelText(/skill name/i), 'demo-api');
+    await user.click(screen.getByRole('button', { name: /^start$/i }));
+    await vi.waitFor(() => expect(useSimulationStore.getState().status).toBe('ready'), {
+      timeout: 5000,
+    });
+  });
+
+  it('surfaces a 404 (no baked artifacts) as an error record', async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.post(`${ORIGIN}/proxy/simulation/start`, () =>
+        HttpResponse.json(
+          { error: 'harness_error', upstreamStatus: 404, body: { detail: 'no artifacts' } },
+          { status: 404 },
+        ),
+      ),
+    );
+    render(<ApiPage pollOptions={{ intervalMs: 20, deadlineMs: 2000 }} />);
+    await user.type(screen.getByLabelText(/skill name/i), 'ghost');
+    await user.click(screen.getByRole('button', { name: /^start$/i }));
+    await vi.waitFor(() =>
+      expect(
+        useHistoryStore
+          .getState()
+          .records.some(
+            (r) => r.endpoint.includes('/simulation/start') && r.responseStatus === 404,
+          ),
+      ).toBe(true),
+    );
     expect(useSimulationStore.getState().status).not.toBe('ready');
   });
 });
