@@ -15,6 +15,7 @@ from simulation_harness.utils.logging import get_logger
 logger = get_logger(__name__)
 
 _REQUIRED_FILES = ("SKILL.md", "schema.json", "db.json", "api.json")
+_BUNDLE_FILES = ("SKILL.md", "schema.json", "db.json", "scenarios.json", "api.json")
 
 
 class SkillRegistry:
@@ -131,6 +132,28 @@ class SkillRegistry:
         if not path.exists():
             raise FileNotFoundError(f"api.json not found for skill '{simulation_name}'")
         return json.loads(path.read_text())
+
+    def read_bundle(self, simulation_name: str) -> dict[str, str]:
+        """Return verbatim contents of all bundle files for a skill.
+
+        Required files (SKILL.md, schema.json, db.json, api.json) must exist;
+        scenarios.json is included only when present. Values are the exact
+        on-disk text, so writing them back reproduces the files byte-for-byte.
+
+        Raises:
+            FileNotFoundError: if a required file is missing.
+        """
+        files: dict[str, str] = {}
+        for fname in _BUNDLE_FILES:
+            path = self._skill_path(simulation_name, fname)
+            if not path.exists():
+                if fname == "scenarios.json":
+                    continue  # optional
+                raise FileNotFoundError(
+                    f"{fname} not found for skill '{simulation_name}'"
+                )
+            files[fname] = path.read_text()
+        return files
 
     def missing_files(self, simulation_name: str) -> list[str]:
         """Return the required artifact files that are absent for this skill."""

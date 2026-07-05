@@ -611,3 +611,81 @@ def test_most_recent_complete_skill(
     os.utime(old_skill, (1_000_000, 1_000_000))
     os.utime(new_skill, (2_000_000, 2_000_000))
     assert discovery_registry.most_recent_complete_skill() == "new"
+
+
+def _write_bundle(skill_dir: Path, *, with_scenarios: bool = True) -> dict[str, str]:
+    """Create a skill dir with verbatim bundle files; return the expected mapping."""
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    contents = {
+        "SKILL.md": "# Demo Skill\n\nverbatim body\n",
+        "schema.json": '{\n  "type": "object"\n}',
+        "db.json": '{\n  "items": []\n}',
+        "api.json": '{\n  "openapi": "3.0.0"\n}',
+    }
+    if with_scenarios:
+        contents["scenarios.json"] = '{\n  "scenarios": []\n}'
+    for fname, text in contents.items():
+        (skill_dir / fname).write_text(text)
+    return contents
+
+
+def test_read_bundle_returns_all_files_verbatim(
+    temp_skills_dir: Path, mock_generator: MagicMock
+) -> None:
+    expected = _write_bundle(temp_skills_dir / "demo")
+    registry = SkillRegistry(temp_skills_dir, mock_generator)
+
+    bundle = registry.read_bundle("demo")
+
+    assert bundle == expected
+    assert list(bundle) == [
+        "SKILL.md",
+        "schema.json",
+        "db.json",
+        "scenarios.json",
+        "api.json",
+    ]
+
+
+def test_read_bundle_omits_absent_scenarios(
+    temp_skills_dir: Path, mock_generator: MagicMock
+) -> None:
+    _write_bundle(temp_skills_dir / "demo", with_scenarios=False)
+    registry = SkillRegistry(temp_skills_dir, mock_generator)
+
+    bundle = registry.read_bundle("demo")
+
+    assert "scenarios.json" not in bundle
+    assert set(bundle) == {"SKILL.md", "schema.json", "db.json", "api.json"}
+
+
+def test_read_bundle_missing_required_file_raises(
+    temp_skills_dir: Path, mock_generator: MagicMock
+) -> None:
+    _write_bundle(temp_skills_dir / "demo")
+    (temp_skills_dir / "demo" / "api.json").unlink()
+    registry = SkillRegistry(temp_skills_dir, mock_generator)
+
+    with pytest.raises(FileNotFoundError, match="api.json"):
+        registry.read_bundle("demo")
+
+
+def test_read_bundle_round_trips_to_complete_dir(
+    temp_skills_dir: Path, mock_generator: MagicMock
+) -> None:
+    """Bundle written back verbatim yields byte-identical files and a complete skill,
+    so ensure_skill would reuse it (no regeneration)."""
+    source = temp_skills_dir / "demo"
+    expected = _write_bundle(source)
+    registry = SkillRegistry(temp_skills_dir, mock_generator)
+    bundle = registry.read_bundle("demo")
+
+    restore_root = temp_skills_dir / "restored"
+    restore_dir = restore_root / "demo"
+    restore_dir.mkdir(parents=True)
+    for fname, text in bundle.items():
+        (restore_dir / fname).write_text(text)
+
+    for fname, text in expected.items():
+        assert (restore_dir / fname).read_text() == text
+    assert SkillRegistry(restore_root, mock_generator).is_complete("demo") is True
