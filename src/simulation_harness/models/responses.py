@@ -54,4 +54,22 @@ class SimulationResponse(BaseModel):
     )
 
 
+class SimulationBundleResponse(BaseModel):
+    """Full generated skill bundle for the active skill."""
+
+    name: str = Field(..., description="Name of the active skill/simulation")
+    files: dict[str, str] = Field(
+        ...,
+        description=(
+            "Bundle filename -> verbatim file contents. Always includes SKILL.md, "
+            "schema.json, db.json, api.json; scenarios.json is present only when it "
+            "exists on disk."
+        ),
+    )
+    sizes: dict[str, int] = Field(
+        ...,
+        description="Bundle filename -> uncompressed content size in bytes.",
+    )
+
+
 # Made with Bob
