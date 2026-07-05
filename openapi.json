@@ -196,6 +196,39 @@
         "title": "SessionState",
         "type": "object"
       },
+      "SimulationBundleResponse": {
+        "description": "Full generated skill bundle for the active skill.",
+        "properties": {
+          "files": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Bundle filename -> verbatim file contents. Always includes SKILL.md, schema.json, db.json, api.json; scenarios.json is present only when it exists on disk.",
+            "title": "Files",
+            "type": "object"
+          },
+          "name": {
+            "description": "Name of the active skill/simulation",
+            "title": "Name",
+            "type": "string"
+          },
+          "sizes": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Bundle filename -> uncompressed content size in bytes.",
+            "title": "Sizes",
+            "type": "object"
+          }
+        },
+        "required": [
+          "name",
+          "files",
+          "sizes"
+        ],
+        "title": "SimulationBundleResponse",
+        "type": "object"
+      },
       "SimulationResponse": {
         "description": "Response model for simulation status.",
         "properties": {
@@ -419,6 +452,37 @@
           }
         },
         "summary": "Create simulation (async)",
+        "tags": [
+          "simulations"
+        ]
+      }
+    },
+    "/api/v1/simulation/bundle": {
+      "get": {
+        "description": "Return every artifact of the active skill's bundle in one response: `SKILL.md`, `schema.json`, `db.json`, `api.json`, and `scenarios.json` when present. Each file is a verbatim string, so writing the values back to a fresh `skills-store/<name>/` reproduces the bundle byte-for-byte and `start` opens a session with no regeneration.\n\n`sizes` reports each file's uncompressed byte length. Send `Accept-Encoding: gzip` to receive a gzip-compressed body (`Content-Encoding: gzip`). Read-only; no session side effects.\n\nNote: a consumer with a size cap (e.g. a 1 MiB Kubernetes ConfigMap) must check the returned sizes itself \u2014 the harness never truncates or rejects on size.",
+        "operationId": "get_simulation_bundle_api_v1_simulation_bundle_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulationBundleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No simulation exists"
+          },
+          "500": {
+            "description": "Skill bundle is incomplete (a required file missing)"
+          },
+          "503": {
+            "description": "Simulation exists but is not ready yet"
+          }
+        },
+        "summary": "Export the full generated skill bundle for the active skill",
         "tags": [
           "simulations"
         ]
@@ -847,7 +911,7 @@
     },
     "/readyz": {
       "get": {
-        "description": "Kubernetes readiness probe \u2014 503 once the app starts draining on shutdown.",
+        "description": "Kubernetes readiness probe \u2014 503 while draining or if autostart failed.",
         "operationId": "readiness_probe_readyz_get",
         "responses": {
           "200": {

@@ -1035,4 +1035,106 @@ class TestStartSimulation:
         mock_simulation_host.start_simulation.assert_called_once()
 
 
+class TestGetSimulationBundle:
+    """Tests for GET /api/v1/simulation/bundle endpoint."""
+
+    def _ready_record(self, mock_simulation_instance: MagicMock) -> Any:
+        record = SimulationRecord.declare(name="demo-api")
+        record.transition(SimulationStatus.INITIALIZING, phase="agent_init")
+        record.mark_ready(mock_simulation_instance)
+        return record
+
+    async def test_returns_bundle_and_sizes_for_active_skill(
+        self,
+        client: TestClient,
+        mock_simulation_host: MagicMock,
+        mock_skill_registry: MagicMock,
+        mock_simulation_instance: MagicMock,
+    ) -> None:
+        mock_simulation_host.get_record = AsyncMock(
+            return_value=self._ready_record(mock_simulation_instance)
+        )
+        files = {
+            "SKILL.md": "# Demo\n",
+            "schema.json": '{"type": "object"}',
+            "db.json": '{"items": []}',
+            "api.json": '{"openapi": "3.0.0"}',
+        }
+        mock_skill_registry.read_bundle = MagicMock(return_value=files)
+
+        resp = client.get(
+            "/api/v1/simulation/bundle", headers={"Accept-Encoding": "identity"}
+        )
+
+        assert resp.status_code == 200
+        assert resp.headers.get("content-encoding") != "gzip"
+        body = resp.json()
+        assert body["name"] == "demo-api"
+        assert body["files"] == files
+        assert body["sizes"]["SKILL.md"] == len("# Demo\n".encode("utf-8"))
+        mock_skill_registry.read_bundle.assert_called_once_with("demo-api")
+
+    async def test_gzip_negotiation_sets_content_encoding(
+        self,
+        client: TestClient,
+        mock_simulation_host: MagicMock,
+        mock_skill_registry: MagicMock,
+        mock_simulation_instance: MagicMock,
+    ) -> None:
+        mock_simulation_host.get_record = AsyncMock(
+            return_value=self._ready_record(mock_simulation_instance)
+        )
+        files = {
+            "SKILL.md": "# Demo\n",
+            "schema.json": "{}",
+            "db.json": "{}",
+            "api.json": "{}",
+        }
+        mock_skill_registry.read_bundle = MagicMock(return_value=files)
+
+        resp = client.get(
+            "/api/v1/simulation/bundle", headers={"Accept-Encoding": "gzip"}
+        )
+
+        # httpx transparently decodes the body but preserves the header.
+        assert resp.status_code == 200
+        assert resp.headers["content-encoding"] == "gzip"
+        assert resp.json()["files"] == files
+
+    async def test_no_simulation_returns_404(
+        self, client: TestClient, mock_simulation_host: MagicMock
+    ) -> None:
+        mock_simulation_host.get_record = AsyncMock(return_value=None)
+        resp = client.get("/api/v1/simulation/bundle")
+        assert resp.status_code == 404
+
+    async def test_not_ready_returns_503(
+        self, client: TestClient, mock_simulation_host: MagicMock
+    ) -> None:
+        record = SimulationRecord.declare(name="demo-api")
+        record.transition(SimulationStatus.GENERATING_SKILL, phase="skill_generation")
+        mock_simulation_host.get_record = AsyncMock(return_value=record)
+        resp = client.get("/api/v1/simulation/bundle")
+        assert resp.status_code == 503
+
+    async def test_incomplete_bundle_returns_500(
+        self,
+        client: TestClient,
+        mock_simulation_host: MagicMock,
+        mock_skill_registry: MagicMock,
+        mock_simulation_instance: MagicMock,
+    ) -> None:
+        mock_simulation_host.get_record = AsyncMock(
+            return_value=self._ready_record(mock_simulation_instance)
+        )
+        mock_skill_registry.read_bundle = MagicMock(
+            side_effect=FileNotFoundError("api.json not found")
+        )
+        resp = client.get(
+            "/api/v1/simulation/bundle", headers={"Accept-Encoding": "identity"}
+        )
+        assert resp.status_code == 500
+        assert "skill bundle" in resp.json()["detail"].lower()
+
+
 # Made with Bob

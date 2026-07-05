@@ -1,5 +1,6 @@
 """Simulation management API routes."""
 
+import gzip
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
@@ -19,6 +20,7 @@ from simulation_harness.models.requests import (
 from simulation_harness.models.responses import (
     ErrorPayload,
     ProgressPayload,
+    SimulationBundleResponse,
     SimulationResponse,
 )
 from simulation_harness.openapi.parser import OpenAPISpec, validate_openapi_dict
@@ -439,6 +441,67 @@ async def get_simulation_schema(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Skill bundle is incomplete: {e}",
         )
+
+
+@router.get(
+    "/simulation/bundle",
+    response_model=SimulationBundleResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Export the full generated skill bundle for the active skill",
+    description=(
+        "Return every artifact of the active skill's bundle in one response: "
+        "`SKILL.md`, `schema.json`, `db.json`, `api.json`, and `scenarios.json` "
+        "when present. Each file is a verbatim string, so writing the values back "
+        "to a fresh `skills-store/<name>/` reproduces the bundle byte-for-byte and "
+        "`start` opens a session with no regeneration.\n\n"
+        "`sizes` reports each file's uncompressed byte length. Send "
+        "`Accept-Encoding: gzip` to receive a gzip-compressed body "
+        "(`Content-Encoding: gzip`). Read-only; no session side effects.\n\n"
+        "Note: a consumer with a size cap (e.g. a 1 MiB Kubernetes ConfigMap) must "
+        "check the returned sizes itself — the harness never truncates or rejects "
+        "on size."
+    ),
+    responses={
+        404: {"description": "No simulation exists"},
+        500: {"description": "Skill bundle is incomplete (a required file missing)"},
+        503: {"description": "Simulation exists but is not ready yet"},
+    },
+)
+async def get_simulation_bundle(
+    request: Request,
+    simulation_host: SimulationHostDep,
+    skill_registry: SkillRegistryDep,
+) -> SimulationBundleResponse | Response:
+    record = await simulation_host.get_record()
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No simulation found",
+        )
+    if record.status != SimulationStatus.READY or record.instance is None:
+        raise SimulationNotReadyError(name=record.name, status=record.status.value)
+    try:
+        files = skill_registry.read_bundle(record.name)
+    except FileNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Skill bundle is incomplete: {e}",
+        )
+
+    payload = SimulationBundleResponse(
+        name=record.name,
+        files=files,
+        sizes={name: len(text.encode("utf-8")) for name, text in files.items()},
+    )
+    accept_encoding = request.headers.get("accept-encoding", "")
+    if "gzip" in accept_encoding.lower():
+        body = gzip.compress(payload.model_dump_json().encode("utf-8"))
+        return Response(
+            content=body,
+            media_type="application/json",
+            headers={"Content-Encoding": "gzip", "Vary": "Accept-Encoding"},
+        )
+    return payload
 
 
 @router.put(
