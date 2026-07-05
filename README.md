@@ -254,6 +254,27 @@ immediately; the utility then polls `GET /api/v1/simulation` until the status
 reaches `ready` (or `failed`) and prints the final response JSON. On failure it
 exits non-zero and writes the error to stderr.
 
+## Get-bundle CLI
+
+`utils/get_bundle.py` exports the full generated skill bundle for the active
+simulation via `GET /api/v1/simulation/bundle` and prints the JSON envelope
+(name + verbatim files + per-file uncompressed sizes) to stdout:
+
+```bash
+uv run python utils/get_bundle.py
+```
+
+| Argument | Description |
+|---|---|
+| `--gzip` | Request a gzip-compressed response and report the compression ratio on stderr. |
+| `--output-dir PATH` | Reconstruct the bundle's verbatim files under `PATH/<name>/`. |
+| `--config PATH` | Path to `harness.yaml` (default: `config/harness.yaml`). |
+
+Diagnostics (compression ratio, files-written notice) go to stderr, so stdout
+stays clean JSON for piping. `--output-dir` writes each file byte-for-byte, so a
+restored `skills-store/<name>/` opens with no regeneration. On failure it exits
+non-zero and writes the error to stderr.
+
 ## Test client
 
 An interactive PatternFly + React test client lives in [`utils/test-client/`](utils/test-client/) with its own Makefile:
@@ -340,6 +361,7 @@ simulation-harness/
 ├── skills-store/           # Generated skills (configured skills folder)
 ├── utils/
 │   ├── simulate.py         # CLI for creating simulations
+│   ├── get_bundle.py       # CLI for exporting the full skill bundle
 │   └── test-client/        # Interactive test client
 ├── Dockerfile
 ├── docker-compose.yml
