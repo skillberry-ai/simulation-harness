@@ -21,6 +21,38 @@ docker compose logs -f harness
 docker compose down
 ```
 
+## Published image & tag policy
+
+CI (`.github/workflows/docker-publish.yml`) builds and publishes **one generic
+image** — there is no per-tool build. It is pushed to the GHCR namespace of the
+repository (or mirror) that runs the workflow:
+
+```
+ghcr.io/<owner>/simulation-harness
+```
+
+Tags produced per build:
+
+| Tag           | When              | Example       | Safe to pin in a cluster? |
+|---------------|-------------------|---------------|---------------------------|
+| `X.Y.Z`       | git tag `vX.Y.Z`  | `0.3.1`       | ✅ immutable by convention |
+| `X.Y`         | git tag `vX.Y.Z`  | `0.3`         | ⚠️ moves with patches      |
+| `sha-<short>` | every build       | `sha-1a2b3c4` | ✅ ties to one commit      |
+| `main`        | push to `main`    | `main`        | ❌ moving                  |
+| `latest`      | push to `main`    | `latest`      | ❌ moving                  |
+
+**Pin by digest in production.** A tag is a mutable pointer; a digest is the
+immutable content hash of the exact build. Every non-PR CI run prints the full
+`...@sha256:...` reference to its **workflow run summary** (for the multi-arch
+build this is the manifest-index digest covering both arches). Consume that:
+
+```
+ghcr.io/<owner>/simulation-harness@sha256:<digest>
+```
+
+At minimum pin an immutable `X.Y.Z` release tag; never deploy `latest` or `main`
+to a cluster.
+
 ## Kubernetes — Kustomize
 
 1. Build and push the image to a registry your cluster can read:
