@@ -79,6 +79,11 @@ def streamable_client() -> Iterator[TestClient]:
     import simulation_harness.config.settings as settings_module
 
     prior_path = os.environ.get("HARNESS_CONFIG_PATH")
+    # The app lifespan calls load_secrets() on TestClient startup, which requires
+    # LLM_API_KEY. CI has no .env, so provide a dummy key (mirrors
+    # test_database_endpoints.py::_harness_env).
+    prior_key = os.environ.get("LLM_API_KEY")
+    os.environ["LLM_API_KEY"] = "test-key"
 
     # Patch the loaded config's transport rather than writing a full YAML file:
     # reload picks up whatever load_config returns, so wrap it to force streamable.
@@ -129,6 +134,10 @@ def streamable_client() -> Iterator[TestClient]:
             os.environ["HARNESS_CONFIG_PATH"] = prior_path
         elif "HARNESS_CONFIG_PATH" in os.environ:
             del os.environ["HARNESS_CONFIG_PATH"]
+        if prior_key is not None:
+            os.environ["LLM_API_KEY"] = prior_key
+        else:
+            os.environ.pop("LLM_API_KEY", None)
 
 
 def test_initialize_handshake_returns_200(streamable_client: TestClient) -> None:
