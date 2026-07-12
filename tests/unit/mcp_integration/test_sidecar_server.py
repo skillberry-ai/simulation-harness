@@ -1,10 +1,13 @@
 """Tests for SidecarMCPServer."""
 
 import asyncio
+import json
 import socket
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi.testclient import TestClient
 
 from simulation_harness.config.models import MCPConfig, TransportType
 from simulation_harness.mcp_integration.sidecar_server import (
@@ -12,6 +15,29 @@ from simulation_harness.mcp_integration.sidecar_server import (
     _check_port_available,
 )
 from simulation_harness.utils.errors import PortInUseError
+
+
+def _spec() -> dict[str, Any]:
+    return {
+        "openapi": "3.0.0",
+        "info": {"title": "Sidecar Test API", "version": "1.0.0"},
+        "paths": {
+            "/ping": {
+                "get": {
+                    "operationId": "ping",
+                    "summary": "Ping",
+                    "responses": {"200": {"description": "OK"}},
+                }
+            }
+        },
+    }
+
+
+def _parse_sse_json(body: str) -> dict[str, Any]:
+    for line in body.splitlines():
+        if line.startswith("data:"):
+            return json.loads(line[len("data:") :].strip())
+    raise AssertionError(f"no SSE data line in response body: {body!r}")
 
 
 class TestCheckPortAvailable:
@@ -135,3 +161,41 @@ class TestSidecarMCPServer:
         sidecar = SidecarMCPServer(mock_instance, 9003, sse_config)
         # Should not raise
         await sidecar.stop()
+
+    def test_streamable_http_app_handles_initialize(self) -> None:
+        """The streamable_http sidecar app completes an MCP initialize (issue #18).
+
+        The old code constructed ``StreamableHTTPServerTransport()`` by hand and
+        every ``POST /mcp`` 500'd with a missing ``mcp_session_id`` TypeError.
+        """
+        instance = MagicMock()
+        instance.spec.openapi_spec = _spec()
+        sidecar = SidecarMCPServer(
+            instance, 9004, MCPConfig(transport=TransportType.STREAMABLE_HTTP)
+        )
+
+        app = sidecar._create_app()
+
+        body = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {"name": "test-client", "version": "1.0.0"},
+            },
+        }
+        with TestClient(app) as client:
+            resp = client.post(
+                "/mcp",
+                json=body,
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json, text/event-stream",
+                },
+            )
+
+        assert resp.status_code == 200, resp.text
+        payload = _parse_sse_json(resp.text)
+        assert payload["result"]["serverInfo"]["name"] == "simulation-harness"

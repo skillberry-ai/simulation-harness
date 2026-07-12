@@ -368,22 +368,17 @@ try:
                 )
             instance = record.instance
 
-            # Create MCP server wrapper and handle streamable HTTP
+            # Create MCP server wrapper and handle streamable HTTP via the SDK
+            # session manager (owns transport + mcp_session_id lifecycle).
             from simulation_harness.mcp_integration.mcp_server import MCPServerWrapper
-            from mcp.server.streamable_http import StreamableHTTPServerTransport
+            from simulation_harness.mcp_integration.transport import (
+                handle_streamable_http_request,
+            )
 
             mcp_server = MCPServerWrapper(instance)
-            http = StreamableHTTPServerTransport()
-
-            async with http.connect(request.scope, request.receive, request._send) as (
-                read_stream,
-                write_stream,
-            ):
-                await mcp_server.server.run(
-                    read_stream,
-                    write_stream,
-                    mcp_server.server.create_initialization_options(),
-                )
+            return await handle_streamable_http_request(
+                mcp_server.server, request.scope, request.receive
+            )
 
         logger.info("Streamable HTTP transport endpoint mounted at /mcp")
 

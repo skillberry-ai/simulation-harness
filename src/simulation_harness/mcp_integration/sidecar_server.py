@@ -149,22 +149,18 @@ class SidecarMCPServer:
                 )
 
         elif self._mcp_config.transport == TransportType.STREAMABLE_HTTP:
-            from mcp.server.streamable_http import StreamableHTTPServerTransport
+            from simulation_harness.mcp_integration.transport import (
+                handle_streamable_http_request,
+            )
 
             instance = self._instance
 
             @app.post("/mcp")
             async def mcp_streamable(request: Request):
                 wrapper = MCPServerWrapper(instance)
-                http = StreamableHTTPServerTransport()
-                async with http.connect(
-                    request.scope, request.receive, request._send
-                ) as (read_stream, write_stream):
-                    await wrapper.server.run(
-                        read_stream,
-                        write_stream,
-                        wrapper.server.create_initialization_options(),
-                    )
+                return await handle_streamable_http_request(
+                    wrapper.server, request.scope, request.receive
+                )
 
         return app
 
