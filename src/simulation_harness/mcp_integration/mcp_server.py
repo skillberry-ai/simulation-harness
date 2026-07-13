@@ -8,6 +8,7 @@ from mcp.types import Tool, TextContent, CallToolResult
 
 from simulation_harness.core.simulation_instance import SimulationInstance
 from simulation_harness.openapi.parser import OpenAPISpec
+from simulation_harness.openapi.tool_generator import generate_tool_from_operation
 from simulation_harness.utils.errors import (
     SessionExpiredError,
     ConcurrentQueueFullError,
@@ -29,9 +30,10 @@ class MCPServerWrapper:
         self.simulation_instance = simulation_instance
         self.server = Server("simulation-harness")
 
-        # Cache parsed operations to avoid repeated parsing
-        spec = OpenAPISpec(self.simulation_instance.spec.openapi_spec)
-        self._operations = spec.operations
+        # Cache the parsed spec (needed to resolve $ref schemas) and its
+        # operations to avoid repeated parsing.
+        self._spec = OpenAPISpec(self.simulation_instance.spec.openapi_spec)
+        self._operations = self._spec.operations
 
         # Register handlers
         self.server.list_tools()(self._handle_list_tools)
@@ -52,70 +54,21 @@ class MCPServerWrapper:
 
         tools = []
         for operation in operations:
-            # Convert OpenAPI operation to MCP tool schema
-            tool = Tool(
-                name=operation.operation_id,
-                description=operation.summary or operation.description or "",
-                inputSchema={
-                    "type": "object",
-                    "properties": self._extract_properties(operation),
-                    "required": self._extract_required(operation),
-                },
+            # Build the tool schema via the shared generator so $ref request
+            # bodies (and nested property $refs) are resolved into concrete
+            # properties. A bare {"$ref": ...} otherwise yields an empty
+            # inputSchema and clients render no argument fields.
+            generated = generate_tool_from_operation(operation, self._spec)
+            tools.append(
+                Tool(
+                    name=generated["name"],
+                    description=generated["description"],
+                    inputSchema=generated["inputSchema"],
+                )
             )
-            tools.append(tool)
 
         logger.debug(f"Returning {len(tools)} tools")
         return tools
-
-    def _extract_properties(self, operation) -> dict[str, Any]:
-        """Extract properties from operation parameters and request body.
-
-        Args:
-            operation: OpenAPI operation
-
-        Returns:
-            Properties dictionary for JSON schema
-        """
-        properties = {}
-
-        # Add parameters
-        for param in operation.parameters:
-            param_name = param.get("name", "")
-            param_schema = param.get("schema", {})
-            if param_name:
-                properties[param_name] = param_schema
-
-        # Add request body properties if present
-        request_schema = operation.get_request_schema()
-        if request_schema and "properties" in request_schema:
-            properties.update(request_schema["properties"])
-
-        return properties
-
-    def _extract_required(self, operation) -> list[str]:
-        """Extract required fields from operation.
-
-        Args:
-            operation: OpenAPI operation
-
-        Returns:
-            List of required field names
-        """
-        required = []
-
-        # Add required parameters
-        for param in operation.parameters:
-            if param.get("required", False):
-                param_name = param.get("name", "")
-                if param_name:
-                    required.append(param_name)
-
-        # Add required request body fields
-        request_schema = operation.get_request_schema()
-        if request_schema and "required" in request_schema:
-            required.extend(request_schema["required"])
-
-        return required
 
     async def _handle_call_tool(
         self, name: str, arguments: dict[str, Any]

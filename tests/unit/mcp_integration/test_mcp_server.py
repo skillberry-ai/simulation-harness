@@ -71,6 +71,61 @@ async def test_list_tools_returns_tool_schemas(
 
 
 @pytest.mark.asyncio
+async def test_list_tools_resolves_request_body_ref(
+    mock_simulation_instance: MagicMock,
+) -> None:
+    """inputSchema must inline properties from a $ref request body.
+
+    Regression: createTask-style operations whose requestBody is a bare
+    ``{"$ref": "#/components/schemas/..."}`` produced an empty properties
+    map, so the test-client UI rendered no argument fields.
+    """
+    mock_simulation_instance.spec.openapi_spec = {
+        "openapi": "3.0.0",
+        "info": {"title": "Tasks API", "version": "1.0.0"},
+        "paths": {
+            "/tasks": {
+                "post": {
+                    "operationId": "createTask",
+                    "summary": "Create a task",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {"$ref": "#/components/schemas/NewTask"}
+                            }
+                        },
+                    },
+                    "responses": {"201": {"description": "Created"}},
+                }
+            }
+        },
+        "components": {
+            "schemas": {
+                "NewTask": {
+                    "type": "object",
+                    "required": ["title"],
+                    "properties": {
+                        "title": {"type": "string"},
+                        "completed": {"type": "boolean", "default": False},
+                    },
+                }
+            }
+        },
+    }
+
+    wrapper = MCPServerWrapper(mock_simulation_instance)
+    tools = await wrapper.list_tools()
+
+    create_task = next(t for t in tools if t["name"] == "createTask")
+    schema = create_task["inputSchema"]
+    assert "title" in schema["properties"]
+    assert "completed" in schema["properties"]
+    assert schema["properties"]["title"]["type"] == "string"
+    assert "title" in schema["required"]
+
+
+@pytest.mark.asyncio
 async def test_call_tool_executes_via_simulation_instance(
     mock_simulation_instance: MagicMock,
 ) -> None:
