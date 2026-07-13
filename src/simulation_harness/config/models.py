@@ -130,6 +130,12 @@ class StartupConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    autostart_enabled: bool = Field(
+        default=False,
+        description="Master switch for boot-time autostart. When False (default), "
+        "the harness boots idle regardless of autostart_simulation or discovered "
+        "skills.",
+    )
     autostart_simulation: Optional[str] = Field(
         default=None,
         description="Skill name to auto-start on boot. If unset, auto-discovers baked skills.",
