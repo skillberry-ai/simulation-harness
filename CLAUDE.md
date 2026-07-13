@@ -123,7 +123,9 @@ Instead, use `Assisted-By` to acknowledge AI assistance without inflating contri
 
     Assisted-By: Claude (Anthropic AI) <noreply@anthropic.com>
 
-Never add `Co-authored-by`, `Made-with`, or similar trailers that GitHub parses as co-authorship.## Code-quality automation
+Never add `Co-authored-by`, `Made-with`, or similar trailers that GitHub parses as co-authorship.
+
+## Code-quality automation
 
 - **Pre-commit** (`.pre-commit-config.yaml`): ruff lint+format, detect-secrets, and Conventional Commit message enforcement. Install once: `uv run pre-commit install --install-hooks && uv run pre-commit install --hook-type commit-msg`.
 - **Agent hook** (`.claude/settings.json` → `.claude/hooks/format-python.sh`): auto-formats and autofixes Python files after every Edit/Write.
