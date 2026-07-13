@@ -303,6 +303,83 @@ def test_operation_parameters(
     assert len(get_op.get_optional_parameters()) == 0
 
 
+def test_path_item_level_parameters_merged_into_each_operation() -> None:
+    """Path-item-level parameters apply to every operation under the path.
+
+    A shared ``{id}`` path parameter declared once at the path-item level must
+    reach every method (get/delete/...), not just an operation that redeclares
+    it — otherwise the generated tool schema omits the path parameter.
+    """
+    spec = _spec_with_operation_ids(
+        {
+            "/tasks/{id}": {
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": True,
+                        "schema": {"type": "string"},
+                    },
+                ],
+                "get": {"operationId": "getTask", "responses": {}},
+                "delete": {"operationId": "deleteTask", "responses": {}},
+            }
+        }
+    )
+
+    for op_id in ("getTask", "deleteTask"):
+        op = spec.get_operation_by_id(op_id)
+        assert op is not None, op_id
+        assert [p["name"] for p in op.parameters] == ["id"]
+        assert [p["name"] for p in op.get_required_parameters()] == ["id"]
+
+
+def test_operation_level_parameter_overrides_path_level() -> None:
+    """An operation-level parameter overrides a path-level one on (name, in)."""
+    spec = _spec_with_operation_ids(
+        {
+            "/tasks/{id}": {
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": True,
+                        "schema": {"type": "string"},
+                        "description": "path-level",
+                    },
+                ],
+                "get": {
+                    "operationId": "getTask",
+                    "parameters": [
+                        {
+                            "name": "id",
+                            "in": "path",
+                            "required": True,
+                            "schema": {"type": "integer"},
+                            "description": "op-level",
+                        },
+                        {
+                            "name": "verbose",
+                            "in": "query",
+                            "required": False,
+                            "schema": {"type": "boolean"},
+                        },
+                    ],
+                    "responses": {},
+                },
+            }
+        }
+    )
+
+    op = spec.get_operation_by_id("getTask")
+    assert op is not None
+    # No duplicate 'id'; op-level entry wins; new query param appended.
+    assert [p["name"] for p in op.parameters] == ["id", "verbose"]
+    by_name = {p["name"]: p for p in op.parameters}
+    assert by_name["id"]["schema"]["type"] == "integer"
+    assert by_name["id"]["description"] == "op-level"
+
+
 def test_get_schema(temp_dir: Path, full_openapi_spec: dict[str, Any]) -> None:
     """Test getting schema definition."""
     spec_file = temp_dir / "openapi.json"

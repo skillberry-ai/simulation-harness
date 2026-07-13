@@ -201,7 +201,14 @@ class OpenAPISpec:
                 used_ids.add(operation_id)
                 summary = operation_data.get("summary")
                 description = operation_data.get("description")
-                parameters = operation_data.get("parameters", [])
+                # Path-item-level parameters apply to every operation under
+                # this path (OpenAPI 3.x Path Item Object); operation-level
+                # parameters override them on matching (name, in). Merge so
+                # shared path params like {id} reach every operation's schema.
+                parameters = self._merge_parameters(
+                    path_item.get("parameters", []),
+                    operation_data.get("parameters", []),
+                )
                 request_body = operation_data.get("requestBody")
                 responses = operation_data.get("responses", {})
                 tags = operation_data.get("tags", [])
@@ -220,6 +227,32 @@ class OpenAPISpec:
                 )
 
                 self.operations.append(operation)
+
+    @staticmethod
+    def _merge_parameters(
+        path_level: list[dict[str, Any]],
+        op_level: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Merge path-item-level and operation-level parameters.
+
+        Operation-level entries override path-level ones sharing the same
+        (name, in) per the OpenAPI spec. $ref parameters (no name/in until
+        resolved) are keyed by their ref string so they are never dropped.
+        """
+        merged: dict[Any, dict[str, Any]] = {}
+        order: list[Any] = []
+        for param in [*path_level, *op_level]:
+            if not isinstance(param, dict):
+                continue
+            key = (
+                param["$ref"]
+                if "$ref" in param
+                else (param.get("name"), param.get("in"))
+            )
+            if key not in merged:
+                order.append(key)
+            merged[key] = param  # later (op-level) wins on collision
+        return [merged[k] for k in order]
 
     @staticmethod
     def _disambiguate_id(operation_id: str, used_ids: set[str]) -> str:
