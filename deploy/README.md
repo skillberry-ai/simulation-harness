@@ -104,6 +104,47 @@ These override the values in the mounted `harness.yaml`:
 
 Secrets (`LLM_API_KEY`, optional `LLM_API_BASE`) come from `harness-secrets` Secret.
 
+## LLM model & provider config
+
+The four LLM settings a consumer typically tunes split across **two** channels:
+
+| Setting | Channel | How to set it |
+|---|---|---|
+| `LLM_API_KEY`            | `harness-secrets` **Secret** (`secret.yaml`) | env var, injected via `envFrom` |
+| `LLM_API_BASE` (optional)| `harness-secrets` **Secret** (`secret.yaml`) | env var, injected via `envFrom` |
+| `skill_generation_model` | `harness-config` **ConfigMap** (`harness.yaml`) | edit the `llm:` block — **no env-var override** |
+| `simulation_model`       | `harness-config` **ConfigMap** (`harness.yaml`) | edit the `llm:` block — **no env-var override** |
+
+The API key/base are read only from the process environment (never from YAML),
+so they belong in the Secret. The two model names live only in `harness.yaml`
+and are **not** in the `HARNESS_*` override table above — the only supported way
+to change them in-cluster is to edit the ConfigMap.
+
+Edit the `llm:` block in `deploy/k8s/configmap.yaml`:
+
+```yaml
+data:
+  harness.yaml: |
+    llm:
+      provider: openai                       # litellm provider family
+      skill_generation_model: azure/gpt-5.4  # one-time, per-spec skill generation
+      simulation_model: azure/gpt-5.4        # hot path — every tools/call
+      temperature: 0
+    # ...
+```
+
+Model strings are **litellm-style** (`azure/gpt-5.4`, `openai/gpt-4o`, …); the
+`provider:` field and the model prefix must be consistent with the endpoint
+`LLM_API_BASE` points at. The two models are independent — e.g. a larger model
+for generation and a cheaper one for the simulation hot path.
+
+**Config is read once at startup.** Editing the ConfigMap (or rotating the
+Secret) has no effect on a running pod. Trigger a restart to pick up changes:
+
+```bash
+kubectl -n simulation-harness rollout restart deploy/simulation-harness
+```
+
 ## Graceful shutdown
 
 On `SIGTERM` (rolling update, `kubectl delete`), the lifespan teardown sets
