@@ -122,7 +122,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     try:
         target = resolve_autostart_target(
-            config.startup.autostart_simulation, skill_registry
+            config.startup.autostart_enabled,
+            config.startup.autostart_simulation,
+            skill_registry,
         )
         if target is not None:
             logger.info(f"Auto-starting simulation from artifacts: {target}")

@@ -19,14 +19,19 @@ class AutostartConfigError(Exception):
 
 
 def resolve_autostart_target(
-    configured: str | None, registry: SkillRegistry
+    enabled: bool, configured: str | None, registry: SkillRegistry
 ) -> str | None:
     """Return the skill name to auto-start, or None to boot idle.
 
     Precedence:
+      0. Autostart disabled → None (wins over an explicit name).
       1. Explicit name → that skill, or AutostartConfigError if incomplete.
       2. No name: 0 skills → None; 1 skill → it; >1 → most recent (+ WARNING).
     """
+    if not enabled:
+        logger.info("Autostart disabled by config; booting idle.")
+        return None
+
     if configured:
         if registry.is_complete(configured):
             return configured

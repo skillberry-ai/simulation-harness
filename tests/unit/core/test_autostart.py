@@ -29,21 +29,21 @@ def registry(tmp_path: Path) -> SkillRegistry:
 
 def test_explicit_name_present(registry: SkillRegistry, tmp_path: Path) -> None:
     _bake(tmp_path, "acme", 1000)
-    assert resolve_autostart_target("acme", registry) == "acme"
+    assert resolve_autostart_target(True, "acme", registry) == "acme"
 
 
 def test_explicit_name_missing_raises(registry: SkillRegistry) -> None:
     with pytest.raises(AutostartConfigError):
-        resolve_autostart_target("ghost", registry)
+        resolve_autostart_target(True, "ghost", registry)
 
 
 def test_no_name_no_skills_returns_none(registry: SkillRegistry) -> None:
-    assert resolve_autostart_target(None, registry) is None
+    assert resolve_autostart_target(True, None, registry) is None
 
 
 def test_no_name_single_skill(registry: SkillRegistry, tmp_path: Path) -> None:
     _bake(tmp_path, "only", 1000)
-    assert resolve_autostart_target(None, registry) == "only"
+    assert resolve_autostart_target(True, None, registry) == "only"
 
 
 def test_no_name_multiple_picks_most_recent(
@@ -51,4 +51,19 @@ def test_no_name_multiple_picks_most_recent(
 ) -> None:
     _bake(tmp_path, "old", 1000)
     _bake(tmp_path, "new", 2000)
-    assert resolve_autostart_target(None, registry) == "new"
+    assert resolve_autostart_target(True, None, registry) == "new"
+
+
+def test_disabled_ignores_explicit_name(
+    registry: SkillRegistry, tmp_path: Path
+) -> None:
+    _bake(tmp_path, "acme", 1000)
+    assert resolve_autostart_target(False, "acme", registry) is None
+
+
+def test_disabled_ignores_discovered_skills(
+    registry: SkillRegistry, tmp_path: Path
+) -> None:
+    _bake(tmp_path, "old", 1000)
+    _bake(tmp_path, "new", 2000)
+    assert resolve_autostart_target(False, None, registry) is None
