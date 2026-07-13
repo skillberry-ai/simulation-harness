@@ -95,6 +95,8 @@ These override the values in the mounted `harness.yaml`:
 | `HARNESS_SERVER_HOST`                          | `server.host`                               |
 | `HARNESS_SERVER_PORT`                          | `server.port`                               |
 | `HARNESS_SKILLS_FOLDER`                        | `skills.folder`                             |
+| `HARNESS_AUTOSTART_ENABLED`                    | `startup.autostart_enabled` (`true`/`false`)|
+| `HARNESS_AUTOSTART_SIMULATION`                 | `startup.autostart_simulation`              |
 | `HARNESS_LOG_LEVEL`                            | `logging.level`                             |
 | `HARNESS_LOG_DESTINATION`                      | `logging.destination_folder`                |
 | `HARNESS_MCP_TRANSPORT`                        | `mcp.transport` (`sse` or `streamable_http`)|

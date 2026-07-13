@@ -114,6 +114,8 @@ def _write_base_config(path: Path) -> None:
             "max_concurrent_queue_depth": 8,
         },
         "mcp": {"transport": "sse"},
+        # Autostart defaults off; these boot tests exercise the enabled paths.
+        "startup": {"autostart_enabled": True},
     }
     path.write_text(yaml.safe_dump(config))
 
@@ -242,3 +244,23 @@ def test_multiple_bundles_unset_autostarts_most_recent(
         final = poll_until_ready(client, timeout=30.0)
         assert final["status"] == "ready", f"expected ready, got: {final}"
         assert final["name"] == "newer"
+
+
+def test_disabled_flag_ignores_baked_skills(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """autostart_enabled=false → boot idle even with a complete baked skill."""
+    skills = tmp_path / "skills-store"
+    skills.mkdir()
+    _bake_skill(skills, "petstore")
+
+    monkeypatch.setenv("HARNESS_AUTOSTART_ENABLED", "false")
+    with booted_harness(tmp_path, skills, monkeypatch) as client:
+        assert client.get("/healthz").status_code == 200
+
+        ready = client.get("/readyz")
+        assert ready.status_code == 200
+        assert ready.json()["status"] == "ready"
+
+        # Skill present, but the flag forced an idle boot.
+        assert client.get("/api/v1/simulation").status_code == 404

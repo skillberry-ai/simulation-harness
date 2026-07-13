@@ -187,9 +187,12 @@ curl -sS -X POST "$BASE/api/v1/simulation/start" \
   -H 'content-type: application/json' -d '{"name": "my-api"}'
 ```
 
-**Auto-start on boot.** Set `startup.autostart_simulation` in
-`config/harness.yaml` (or the `HARNESS_AUTOSTART_SIMULATION` env var) to open a
-session from baked artifacts automatically when the server starts. Resolution
+**Auto-start on boot.** Autostart is **opt-in** and off by default. Set
+`startup.autostart_enabled: true` in `config/harness.yaml` (or
+`HARNESS_AUTOSTART_ENABLED=true`) to open a session from baked artifacts when the
+server starts; with it `false` (the default) the harness always boots idle and
+ignores any baked skills. When enabled, `startup.autostart_simulation` (or the
+`HARNESS_AUTOSTART_SIMULATION` env var) picks which skill starts. Resolution
 precedence when no name is given: **0** baked skills → boot idle; **1** → start
 it; **more than one** → start the most recently generated one and log a warning.
 An explicitly-named skill with no complete artifacts fails readiness (`/readyz`
