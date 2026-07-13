@@ -54,7 +54,7 @@ def test_plan_chunks_groups_by_tag_when_large() -> None:
     assert sum(len(c) for c in chunks) == 50
 
 
-SPEC = {
+SPEC: dict[str, Any] = {
     "openapi": "3.0.0",
     "info": {"title": "Aha", "version": "1"},
     "paths": {
@@ -68,7 +68,7 @@ SPEC = {
 }
 
 
-CREATE_SPEC = {
+CREATE_SPEC: dict[str, Any] = {
     "openapi": "3.0.0",
     "info": {"title": "Tasks", "version": "1"},
     "paths": {
@@ -147,7 +147,7 @@ def test_op_context_surfaces_non_200_success_response() -> None:
     assert resp.get("required") == ["id", "title", "completed"]
 
 
-RESPONSE_REF_SPEC = {
+RESPONSE_REF_SPEC: dict[str, Any] = {
     "openapi": "3.0.0",
     "info": {"title": "Tasks", "version": "1"},
     "paths": {
