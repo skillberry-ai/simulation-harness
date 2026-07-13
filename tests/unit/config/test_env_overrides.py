@@ -112,5 +112,26 @@ class TestApplyEnvOverrides:
         out = apply_env_overrides(_base())
         assert out.startup.autostart_simulation == "acme"
 
+    def test_autostart_enabled_true_override(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("HARNESS_AUTOSTART_ENABLED", "true")
+        out = apply_env_overrides(_base())
+        assert out.startup.autostart_enabled is True
+
+    def test_autostart_enabled_false_override(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("HARNESS_AUTOSTART_ENABLED", "false")
+        out = apply_env_overrides(_base())
+        assert out.startup.autostart_enabled is False
+
+    def test_autostart_enabled_invalid_raises(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("HARNESS_AUTOSTART_ENABLED", "notabool")
+        with pytest.raises(ValueError):
+            apply_env_overrides(_base())
+
 
 # Made with Bob

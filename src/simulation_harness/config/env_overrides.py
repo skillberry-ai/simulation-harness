@@ -20,6 +20,18 @@ def _int_env(name: str) -> int | None:
         raise ValueError(f"{name} must be an integer, got {raw!r}") from e
 
 
+def _bool_env(name: str) -> bool | None:
+    raw = os.getenv(name)
+    if raw is None:
+        return None
+    lowered = raw.strip().lower()
+    if lowered in ("true", "1", "yes"):
+        return True
+    if lowered in ("false", "0", "no"):
+        return False
+    raise ValueError(f"{name} must be a boolean, got {raw!r}")
+
+
 def apply_env_overrides(config: HarnessConfig) -> HarnessConfig:
     """Return a copy of ``config`` with HARNESS_* env vars applied.
 
@@ -30,6 +42,7 @@ def apply_env_overrides(config: HarnessConfig) -> HarnessConfig:
       HARNESS_MCP_TRANSPORT
       HARNESS_SESSIONS_MAX_MESSAGES, HARNESS_SESSIONS_IDLE_TIMEOUT_SECONDS,
       HARNESS_SESSIONS_MAX_CONCURRENT_QUEUE_DEPTH
+      HARNESS_AUTOSTART_ENABLED, HARNESS_AUTOSTART_SIMULATION
     """
     data = config.model_dump()
 
@@ -68,6 +81,10 @@ def apply_env_overrides(config: HarnessConfig) -> HarnessConfig:
     queue_depth = _int_env("HARNESS_SESSIONS_MAX_CONCURRENT_QUEUE_DEPTH")
     if queue_depth is not None:
         data["sessions"]["max_concurrent_queue_depth"] = queue_depth
+
+    autostart_enabled = _bool_env("HARNESS_AUTOSTART_ENABLED")
+    if autostart_enabled is not None:
+        data["startup"]["autostart_enabled"] = autostart_enabled
 
     autostart = os.getenv("HARNESS_AUTOSTART_SIMULATION")
     if autostart is not None:
