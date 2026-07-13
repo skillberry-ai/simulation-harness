@@ -100,7 +100,30 @@ For the common change types, copy the shape of an existing example rather than i
 - **New skill-generation stage** → mirror an existing stage in `src/simulation_harness/skills/generation/stages/` (e.g. `operations.py`); wire it into the pipeline in `skills/generator.py`.
 - **New prompt/skill template** → add a Jinja2 file under `src/simulation_harness/agent/templates/` or `src/simulation_harness/skills/assets/` and register it in `pyproject.toml` `package-data`.
 
-## Code-quality automation
+## DCO Sign-Off (Mandatory)
+
+All commits **must** include a `Signed-off-by` trailer (Developer Certificate of Origin).
+Always use the `-s` flag when committing:
+
+```sh
+git commit -s -m "feat: Add new feature"
+```
+
+This adds a line like `Signed-off-by: Your Name <your@email.com>` to the commit message.
+PRs without DCO sign-off will fail CI checks. To retroactively sign-off existing commits:
+
+```sh
+git rebase --signoff main
+```
+
+## Commit Attribution Policy
+
+When creating git commits, do NOT use `Co-Authored-By` trailers for AI attribution.
+Instead, use `Assisted-By` to acknowledge AI assistance without inflating contributor stats:
+
+    Assisted-By: Claude (Anthropic AI) <noreply@anthropic.com>
+
+Never add `Co-authored-by`, `Made-with`, or similar trailers that GitHub parses as co-authorship.## Code-quality automation
 
 - **Pre-commit** (`.pre-commit-config.yaml`): ruff lint+format, detect-secrets, and Conventional Commit message enforcement. Install once: `uv run pre-commit install --install-hooks && uv run pre-commit install --hook-type commit-msg`.
 - **Agent hook** (`.claude/settings.json` → `.claude/hooks/format-python.sh`): auto-formats and autofixes Python files after every Edit/Write.
