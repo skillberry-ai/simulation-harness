@@ -76,6 +76,9 @@ export function McpPage() {
                     key={selectedTool.name}
                     tool={selectedTool}
                     onSubmit={async (args) => {
+                      // Clear any prior result so a stale response from the
+                      // previous call isn't shown while this one runs.
+                      setResult(null);
                       const res = await runCallTool(selectedTool.name, args);
                       setResult(res ?? null);
                     }}
