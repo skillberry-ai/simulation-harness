@@ -278,6 +278,80 @@ def test_operation_response_schema(
     assert response_schema["type"] == "array"
 
 
+_MULTI_STATUS_SPEC = {
+    "openapi": "3.0.0",
+    "info": {"title": "Tasks", "version": "1"},
+    "paths": {
+        "/tasks": {
+            "post": {
+                "operationId": "createTask",
+                "responses": {
+                    "201": {
+                        "description": "created",
+                        "content": {
+                            "application/json": {
+                                "schema": {"type": "object", "title": "Task"}
+                            }
+                        },
+                    }
+                },
+            }
+        },
+        "/tasks/{id}": {
+            "get": {
+                "operationId": "getTask",
+                "responses": {
+                    "200": {
+                        "description": "ok",
+                        "content": {
+                            "application/json": {
+                                "schema": {"type": "object", "title": "Task200"}
+                            }
+                        },
+                    },
+                    "404": {"description": "missing"},
+                },
+            },
+            "delete": {
+                "operationId": "deleteTask",
+                "responses": {"204": {"description": "deleted"}},
+            },
+        },
+    },
+}
+
+
+def test_success_response_schema_picks_201() -> None:
+    """A create returning 201 (not 200) must still surface its response body."""
+    spec = OpenAPISpec(_MULTI_STATUS_SPEC)
+
+    create = spec.get_operation_by_id("createTask")
+    assert create is not None
+    # The exact-200 lookup misses it...
+    assert create.get_response_schema() is None
+    # ...but the success-response lookup finds the 201 body.
+    schema = create.get_success_response_schema()
+    assert schema is not None
+    assert schema["title"] == "Task"
+
+
+def test_success_response_schema_prefers_2xx_over_error() -> None:
+    spec = OpenAPISpec(_MULTI_STATUS_SPEC)
+    get = spec.get_operation_by_id("getTask")
+    assert get is not None
+    schema = get.get_success_response_schema()
+    assert schema is not None
+    assert schema["title"] == "Task200"
+
+
+def test_success_response_schema_none_when_no_body() -> None:
+    """204 No Content has no body — success lookup returns None, not an error."""
+    spec = OpenAPISpec(_MULTI_STATUS_SPEC)
+    delete = spec.get_operation_by_id("deleteTask")
+    assert delete is not None
+    assert delete.get_success_response_schema() is None
+
+
 def test_operation_parameters(
     temp_dir: Path, full_openapi_spec: dict[str, Any]
 ) -> None:

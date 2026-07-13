@@ -135,6 +135,33 @@ class OpenAPIOperation:
 
         return None
 
+    def get_success_response_schema(self) -> dict[str, Any] | None:
+        """Get the schema of the operation's success (2xx) response.
+
+        Unlike :meth:`get_response_schema`, which resolves one exact status
+        code, this scans for the first 2xx response that carries a body schema
+        — so a create returning ``201`` or an async ``202`` is handled, not
+        just ``200``. Returns ``None`` when the success response has no body
+        (e.g. ``204 No Content``).
+        """
+        for status_code, response in self.responses.items():
+            if not (isinstance(status_code, str) and status_code[:1] == "2"):
+                continue
+            if not isinstance(response, dict):
+                continue
+            content = response.get("content", {})
+            if "application/json" in content:
+                schema = content["application/json"].get("schema")
+                if isinstance(schema, dict):
+                    return schema
+            for _content_type, content_data in content.items():
+                if not isinstance(content_data, dict):
+                    continue
+                schema = content_data.get("schema")
+                if isinstance(schema, dict):
+                    return schema
+        return None
+
     def get_required_parameters(self) -> list[dict[str, Any]]:
         """Get list of required parameters.
 

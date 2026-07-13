@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 try:
     from importlib.resources import files
@@ -39,9 +40,45 @@ def plan_chunks(ir: SpecModel, *, threshold: int) -> list[list[Operation]]:
     return chunks
 
 
+def _resolve_refs(
+    spec: OpenAPISpec, schema: Any, _seen: frozenset = frozenset()
+) -> Any:
+    """Resolve ``$ref`` pointers so the operation prompt sees concrete request /
+    response shapes — their own ``required`` arrays and property types — instead
+    of an opaque ``{"$ref": ...}``.
+
+    Without this the LLM cannot read (for example) a request body's required
+    fields and falls back to the merged entity's ``required`` set, which is
+    derived from the response schema — wrongly marking response-only fields as
+    required inputs. Mirrors the request-body resolution in ``tool_generator``.
+    Recurses into ``properties`` and array ``items``; guards against ref cycles.
+    """
+    if not isinstance(schema, dict):
+        return schema
+    if "$ref" in schema:
+        ref = schema["$ref"]
+        if ref in _seen:
+            return schema  # cyclic ref: stop unrolling
+        resolved = spec.resolve_ref(ref)
+        if resolved is None:
+            return schema
+        return _resolve_refs(spec, resolved, _seen | {ref})
+    result: dict[str, Any] = {}
+    for key, value in schema.items():
+        if key == "properties" and isinstance(value, dict):
+            result[key] = {k: _resolve_refs(spec, v, _seen) for k, v in value.items()}
+        elif key == "items":
+            result[key] = _resolve_refs(spec, value, _seen)
+        else:
+            result[key] = value
+    return result
+
+
 def _op_context(spec: OpenAPISpec, ir: SpecModel, op: Operation) -> dict:
     parsed = spec.get_operation_by_id(op.operation_id)
     entity = next((e for e in ir.entities if e.name == op.entity), None)
+    request_schema = parsed.get_request_schema() if parsed else None
+    response_schema = parsed.get_success_response_schema() if parsed else None
     return {
         "operation_id": op.operation_id,
         "method": op.method,
@@ -49,8 +86,12 @@ def _op_context(spec: OpenAPISpec, ir: SpecModel, op: Operation) -> dict:
         "kind": op.kind.value,
         "patterns": op.patterns,
         "entity": entity.model_dump() if entity else None,
-        "request_schema": parsed.get_request_schema() if parsed else None,
-        "response_schema": parsed.get_response_schema() if parsed else None,
+        "request_schema": _resolve_refs(spec, request_schema)
+        if request_schema
+        else None,
+        "response_schema": _resolve_refs(spec, response_schema)
+        if response_schema
+        else None,
         "required_parameters": parsed.get_required_parameters() if parsed else [],
         "optional_parameters": parsed.get_optional_parameters() if parsed else [],
     }

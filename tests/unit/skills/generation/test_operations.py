@@ -68,6 +68,119 @@ SPEC = {
 }
 
 
+CREATE_SPEC = {
+    "openapi": "3.0.0",
+    "info": {"title": "Tasks", "version": "1"},
+    "paths": {
+        "/tasks": {
+            "post": {
+                "operationId": "createTask",
+                "requestBody": {
+                    "required": True,
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/NewTask"}
+                        }
+                    },
+                },
+                "responses": {
+                    "201": {
+                        "description": "created",
+                        "content": {
+                            "application/json": {
+                                "schema": {"$ref": "#/components/schemas/Task"}
+                            }
+                        },
+                    }
+                },
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "NewTask": {
+                "type": "object",
+                "required": ["title"],
+                "properties": {
+                    "title": {"type": "string"},
+                    "completed": {"type": "boolean", "default": False},
+                },
+            },
+            "Task": {
+                "type": "object",
+                "required": ["id", "title", "completed"],
+                "properties": {
+                    "id": {"type": "string"},
+                    "title": {"type": "string"},
+                    "completed": {"type": "boolean"},
+                },
+            },
+        }
+    },
+}
+
+
+def test_op_context_resolves_request_schema_ref() -> None:
+    """The operation prompt must see the request body's own required set, not an
+    opaque $ref that forces the LLM to fall back to the merged entity's required
+    fields (which come from the response schema)."""
+    ir = _ir([_op("createTask", "/tasks")])
+    ctx = O._op_context(OpenAPISpec(CREATE_SPEC), ir, ir.operations[0])
+
+    req = ctx["request_schema"]
+    assert req is not None
+    assert "$ref" not in req
+    # NewTask requires only title, not completed.
+    assert req.get("required") == ["title"]
+    assert set(req.get("properties", {})) == {"title", "completed"}
+
+
+def test_op_context_surfaces_non_200_success_response() -> None:
+    """createTask responds 201, not 200 — its response shape must still reach
+    the operation prompt (resolved), not be dropped by an exact-200 lookup."""
+    ir = _ir([_op("createTask", "/tasks")])
+    ctx = O._op_context(OpenAPISpec(CREATE_SPEC), ir, ir.operations[0])
+
+    resp = ctx["response_schema"]
+    assert resp is not None
+    assert "$ref" not in resp
+    assert resp.get("required") == ["id", "title", "completed"]
+
+
+RESPONSE_REF_SPEC = {
+    "openapi": "3.0.0",
+    "info": {"title": "Tasks", "version": "1"},
+    "paths": {
+        "/tasks/{id}": {
+            "get": {
+                "operationId": "getTask",
+                "responses": {
+                    "200": {
+                        "description": "ok",
+                        "content": {
+                            "application/json": {
+                                "schema": {"$ref": "#/components/schemas/Task"}
+                            }
+                        },
+                    }
+                },
+            }
+        }
+    },
+    "components": {"schemas": {"Task": CREATE_SPEC["components"]["schemas"]["Task"]}},
+}
+
+
+def test_op_context_resolves_response_schema_ref() -> None:
+    ir = _ir([_op("getTask", "/tasks/{id}")])
+    ctx = O._op_context(OpenAPISpec(RESPONSE_REF_SPEC), ir, ir.operations[0])
+
+    resp = ctx["response_schema"]
+    assert resp is not None
+    assert "$ref" not in resp
+    assert resp.get("required") == ["id", "title", "completed"]
+
+
 async def test_generate_section_requires_headers() -> None:
     ir = _ir([_op("getFeature", "/features/{id}")])
     good = "### /features/{id} GET\nDoes a thing."

@@ -52,7 +52,7 @@ def inline_schema_evidence(spec: OpenAPISpec) -> dict:
         req = op.get_request_schema()
         if req:
             evidence[f"{op.operation_id}__request"] = req
-        resp = op.get_response_schema("200")
+        resp = op.get_success_response_schema()
         if resp:
             props = resp.get("properties") if isinstance(resp, dict) else None
             if isinstance(props, dict) and isinstance(props.get("returns"), dict):
