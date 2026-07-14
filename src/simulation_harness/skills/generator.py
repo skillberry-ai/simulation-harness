@@ -9,6 +9,7 @@ from pydantic import SecretStr
 
 from simulation_harness.config.models import GenerationConfig
 from simulation_harness.skills.generation import run_pipeline
+from simulation_harness.skills.generation.repair import StageTimeoutError
 
 # Backward-compat re-export: these moved to skills.generation.naming, but
 # tests/unit/skills/test_generator.py imports them from this module.
@@ -77,7 +78,10 @@ class SkillGenerator:
             Path to the generated SKILL.md file
 
         Raises:
-            RuntimeError: If skill generation fails (wraps original exception)
+            StageTimeoutError: If a generation stage exceeds its per-stage
+                timeout (propagated unwrapped so the cause is preserved).
+            RuntimeError: If skill generation otherwise fails (wraps the
+                original exception via ``__cause__``).
         """
         temp_dir = skills_folder / f".{simulation_name}.tmp-{uuid.uuid4().hex[:8]}"
         final_dir = skills_folder / simulation_name
@@ -111,6 +115,11 @@ class SkillGenerator:
         except Exception as e:
             if temp_dir.exists():
                 shutil.rmtree(temp_dir)
+            # Preserve the stage-timeout signal — flattening it into a generic
+            # RuntimeError would erase which stage stalled and prevent the
+            # creator from classifying it as a timeout (see issue #19).
+            if isinstance(e, StageTimeoutError):
+                raise
             raise RuntimeError(
                 f"Skill generation failed for '{simulation_name}'"
             ) from e

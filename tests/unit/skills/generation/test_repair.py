@@ -1,10 +1,42 @@
+import asyncio
+
 import pytest
 
 from simulation_harness.skills.generation.repair import (
     GenerationStageError,
+    StageTimeoutError,
+    guard_timeout,
     with_repair,
 )
 from typing import Any
+
+
+async def test_guard_timeout_converts_timeout_to_stage_error() -> None:
+    async def hang() -> None:
+        await asyncio.sleep(10)
+
+    with pytest.raises(StageTimeoutError) as exc:
+        await guard_timeout(hang(), stage="operations", timeout=0.01)
+    assert exc.value.stage == "operations"
+    assert exc.value.timeout == 0.01
+    # Original TimeoutError preserved as the chained cause.
+    assert isinstance(exc.value.__cause__, asyncio.TimeoutError)
+    # Not a TimeoutError subclass — must stay distinct from the outer budget.
+    assert not isinstance(exc.value, TimeoutError)
+
+
+async def test_guard_timeout_returns_result_within_budget() -> None:
+    async def quick() -> str:
+        return "done"
+
+    assert await guard_timeout(quick(), stage="schema", timeout=5) == "done"
+
+
+async def test_guard_timeout_none_disables_guard() -> None:
+    async def quick() -> str:
+        return "ok"
+
+    assert await guard_timeout(quick(), stage="seed", timeout=None) == "ok"
 
 
 async def test_succeeds_on_third_attempt_and_threads_feedback() -> None:

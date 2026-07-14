@@ -7,7 +7,10 @@ from collections.abc import Callable
 
 from simulation_harness.openapi.parser import OpenAPISpec
 from simulation_harness.skills.generation.ir import SpecModel
-from simulation_harness.skills.generation.repair import GenerationStageError
+from simulation_harness.skills.generation.repair import (
+    GenerationStageError,
+    guard_timeout,
+)
 from simulation_harness.skills.generation.stages.analyze.classify import (
     classify_batch,
     plan_classify_batches,
@@ -61,12 +64,6 @@ def inline_schema_evidence(spec: OpenAPISpec) -> dict:
     return evidence
 
 
-async def _guard(coro, timeout):
-    if timeout is None:
-        return await coro
-    return await asyncio.wait_for(coro, timeout=timeout)
-
-
 async def analyze(
     spec_dict: dict,
     slug: str,
@@ -89,8 +86,10 @@ async def analyze(
 
     # Stage 1a — extract data model
     cb("extracting_model")
-    dm = await _guard(
-        extract_data_model(schema_source, slug, extract_llm, retries=retries), timeout
+    dm = await guard_timeout(
+        extract_data_model(schema_source, slug, extract_llm, retries=retries),
+        stage="analyze:extract",
+        timeout=timeout,
     )
     if not dm.entities:
         raise GenerationStageError(
@@ -112,9 +111,10 @@ async def analyze(
     async def run_batch(batch):
         nonlocal done
         async with sem:
-            records = await _guard(
+            records = await guard_timeout(
                 classify_batch(batch, entity_names, classify_llm, retries=retries),
-                timeout,
+                stage="analyze:classify",
+                timeout=timeout,
             )
         async with lock:
             done += 1

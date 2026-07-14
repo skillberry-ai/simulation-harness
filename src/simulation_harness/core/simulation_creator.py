@@ -10,6 +10,7 @@ from simulation_harness.core.simulation_record import (
     SimulationRecord,
     SimulationStatus,
 )
+from simulation_harness.skills.generation.repair import StageTimeoutError
 from simulation_harness.utils.errors import SimulationArtifactsNotFoundError
 from simulation_harness.utils.logging import get_logger
 
@@ -59,6 +60,20 @@ class SimulationCreator:
         """
         try:
             await asyncio.wait_for(self._pipeline(), timeout=self._max_duration_seconds)
+        except StageTimeoutError as e:
+            # A single generation stage stalled (e.g. slow LLM endpoint) and hit
+            # stage_timeout_seconds — distinct from the outer creation budget.
+            logger.warning(
+                "Generation stage %r timed out for %s after %.0fs",
+                e.stage,
+                self._record.name,
+                e.timeout,
+            )
+            self._record.fail(
+                code="stage_timeout",
+                message=str(e),
+                details={"stage": e.stage, "timeout_seconds": e.timeout},
+            )
         except asyncio.TimeoutError:
             logger.warning(
                 "Simulation creation timed out for %s after %.1fs",
@@ -90,7 +105,7 @@ class SimulationCreator:
                 message=str(e),
                 details={
                     "exception": type(e).__name__,
-                    "cause": str(cause) if cause else None,
+                    "cause": repr(cause) if cause else None,
                     "cause_type": type(cause).__name__ if cause else None,
                 },
             )

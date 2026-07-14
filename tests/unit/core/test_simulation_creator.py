@@ -178,6 +178,62 @@ async def test_timeout_marks_failed_with_creation_timeout(
     assert record.error.code == "creation_timeout"
 
 
+async def test_stage_timeout_classified_distinctly(
+    record: Any, skill_registry: MagicMock, instance_factory: Any
+) -> None:
+    """A per-stage timeout is recorded as `stage_timeout`, not `skill_generation_failed`."""
+    from simulation_harness.skills.generation.repair import StageTimeoutError
+
+    factory, _ = instance_factory
+    skill_registry.ensure_skill.side_effect = StageTimeoutError("operations", 420)
+
+    creator = SimulationCreator(
+        record=record,
+        skill_registry=skill_registry,
+        instance_factory=factory,
+        openapi_spec={"openapi": "3.0.0", "info": {"title": "x", "version": "1"}},
+        regenerate=False,
+        max_duration_seconds=10,
+        skill_exists=lambda name: False,
+    )
+
+    await creator.run()
+
+    assert record.status == SimulationStatus.FAILED
+    assert record.error is not None
+    assert record.error.code == "stage_timeout"
+    assert record.error.details["stage"] == "operations"
+    assert record.error.details["timeout_seconds"] == 420
+
+
+async def test_generic_failure_records_repr_of_cause(
+    record: Any, skill_registry: MagicMock, instance_factory: Any
+) -> None:
+    """`details.cause` uses repr, so a cause with an empty str (TimeoutError) survives."""
+    factory, _ = instance_factory
+    err = RuntimeError("Skill generation failed for 'x'")
+    err.__cause__ = TimeoutError()  # str(TimeoutError()) == "" — repr keeps the signal
+    skill_registry.ensure_skill.side_effect = err
+
+    creator = SimulationCreator(
+        record=record,
+        skill_registry=skill_registry,
+        instance_factory=factory,
+        openapi_spec={"openapi": "3.0.0", "info": {"title": "x", "version": "1"}},
+        regenerate=False,
+        max_duration_seconds=10,
+        skill_exists=lambda name: False,
+    )
+
+    await creator.run()
+
+    assert record.status == SimulationStatus.FAILED
+    assert record.error is not None
+    assert record.error.code == "skill_generation_failed"
+    assert record.error.details["cause_type"] == "TimeoutError"
+    assert record.error.details["cause"] == "TimeoutError()"
+
+
 async def test_setup_only_stops_at_generated(
     record: Any, skill_registry: MagicMock, instance_factory: Any
 ) -> None:

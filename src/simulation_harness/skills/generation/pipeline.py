@@ -11,7 +11,11 @@ from pydantic import SecretStr
 from simulation_harness.config.models import GenerationConfig
 from simulation_harness.openapi.parser import OpenAPISpec
 from simulation_harness.skills.generation.llm import StructuredCallError, build_chat
-from simulation_harness.skills.generation.repair import GenerationStageError
+from simulation_harness.skills.generation.repair import (
+    GenerationStageError,
+    StageTimeoutError,
+    guard_timeout,
+)
 from simulation_harness.skills.generation.stages.analyze import analyze
 from simulation_harness.skills.generation.stages.assemble import (
     assemble_skill,
@@ -85,7 +89,7 @@ async def run_pipeline(
     async def one_section(chunk):
         nonlocal done
         async with sem:
-            section = await asyncio.wait_for(
+            section = await guard_timeout(
                 generate_section(
                     spec,
                     ir,
@@ -93,6 +97,7 @@ async def run_pipeline(
                     chat(gen_config.operation, False),
                     retries=gen_config.repair_retries,
                 ),
+                stage="operations",
                 timeout=timeout,
             )
         async with lock:
@@ -102,12 +107,13 @@ async def run_pipeline(
 
     async def schema_task():
         cb("designing_schema")
-        return await asyncio.wait_for(
+        return await guard_timeout(
             generate_schema(
                 ir,
                 chat(gen_config.schema_seed, True),
                 retries=gen_config.repair_retries,
             ),
+            stage="schema",
             timeout=timeout,
         )
 
@@ -116,16 +122,17 @@ async def run_pipeline(
             return []
         cb("imagining_scenarios")
         try:
-            return await asyncio.wait_for(
+            return await guard_timeout(
                 generate_scenarios(
                     ir,
                     chat(gen_config.scenarios, True),
                     count=gen_config.scenarios_count,
                     retries=gen_config.repair_retries,
                 ),
+                stage="scenarios",
                 timeout=timeout,
             )
-        except (GenerationStageError, StructuredCallError, asyncio.TimeoutError) as e:
+        except (GenerationStageError, StructuredCallError, StageTimeoutError) as e:
             cb(f"scenarios_skipped {type(e).__name__}")
             return []
 
@@ -137,7 +144,7 @@ async def run_pipeline(
     # Stage: seed (depends on schema + scenarios)
     scenario_dicts = [s.model_dump() for s in scenarios]
     cb("seeding_database")
-    db = await asyncio.wait_for(
+    db = await guard_timeout(
         generate_seed(
             ir,
             schema,
@@ -145,6 +152,7 @@ async def run_pipeline(
             chat(gen_config.schema_seed, True),
             retries=gen_config.repair_retries,
         ),
+        stage="seed",
         timeout=timeout,
     )
 
