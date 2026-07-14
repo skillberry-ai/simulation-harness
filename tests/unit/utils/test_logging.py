@@ -1,11 +1,19 @@
 """Tests for structured logging utilities."""
 
+import json
+import logging
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import patch
 
 
 from simulation_harness.models.domain import SessionState
-from simulation_harness.utils.logging import log_tool_call, log_tool_call_legacy
+from simulation_harness.utils.logging import (
+    configure_logging,
+    get_logger,
+    log_tool_call,
+    log_tool_call_legacy,
+)
 from typing import Any
 
 
@@ -276,6 +284,44 @@ class TestLogToolCall:
 
         assert log_entry["token_usage"] is None
         assert log_entry["transport"] == "streamable_http"
+
+
+class TestExceptionRendering:
+    """configure_logging must render exc_info as a chained traceback (issue #20)."""
+
+    def test_exc_info_renders_chained_traceback(self, tmp_path: Path) -> None:
+        log_file = tmp_path / "harness.log"
+        root = logging.getLogger()
+        saved_handlers = root.handlers[:]
+        saved_level = root.level
+        try:
+            configure_logging(logging.INFO, log_file)
+            logger = get_logger("test.exc")
+            try:
+                try:
+                    raise TimeoutError()
+                except TimeoutError as cause:
+                    raise RuntimeError("Skill generation failed for 'x'") from cause
+            except RuntimeError:
+                logger.exception("Simulation creation failed for %s", "demo-api")
+
+            for handler in root.handlers:
+                handler.flush()
+            lines = [ln for ln in log_file.read_text().splitlines() if ln.strip()]
+        finally:
+            root.handlers.clear()
+            root.handlers.extend(saved_handlers)
+            root.setLevel(saved_level)
+
+        entry = json.loads(lines[-1])
+        # No raw exc_info tuple; a rendered `exception` string instead.
+        assert "exc_info" not in entry
+        rendered = entry["exception"]
+        assert isinstance(rendered, str)
+        # Both the outer error and the chained cause are visible.
+        assert "RuntimeError: Skill generation failed for 'x'" in rendered
+        assert "TimeoutError" in rendered
+        assert "direct cause" in rendered
 
 
 # Made with Bob

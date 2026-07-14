@@ -71,6 +71,10 @@ def configure_logging(level: int, log_file: Path) -> None:
         foreign_pre_chain=foreign_pre_chain,
         processors=[
             structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+            # Render exc_info (and its chained __cause__) as a readable traceback
+            # string before JSON. format_exc_info omits frame locals, so it does
+            # not leak secrets (LLM_API_KEY etc.) that dict_tracebacks would dump.
+            structlog.processors.format_exc_info,
             structlog.processors.JSONRenderer(),
         ],
     )
