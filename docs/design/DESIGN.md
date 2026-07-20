@@ -579,6 +579,8 @@ cp -r ../mcp-simulation/src/mcp_simulation/prompts/ \
 
 ### 6.4 Skill Generator — Adaptation
 
+> **Superseded.** This section describes the original single-prompt generator, which loaded two packaged prompt assets (`generate_simulator_guide.md`, `skill_generator_prompt.md`) and asked one LLM call to emit `skill_md` + `schema_json` + `db_json` in one shot. It has been replaced by the multi-step pipeline in `skills/generation/` (`run_pipeline`), where each stage — analyze → operations → scenarios → schema → seed → assemble — carries its own prompt under `skills/assets/generation/`. The two monolithic assets were removed as orphaned; the description below is retained only as a record of the initial design.
+
 The upstream `utils/skill-creator/skill_generator.py` reads a YAML config in `__init__` (`_load_config`) for: LLM model/temperature/max_tokens/api_key_env/base_api, the path to a generation guide markdown, the output directory, the `{api_name}-simulation` directory pattern, and a multi-page system prompt. We drop the YAML during the copy and split its contents into three buckets:
 
 1. **LLM knobs** (`model`, `temperature`, `max_tokens`, `api_key_env`, `base_api`) — come from the harness's main YAML (§9) plus the optional `llm_config` override on `POST /api/v1/simulation`.
