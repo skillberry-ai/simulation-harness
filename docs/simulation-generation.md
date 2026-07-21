@@ -92,25 +92,27 @@ spec ─▶  │ Stage 1  ANALYZE                              │
         │   extract data model → classify ops → merge   │ → IR (SpecModel)
         └──────────────────────────────────────────────┘
                               │ IR
-            ┌─────────────────┼──────────────────────────┐
-            ▼                 ▼                           ▼
-    Stage 2/3 OPERATIONS  Stage 4 SCHEMA          Stage 5 SCENARIOS
-    (per-chunk sections)  (JSON Schema)           (optional, best-effort)
-            │                 │                           │
-            └───────┬─────────┴───────────┬───────────────┘
-                    │                     │ schema + scenarios
-                    │                     ▼
-                    │             Stage 6 SEED  (db.json)
-                    │                     │
-                    └──────────┬──────────┘
-                               ▼
-                       Stage 7 ASSEMBLE + VALIDATE → SkillBundle
+        ┌───────────┬─────────┼──────────┬──────────────┐
+        ▼           ▼         ▼          ▼
+ Stage 2/3     Stage 4   Stage 5    Stage 6
+ OPERATIONS    SCHEMA    SCENARIOS  BEHAVIOR
+ (per-chunk    (JSON     (optional, (optional,
+  sections)    Schema)   best-eff.) best-eff.)
+        │           │         │          │
+        │           └────┬────┘          │   schema + scenarios
+        │                ▼               │
+        │        Stage 7 SEED (db.json)  │
+        │                │               │
+        └────────┬───────┴───────────────┘
+                 ▼   (operations + behavior feed the preamble)
+         Stage 8 ASSEMBLE + VALIDATE → SkillBundle
 ```
 
-Stages 3 (operation sections), 4 (schema), and 5 (scenarios) run concurrently
-via a single `asyncio.gather` (`pipeline.py:133`). Stage 6 (seed) waits on
-schema + scenarios; Stage 7 assembles everything and validates before the
-bundle is returned.
+Stages 3 (operation sections), 4 (schema), 5 (scenarios), and 6 (behavior) run
+concurrently via a single `asyncio.gather` (`pipeline.py:159`). Stage 7 (seed)
+waits on schema + scenarios; Stage 8 assembles everything — the preamble
+(including the behavior section), the operation sections, and the seed/schema —
+and validates before the bundle is returned.
 
 **Cross-cutting machinery:**
 
@@ -124,8 +126,9 @@ bundle is returned.
 - **Tuning** — `GenerationConfig` (`config/models.py:87`) holds all knobs:
   per-stage `StageParams`, `concurrency` (5), `chunk_threshold` (40),
   `classify_batch_size` (40), `repair_retries` (2),
-  `stage_timeout_seconds` (120), and the scenario toggles
-  (`scenarios_enabled`, `scenarios_count`). These surface in `harness.yaml`.
+  `stage_timeout_seconds` (120), the scenario toggles
+  (`scenarios_enabled`, `scenarios_count`), and the behavior toggle
+  (`behavior_enabled`). These surface in `harness.yaml`.
 
 ## 3. The stages
 
@@ -157,8 +160,11 @@ groups larger than `chunk_threshold` into chunks. Each chunk is then rendered
 to Markdown by `generate_section` (`stages/operations.py:59`; prompt
 `assets/generation/operation.md`, text mode) — one `### METHOD /path` section
 per operation, documenting the simulated behavior, response shape, and error
-when-clauses. Chunks generate concurrently, bounded by a semaphore
-(`concurrency`).
+when-clauses. Each section also carries a **Derived fields** note listing which
+response fields are computed rather than copied from the request or store; the
+*how* (ranges, formulas, ordering) is deferred to the global behavior section
+(Stage 6), keeping numeric decisions in one authoritative place. Chunks generate
+concurrently, bounded by a semaphore (`concurrency`).
 
 ### Stage 4 — Schema
 
@@ -175,7 +181,27 @@ representative user stories (`title`, `intent`, `operations`). This stage is
 error or timeout is swallowed (`pipeline.py:128`) so it cannot fail the build —
 generation simply proceeds with no scenarios.
 
-### Stage 6 — Seed database
+### Stage 6 — Behavior (optional)
+
+`generate_behavior` (`stages/behavior.py:50`; prompt
+`assets/generation/behavior.md`, text mode) runs once over the whole IR and
+produces a single Markdown block — the authoritative source for *how* the
+simulator computes and keeps values consistent, especially numeric ones. It has
+three fixed subsections: **Numeric Ranges and Ordering** (domain value ranges
+and ordering constraints), **Derivation Rules** (cross-field/cross-operation
+formulas — e.g. a payment amount equals the sum of per-item charges plus fees),
+and **On-Demand Generation Rules** (deterministic generation of unseeded numeric
+records so repeat calls stay stable). This section is injected into the preamble
+under *Realism Guidelines* (Stage 8) and is what the per-operation *Derived
+fields* notes defer to.
+
+Like scenarios, this stage is **best-effort**: it is skipped when
+`behavior_enabled` is false, and any error or timeout is swallowed
+(`pipeline.py:140`, emitting `behavior_skipped …`) so it cannot fail the build —
+the preamble then falls back to its static realism invariants. Its
+`with_repair` validation requires all three subsection headings to be present.
+
+### Stage 7 — Seed database
 
 `generate_seed` (`stages/seed.py:39`; prompt `assets/generation/seed.md`, JSON
 mode) generates the initial `db.json` contents. It depends on the schema and
@@ -183,13 +209,15 @@ the scenarios so the seed data is both schema-valid and rich enough to satisfy
 the example scenarios. The generated data is validated against the Stage-4
 schema (`validate_schema_and_db`) inside the repair loop.
 
-### Stage 7 — Assemble + validate
+### Stage 8 — Assemble + validate
 
 - `render_preamble` (`stages/assemble.py:25`) renders the Jinja2 template
   `assets/generation/skill_preamble.jinja2` with the API name, collection list,
-  and scenarios — producing the frontmatter plus the fixed guidance sections
-  (core principles, state management, schema reference, error handling, realism,
-  example scenarios).
+  scenarios, and the Stage-6 behavior section — producing the frontmatter plus
+  the fixed guidance sections (core principles, state management, schema
+  reference, error handling, realism, example scenarios). The behavior section,
+  when present, is injected under *Realism Guidelines*; when absent (stage
+  disabled or skipped) only the static realism invariants remain.
 - `assemble_skill` (`stages/assemble.py:34`) concatenates the preamble and the
   per-operation sections, and forces the frontmatter `name` to the slug.
 - `validate_bundle` (`stages/assemble.py:39`) is the final gate: it confirms
@@ -227,9 +255,9 @@ The resulting `<skills_folder>/<name>/` directory contains:
 
 | File | Source | Contents |
 |---|---|---|
-| `SKILL.md` | `assemble_skill` (Stage 7) | Agent Skills document: YAML frontmatter (`name`, `description`) + fixed guidance preamble + one Markdown section per operation. This is what the agent reads on demand via progressive disclosure. |
+| `SKILL.md` | `assemble_skill` (Stage 8) | Agent Skills document: YAML frontmatter (`name`, `description`) + guidance preamble (including the Stage-6 behavior section under *Realism Guidelines*) + one Markdown section per operation, each with a *Derived fields* note. This is what the agent reads on demand via progressive disclosure. |
 | `schema.json` | `generate_schema` (Stage 4) | JSON Schema (Draft 2020-12) describing every collection — the authoritative shape of the state store. |
-| `db.json` | `generate_seed` (Stage 6) | Initial seed entities, schema-valid, loaded into the state store on first use. |
+| `db.json` | `generate_seed` (Stage 7) | Initial seed entities, schema-valid, loaded into the state store on first use. |
 | `scenarios.json` | `generate_scenarios` (Stage 5) | Representative user stories (`title`, `intent`, `operations`). **Only written when scenarios were generated** — omitted otherwise. |
 | `api.json` | input spec (`generator.py:103`) | Verbatim copy of the input OpenAPI spec, kept for reference, reuse checks, and so `POST /api/v1/simulation/start` can reconstruct the spec at run time without a fresh submission. |
 
@@ -244,8 +272,9 @@ optional and does not affect reuse.
   exhausting its repair retries or timing out → `GenerationStageError`, which
   fails the creation; `SkillGenerator` wraps it in a `RuntimeError` and removes
   the temp dir.
-- Scenarios are the sole non-fatal stage: failures are logged via the progress
-  callback (`scenarios_skipped …`) and generation continues.
+- Scenarios and behavior are the non-fatal stages: failures are logged via the
+  progress callback (`scenarios_skipped …` / `behavior_skipped …`) and
+  generation continues (behavior falls back to the static realism invariants).
 
 ## Code reference index
 
@@ -259,8 +288,9 @@ optional and does not affect reuse.
 | Stage 2/3 operations | `skills/generation/stages/operations.py` |
 | Stage 4 schema | `skills/generation/stages/schema.py:37` |
 | Stage 5 scenarios | `skills/generation/stages/scenarios.py:42` |
-| Stage 6 seed | `skills/generation/stages/seed.py:39` |
-| Stage 7 assemble | `skills/generation/stages/assemble.py` |
+| Stage 6 behavior | `skills/generation/stages/behavior.py:50` |
+| Stage 7 seed | `skills/generation/stages/seed.py:39` |
+| Stage 8 assemble | `skills/generation/stages/assemble.py` |
 | IR model | `skills/generation/ir.py` |
 | LLM client | `skills/generation/llm.py` |
 | Repair loop | `skills/generation/repair.py:20` |
