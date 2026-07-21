@@ -22,6 +22,7 @@ from simulation_harness.skills.generation.stages.assemble import (
     render_preamble,
     validate_bundle,
 )
+from simulation_harness.skills.generation.stages.behavior import generate_behavior
 from simulation_harness.skills.generation.stages.operations import (
     generate_section,
     plan_chunks,
@@ -136,9 +137,30 @@ async def run_pipeline(
             cb(f"scenarios_skipped {type(e).__name__}")
             return []
 
+    async def behavior_task():
+        if not gen_config.behavior_enabled:
+            return ""
+        cb("describing_behavior")
+        try:
+            return await guard_timeout(
+                generate_behavior(
+                    ir,
+                    chat(gen_config.behavior, False),
+                    retries=gen_config.repair_retries,
+                ),
+                stage="behavior",
+                timeout=timeout,
+            )
+        except (GenerationStageError, StructuredCallError, StageTimeoutError) as e:
+            cb(f"behavior_skipped {type(e).__name__}")
+            return ""
+
     # Stage: schema ∥ scenarios ∥ operation sections
-    schema, scenarios, *sections = await asyncio.gather(
-        schema_task(), scenarios_task(), *[one_section(c) for c in chunks]
+    schema, scenarios, behavior_section, *sections = await asyncio.gather(
+        schema_task(),
+        scenarios_task(),
+        behavior_task(),
+        *[one_section(c) for c in chunks],
     )
 
     # Stage: seed (depends on schema + scenarios)
@@ -158,7 +180,7 @@ async def run_pipeline(
 
     # Stage: assemble + final validation
     cb("assembling")
-    preamble = render_preamble(ir, scenario_dicts)
+    preamble = render_preamble(ir, scenario_dicts, behavior_section)
     skill_md = assemble_skill(ir, preamble, list(sections))
     errors = validate_bundle(ir, skill_md, schema, db)
     if errors:

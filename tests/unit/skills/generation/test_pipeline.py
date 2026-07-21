@@ -90,6 +90,11 @@ async def test_run_pipeline_produces_bundle_with_scenarios() -> None:
             ),
         ),
         patch.object(
+            P,
+            "generate_behavior",
+            AsyncMock(return_value="### Derivation Rules\n- total = sum of prices"),
+        ),
+        patch.object(
             P, "generate_seed", AsyncMock(return_value={"features": [{"id": "f1"}]})
         ),
         patch.object(
@@ -116,6 +121,8 @@ async def test_run_pipeline_produces_bundle_with_scenarios() -> None:
     assert "imagining_scenarios" in phases
     assert "seeding_database" in phases
     assert "assembling" in phases
+    assert "describing_behavior" in phases
+    assert "### Derivation Rules" in bundle.skill_md
 
 
 async def test_run_pipeline_disabled_scenarios_skips_stage() -> None:
@@ -124,6 +131,11 @@ async def test_run_pipeline_disabled_scenarios_skips_stage() -> None:
         patch.object(P, "analyze", AsyncMock(return_value=_ir())),
         patch.object(P, "generate_schema", AsyncMock(return_value=SCHEMA)),
         patch.object(P, "generate_scenarios", AsyncMock()) as mock_scen,
+        patch.object(
+            P,
+            "generate_behavior",
+            AsyncMock(return_value="### Derivation Rules\n- total = sum of prices"),
+        ),
         patch.object(
             P, "generate_seed", AsyncMock(return_value={"features": [{"id": "f1"}]})
         ),
@@ -145,3 +157,32 @@ async def test_run_pipeline_disabled_scenarios_skips_stage() -> None:
     assert bundle.scenarios == []
     assert "## Example Scenarios" not in bundle.skill_md
     assert "imagining_scenarios" not in phases
+
+
+async def test_run_pipeline_disabled_behavior_skips_stage() -> None:
+    phases: list[Any] = []
+    with (
+        patch.object(P, "analyze", AsyncMock(return_value=_ir())),
+        patch.object(P, "generate_schema", AsyncMock(return_value=SCHEMA)),
+        patch.object(P, "generate_scenarios", AsyncMock(return_value=[])),
+        patch.object(P, "generate_behavior", AsyncMock()) as mock_behavior,
+        patch.object(
+            P, "generate_seed", AsyncMock(return_value={"features": [{"id": "f1"}]})
+        ),
+        patch.object(
+            P, "generate_section", AsyncMock(return_value="### /features/{id} GET\nok")
+        ),
+        patch.object(P, "build_chat"),
+    ):
+        bundle = await P.run_pipeline(
+            SPEC,
+            "aha",
+            api_key=None,
+            base_url=None,
+            gen_config=GenerationConfig(behavior_enabled=False),
+            model="m",
+            progress_cb=phases.append,
+        )
+    mock_behavior.assert_not_called()
+    assert "describing_behavior" not in phases
+    assert "### Derivation Rules" not in bundle.skill_md
