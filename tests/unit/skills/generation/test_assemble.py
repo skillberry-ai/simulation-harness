@@ -109,3 +109,4 @@ def test_render_preamble_includes_behavior_section() -> None:
 def test_render_preamble_omits_behavior_when_empty() -> None:
     out = A.render_preamble(_ir(), [])
     assert "### Derivation Rules" not in out
+    assert "\n\n\n" not in out
