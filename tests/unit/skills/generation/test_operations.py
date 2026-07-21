@@ -201,3 +201,9 @@ async def test_generate_section_repairs_missing_header() -> None:
             OpenAPISpec(SPEC), ir, ir.operations, llm=object(), retries=1
         )
     assert "### /features/{id} GET" in section
+
+
+def test_operation_prompt_requests_derived_fields() -> None:
+    from simulation_harness.skills.generation.stages.operations import _load_prompt
+
+    assert "Derived fields" in _load_prompt()

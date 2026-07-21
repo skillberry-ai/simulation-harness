@@ -12,5 +12,11 @@ for list-style operations, and idempotency behavior where the operation kind or
 patterns require it. Prefer bullet lists and when-clauses over prose. Reference
 the store collections and entity fields exactly as named; do not invent fields.
 
+Also include a **Derived fields** subsection: for each response field whose
+value is COMPUTED rather than copied from the request or read unchanged from the
+store, name the field and give a one-line formula or relationship (defer numeric
+ranges and ordering to the skill's global Realism Guidelines). Write `none` when
+the operation copies or reads all of its output fields.
+
 Output only the markdown section(s) — no preamble, no fences around the whole
 output. If a `feedback` section is present, fix exactly those problems.
