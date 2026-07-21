@@ -7,6 +7,7 @@ from pydantic import SecretStr
 
 from simulation_harness.skills.generation.ir import Entity, StoreMetadata
 from simulation_harness.skills.generation.stages import analyze as A
+from simulation_harness.skills.generation.stages import behavior as B
 from simulation_harness.skills.generation.stages import operations as O
 from simulation_harness.skills.generation.stages import schema as SC
 from simulation_harness.skills.generation.stages import scenarios as SCN
@@ -62,6 +63,11 @@ SCHEMA = {
         }
     },
 }
+BEHAVIOR_SECTION = (
+    "### Numeric Ranges and Ordering\n- id is an opaque string\n\n"
+    "### Derivation Rules\n- none\n\n"
+    "### On-Demand Generation Rules\n- none\n"
+)
 
 
 async def test_full_generation_writes_valid_bundle(tmp_path: Path) -> None:
@@ -95,6 +101,7 @@ async def test_full_generation_writes_valid_bundle(tmp_path: Path) -> None:
             "call_text",
             AsyncMock(return_value="### /features/{id} GET\nReturns a feature."),
         ),
+        patch.object(B, "call_text", AsyncMock(return_value=BEHAVIOR_SECTION)),
         patch("simulation_harness.skills.generation.pipeline.build_chat"),
     ):
         gen = SkillGenerator(api_key=SecretStr("k"))
@@ -108,6 +115,7 @@ async def test_full_generation_writes_valid_bundle(tmp_path: Path) -> None:
     assert "name: aha" in skill_md
     assert "### /features/{id} GET" in skill_md
     assert "## Example Scenarios" in skill_md
+    assert "### Derivation Rules" in skill_md
     schema = json.loads((skill_dir / "schema.json").read_text())
     db = json.loads((skill_dir / "db.json").read_text())
     scenarios = json.loads((skill_dir / "scenarios.json").read_text())
@@ -136,6 +144,7 @@ async def test_full_generation_disabled_scenarios(tmp_path: Path) -> None:
             "call_text",
             AsyncMock(return_value="### /features/{id} GET\nReturns a feature."),
         ),
+        patch.object(B, "call_text", AsyncMock(return_value=BEHAVIOR_SECTION)),
         patch("simulation_harness.skills.generation.pipeline.build_chat"),
     ):
         gen = SkillGenerator(
