@@ -123,6 +123,14 @@ class GenerationConfig(BaseModel):
     scenarios_count: int = Field(
         5, gt=0, description="Number of example scenarios to generate"
     )
+    behavior: StageParams = Field(
+        default_factory=lambda: StageParams(temperature=0.3, max_tokens=3000)
+    )
+    behavior_enabled: bool = Field(
+        True,
+        description="Generate a global behavior/realism section (numeric ranges, "
+        "derivation rules) injected into the skill preamble",
+    )
 
 
 class StartupConfig(BaseModel):

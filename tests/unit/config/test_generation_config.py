@@ -45,6 +45,13 @@ def test_generation_overrides_and_extra_forbidden() -> None:
         GenerationConfig(unknown_field=1)  # type: ignore[call-arg]
 
 
+def test_generation_behavior_defaults() -> None:
+    cfg = GenerationConfig()
+    assert cfg.behavior_enabled is True
+    assert cfg.behavior.temperature == 0.3
+    assert cfg.behavior.max_tokens == 3000
+
+
 def test_harness_config_defaults_generation(
     minimal_harness_dict: dict[str, Any],
 ) -> None:
