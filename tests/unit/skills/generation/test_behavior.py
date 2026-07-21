@@ -62,3 +62,9 @@ async def test_generate_behavior_rejects_missing_heading() -> None:
     with patch.object(B, "call_text", AsyncMock(return_value=bad)):
         with pytest.raises(GenerationStageError):
             await B.generate_behavior(_ir(), llm=object(), retries=0)
+
+
+def test_behavior_prompt_contains_required_headings() -> None:
+    prompt = B._load_prompt()
+    for heading in B.REQUIRED_HEADINGS:
+        assert heading in prompt

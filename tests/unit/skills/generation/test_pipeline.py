@@ -11,6 +11,7 @@ from simulation_harness.skills.generation.ir import (
     SpecModel,
     StoreMetadata,
 )
+from simulation_harness.skills.generation.repair import GenerationStageError
 
 SPEC = {
     "openapi": "3.0.0",
@@ -186,3 +187,36 @@ async def test_run_pipeline_disabled_behavior_skips_stage() -> None:
     mock_behavior.assert_not_called()
     assert "describing_behavior" not in phases
     assert "### Derivation Rules" not in bundle.skill_md
+
+
+async def test_run_pipeline_behavior_stage_failure_skips_gracefully() -> None:
+    phases: list[Any] = []
+    with (
+        patch.object(P, "analyze", AsyncMock(return_value=_ir())),
+        patch.object(P, "generate_schema", AsyncMock(return_value=SCHEMA)),
+        patch.object(P, "generate_scenarios", AsyncMock(return_value=[])),
+        patch.object(
+            P,
+            "generate_behavior",
+            AsyncMock(side_effect=GenerationStageError("behavior", ["boom"])),
+        ),
+        patch.object(
+            P, "generate_seed", AsyncMock(return_value={"features": [{"id": "f1"}]})
+        ),
+        patch.object(
+            P, "generate_section", AsyncMock(return_value="### /features/{id} GET\nok")
+        ),
+        patch.object(P, "build_chat"),
+    ):
+        bundle = await P.run_pipeline(
+            SPEC,
+            "aha",
+            api_key=None,
+            base_url=None,
+            gen_config=GenerationConfig(),
+            model="m",
+            progress_cb=phases.append,
+        )
+    assert "### Derivation Rules" not in bundle.skill_md
+    assert any(p.startswith("behavior_skipped") for p in phases)
+    assert "assembling" in phases
