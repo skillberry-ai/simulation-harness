@@ -96,3 +96,16 @@ def test_render_preamble_includes_scenarios_section() -> None:
 def test_render_preamble_omits_scenarios_section_when_empty() -> None:
     out = A.render_preamble(_ir(), [])
     assert "## Example Scenarios" not in out
+
+
+def test_render_preamble_includes_behavior_section() -> None:
+    out = A.render_preamble(
+        _ir(), [], behavior_section="### Derivation Rules\n- total = sum"
+    )
+    assert "### Derivation Rules" in out
+    assert "- total = sum" in out
+
+
+def test_render_preamble_omits_behavior_when_empty() -> None:
+    out = A.render_preamble(_ir(), [])
+    assert "### Derivation Rules" not in out
