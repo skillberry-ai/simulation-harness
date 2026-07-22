@@ -1,0 +1,155 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Circle API",
+    "version": "1.0.0",
+    "description": "Manage circles. A circle can be created with a radius; its scope (circumference) and area can be read and increased."
+  },
+  "paths": {
+    "/circles": {
+      "post": {
+        "operationId": "create_circle",
+        "summary": "Create a circle with a given radius",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["radius"],
+                "properties": {
+                  "radius": { "type": "number", "description": "Radius of the circle" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created circle.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "circle_id": { "type": "string" } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/circles/{circle_id}/scope": {
+      "get": {
+        "operationId": "get_scope",
+        "summary": "Get the scope (circumference) of a circle",
+        "parameters": [
+          { "name": "circle_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "The scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "scope": { "type": "number" } }
+                }
+              }
+            }
+          },
+          "404": { "description": "Circle not found." }
+        }
+      },
+      "post": {
+        "operationId": "increase_scope",
+        "summary": "Increase the scope (circumference) of a circle by a delta",
+        "parameters": [
+          { "name": "circle_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["scope_delta"],
+                "properties": { "scope_delta": { "type": "number" } }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The new scope after the increase.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "scope": { "type": "number" } }
+                }
+              }
+            }
+          },
+          "404": { "description": "Circle not found." }
+        }
+      }
+    },
+    "/circles/{circle_id}/area": {
+      "get": {
+        "operationId": "get_area",
+        "summary": "Get the area of a circle",
+        "parameters": [
+          { "name": "circle_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "The area.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "area": { "type": "number" } }
+                }
+              }
+            }
+          },
+          "404": { "description": "Circle not found." }
+        }
+      },
+      "post": {
+        "operationId": "increase_area",
+        "summary": "Increase the area of a circle by a delta",
+        "parameters": [
+          { "name": "circle_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["area_delta"],
+                "properties": { "area_delta": { "type": "number" } }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The new area after the increase.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "area": { "type": "number" } }
+                }
+              }
+            }
+          },
+          "404": { "description": "Circle not found." }
+        }
+      }
+    }
+  }
+}
