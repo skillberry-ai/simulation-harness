@@ -24,12 +24,35 @@ def get_server_url(config: dict) -> str:
     return f"http://{host}:{port}"
 
 
+def stop_running_simulation(server_url: str) -> None:
+    """Delete any active simulation so a fresh one can be created.
+
+    A running simulation would make POST /simulation fail with 409, so stop it
+    first. A 404 means nothing was running, which is fine.
+    """
+    url = f"{server_url}/api/v1/simulation"
+    try:
+        with urlopen(Request(url, method="DELETE")):
+            print("Stopped running simulation.")
+    except HTTPError as e:
+        if e.code == 404:
+            return
+        body_text = e.read().decode("utf-8")
+        print(f"Error stopping simulation {e.code}: {body_text}", file=sys.stderr)
+        sys.exit(1)
+    except URLError as e:
+        print(f"Connection error: {e.reason}", file=sys.stderr)
+        sys.exit(1)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Create a simulation in the harness from an OpenAPI JSON file."
     )
     parser.add_argument("openapi_file", type=Path, help="Path to OpenAPI JSON file")
-    parser.add_argument("--name", help="Simulation name override (default: spec info.title)")
+    parser.add_argument(
+        "--name", help="Simulation name override (default: spec info.title)"
+    )
     parser.add_argument(
         "--regenerate-skill",
         action="store_true",
@@ -43,7 +66,9 @@ def main() -> None:
     args = parser.parse_args()
 
     config_path: Path = (
-        args.config if args.config else Path(__file__).parent.parent / "config" / "harness.yaml"
+        args.config
+        if args.config
+        else Path(__file__).parent.parent / "config" / "harness.yaml"
     )
 
     if not config_path.exists():
@@ -57,10 +82,15 @@ def main() -> None:
     config = load_config(config_path)
     server_url = get_server_url(config)
 
+    stop_running_simulation(server_url)
+
     with open(args.openapi_file) as f:
         openapi_spec = json.load(f)
 
-    body: dict = {"openapi_spec": openapi_spec, "regenerate_skill": args.regenerate_skill}
+    body: dict = {
+        "openapi_spec": openapi_spec,
+        "regenerate_skill": args.regenerate_skill,
+    }
     if args.name:
         body["name"] = args.name
 
@@ -68,7 +98,9 @@ def main() -> None:
     data = json.dumps(body).encode("utf-8")
     import time
 
-    req = Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
+    req = Request(
+        url, data=data, headers={"Content-Type": "application/json"}, method="POST"
+    )
     try:
         with urlopen(req) as response:
             declared = json.loads(response.read())
