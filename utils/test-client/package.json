@@ -25,7 +25,7 @@
     "vitest": "^3.2.6"
   },
   "overrides": {
-    "dompurify": "3.4.11",
+    "dompurify": "3.4.12",
     "vite": "^6.4.3",
     "postcss": "^8.5.18",
     "fast-uri": "^3.1.4",
