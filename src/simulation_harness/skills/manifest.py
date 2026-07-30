@@ -25,6 +25,8 @@ MANIFEST_VERSION = 1
 
 # Artifacts a manifest may describe, in the order they appear in `files`.
 # manifest.json is absent by construction: it cannot digest itself.
+# Keep in sync with `_BUNDLE_FILES` in core/skill_registry.py: that list is the
+# authority on what belongs to a bundle, this one on what the manifest digests.
 _SUBJECTS = (
     "SKILL.md",
     "schema.json",
@@ -53,7 +55,18 @@ def canonical_spec_digest(openapi_spec: dict[str, Any]) -> str:
 
 
 def _rfc3339_utc(moment: datetime) -> str:
-    """Format as RFC 3339 UTC with a trailing 'Z' and second precision."""
+    """Format as RFC 3339 UTC with a trailing 'Z' and second precision.
+
+    A tz-naive ``moment`` is treated as already UTC rather than passed to
+    ``astimezone``, which would instead interpret it as *local* time and
+    silently shift it by the host's UTC offset. Manifest generation must
+    never fail or raise here, so we normalize instead of rejecting naive
+    input; today's only caller passes an aware UTC datetime, but a future
+    caller passing e.g. ``datetime.utcnow()`` must not get a silently wrong
+    ``generatedAt``.
+    """
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
     return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
@@ -90,8 +103,11 @@ def build_manifest(
     """Build the provenance manifest for the artifacts in ``artifact_dir``.
 
     Digests are read from the bytes on disk rather than re-serialized from
-    in-memory values, so they always describe exactly what was written. Every
-    sibling artifact must therefore already exist when this is called.
+    in-memory values, so they always describe exactly what was written. The
+    caller is expected to have written the sibling artifacts first — that is
+    why digests come off disk rather than in-memory content. Any subject file
+    (see ``_SUBJECTS``) that is absent from ``artifact_dir`` is simply omitted
+    from the returned ``files`` map rather than causing an error.
 
     ``generated_at`` is a parameter rather than a clock read inside the function
     so callers and tests control the timestamp.

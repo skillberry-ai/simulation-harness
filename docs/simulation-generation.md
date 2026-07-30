@@ -72,7 +72,7 @@ The two HTTP paths route through `SimulationCreator._pipeline`
 `ensure_skill` directly. Only the combined path continues past generation into
 instance startup.
 
-**Reuse gate.** `SkillRegistry.ensure_skill` (`core/skill_registry.py:31`)
+**Reuse gate.** `SkillRegistry.ensure_skill` (`core/skill_registry.py:46`)
 reuses an existing skill only if all four core files (`SKILL.md`,
 `schema.json`, `db.json`, `api.json`) are present *and* `regenerate` is false.
 Otherwise it regenerates. (`regenerate` originates from the `regenerate_skill`
@@ -244,7 +244,7 @@ keeps `SKILL.md`, `schema.json`, and `db.json` mutually coherent.
 
 ## 5. Output files
 
-`SkillGenerator.generate_skill` (`skills/generator.py:51`) writes the bundle
+`SkillGenerator.generate_skill` (`skills/generator.py:55`) writes the bundle
 **atomically**: it writes into a temp dir
 (`<skills_folder>/.<name>.tmp-<uuid>/`), then `rename`s it onto
 `<skills_folder>/<name>/`. On any failure the temp dir is removed, so a
@@ -259,11 +259,15 @@ The resulting `<skills_folder>/<name>/` directory contains:
 | `schema.json` | `generate_schema` (Stage 4) | JSON Schema (Draft 2020-12) describing every collection — the authoritative shape of the state store. |
 | `db.json` | `generate_seed` (Stage 7) | Initial seed entities, schema-valid, loaded into the state store on first use. |
 | `scenarios.json` | `generate_scenarios` (Stage 5) | Representative user stories (`title`, `intent`, `operations`). **Only written when scenarios were generated** — omitted otherwise. |
-| `api.json` | input spec (`generator.py:103`) | Verbatim copy of the input OpenAPI spec, kept for reference, reuse checks, and so `POST /api/v1/simulation/start` can reconstruct the spec at run time without a fresh submission. |
+| `api.json` | input spec (`generator.py:111`) | Verbatim copy of the input OpenAPI spec, kept for reference, reuse checks, and so `POST /api/v1/simulation/start` can reconstruct the spec at run time without a fresh submission. |
+| `manifest.json` | `build_manifest` (`skills/manifest.py:81`) | Provenance for the bundle: harness version, model, canonical input-spec digest, generation timestamp, plus a sha256 digest and byte size per sibling artifact. Purely for reproducibility/debugging — **optional, never required for reuse**. |
 
 The reuse gate (§2) treats a skill as complete only when `SKILL.md`,
-`schema.json`, `db.json`, and `api.json` all exist; `scenarios.json` is
-optional and does not affect reuse.
+`schema.json`, `db.json`, and `api.json` all exist; `scenarios.json` and
+`manifest.json` are optional and do not affect reuse — `manifest.json` is not
+in `_REQUIRED_FILES`, so `is_complete()` is unaffected by its presence or
+absence. The ten skills that predate provenance support have no
+`manifest.json` and remain complete and reusable.
 
 ## 6. Failure behavior (summary)
 
@@ -281,8 +285,8 @@ optional and does not affect reuse.
 | Concern | Location |
 |---|---|
 | Route + input validation | `api/v1/simulations.py:119` |
-| Reuse vs generate gate | `core/skill_registry.py:31` |
-| Atomic file writer | `skills/generator.py:51` |
+| Reuse vs generate gate | `core/skill_registry.py:46` |
+| Atomic file writer | `skills/generator.py:55` |
 | Pipeline orchestrator | `skills/generation/pipeline.py:42` |
 | Stage 1 analyze | `skills/generation/stages/analyze/__init__.py:70` |
 | Stage 2/3 operations | `skills/generation/stages/operations.py` |

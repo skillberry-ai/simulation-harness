@@ -15,6 +15,8 @@ from simulation_harness.utils.logging import get_logger
 logger = get_logger(__name__)
 
 _REQUIRED_FILES = ("SKILL.md", "schema.json", "db.json", "api.json")
+# Keep in sync with `_SUBJECTS` in skills/manifest.py: that list is the
+# authority on what the manifest digests, this one on what belongs to a bundle.
 _BUNDLE_FILES = (
     "SKILL.md",
     "schema.json",

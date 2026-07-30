@@ -459,7 +459,11 @@ async def get_simulation_schema(
         "(`Content-Encoding: gzip`). Read-only; no session side effects.\n\n"
         "Note: a consumer with a size cap (e.g. a 1 MiB Kubernetes ConfigMap) must "
         "check the returned sizes itself — the harness never truncates or rejects "
-        "on size."
+        "on size.\n\n"
+        "When present, `manifest.json` records the sha256 digest of `db.json` as "
+        "generated; if `PUT /api/v1/simulation/database` has since replaced "
+        "`db.json`, that digest will no longer match the returned `db.json` bytes "
+        "— this is expected drift, not a corrupt bundle."
     ),
     responses={
         404: {"description": "No simulation exists"},

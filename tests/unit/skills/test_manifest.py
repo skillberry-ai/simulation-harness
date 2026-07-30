@@ -103,6 +103,24 @@ def test_generated_at_normalises_non_utc_input(artifacts: Path) -> None:
     assert manifest["skill"]["generatedAt"] == "2026-07-30T14:22:31Z"
 
 
+def test_generated_at_treats_naive_input_as_already_utc(artifacts: Path) -> None:
+    """A tz-naive datetime is treated as UTC, not shifted by the host offset.
+
+    ``astimezone`` alone would interpret a naive value as *local* time and
+    silently shift it; a naive ``generated_at`` must render unchanged instead.
+    """
+    manifest = build_manifest(
+        artifacts,
+        skill_name="demo",
+        openapi_spec=SPEC,
+        model="gpt-4",
+        harness_version="0.1.0",
+        generated_at=datetime(2026, 7, 30, 14, 22, 31),
+    )
+
+    assert manifest["skill"]["generatedAt"] == "2026-07-30T14:22:31Z"
+
+
 def test_source_records_spec_title_version_and_canonical_digest(
     artifacts: Path,
 ) -> None:
