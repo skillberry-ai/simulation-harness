@@ -62,8 +62,8 @@ class SimulationBundleResponse(BaseModel):
         ...,
         description=(
             "Bundle filename -> verbatim file contents. Always includes SKILL.md, "
-            "schema.json, db.json, api.json; scenarios.json is present only when it "
-            "exists on disk."
+            "schema.json, db.json, api.json; scenarios.json and manifest.json are "
+            "present only when they exist on disk."
         ),
     )
     sizes: dict[str, int] = Field(

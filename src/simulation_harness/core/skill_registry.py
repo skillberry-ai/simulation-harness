@@ -15,7 +15,19 @@ from simulation_harness.utils.logging import get_logger
 logger = get_logger(__name__)
 
 _REQUIRED_FILES = ("SKILL.md", "schema.json", "db.json", "api.json")
-_BUNDLE_FILES = ("SKILL.md", "schema.json", "db.json", "scenarios.json", "api.json")
+_BUNDLE_FILES = (
+    "SKILL.md",
+    "schema.json",
+    "db.json",
+    "scenarios.json",
+    "api.json",
+    "manifest.json",
+)
+# Bundle files that may legitimately be absent. scenarios.json is written only
+# when the scenarios stage produced output; manifest.json exists only for skills
+# generated after provenance was introduced. Neither is in _REQUIRED_FILES, so
+# neither absence makes a skill incomplete.
+_OPTIONAL_BUNDLE_FILES = frozenset({"scenarios.json", "manifest.json"})
 
 
 class SkillRegistry:
@@ -137,8 +149,9 @@ class SkillRegistry:
         """Return verbatim contents of all bundle files for a skill.
 
         Required files (SKILL.md, schema.json, db.json, api.json) must exist;
-        scenarios.json is included only when present. Values are the exact
-        on-disk text, so writing them back reproduces the files byte-for-byte.
+        scenarios.json and manifest.json are included only when present. Values
+        are the exact on-disk text, so writing them back reproduces the files
+        byte-for-byte.
 
         Raises:
             FileNotFoundError: if a required file is missing.
@@ -147,8 +160,8 @@ class SkillRegistry:
         for fname in _BUNDLE_FILES:
             path = self._skill_path(simulation_name, fname)
             if not path.exists():
-                if fname == "scenarios.json":
-                    continue  # optional
+                if fname in _OPTIONAL_BUNDLE_FILES:
+                    continue
                 raise FileNotFoundError(
                     f"{fname} not found for skill '{simulation_name}'"
                 )

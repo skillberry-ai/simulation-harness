@@ -689,3 +689,37 @@ def test_read_bundle_round_trips_to_complete_dir(
     for fname, text in expected.items():
         assert (restore_dir / fname).read_text() == text
     assert SkillRegistry(restore_root, mock_generator).is_complete("demo") is True
+
+
+def test_read_bundle_includes_manifest_when_present(
+    temp_skills_dir: Path, mock_generator: MagicMock
+) -> None:
+    skill_dir = temp_skills_dir / "demo"
+    _write_bundle(skill_dir)
+    (skill_dir / "manifest.json").write_text('{\n  "manifestVersion": 1\n}')
+    registry = SkillRegistry(temp_skills_dir, mock_generator)
+
+    bundle = registry.read_bundle("demo")
+
+    assert bundle["manifest.json"] == '{\n  "manifestVersion": 1\n}'
+
+
+def test_read_bundle_omits_absent_manifest(
+    temp_skills_dir: Path, mock_generator: MagicMock
+) -> None:
+    """Skills generated before provenance existed have no manifest."""
+    _write_bundle(temp_skills_dir / "demo")
+    registry = SkillRegistry(temp_skills_dir, mock_generator)
+
+    assert "manifest.json" not in registry.read_bundle("demo")
+
+
+def test_skill_without_manifest_is_still_complete(
+    temp_skills_dir: Path, mock_generator: MagicMock
+) -> None:
+    """manifest.json is optional: its absence must never trigger regeneration."""
+    _write_bundle(temp_skills_dir / "demo")
+    registry = SkillRegistry(temp_skills_dir, mock_generator)
+
+    assert registry.is_complete("demo") is True
+    assert registry.missing_files("demo") == []

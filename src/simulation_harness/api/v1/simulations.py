@@ -450,10 +450,10 @@ async def get_simulation_schema(
     summary="Export the full generated skill bundle for the active skill",
     description=(
         "Return every artifact of the active skill's bundle in one response: "
-        "`SKILL.md`, `schema.json`, `db.json`, `api.json`, and `scenarios.json` "
-        "when present. Each file is a verbatim string, so writing the values back "
-        "to a fresh `skills-store/<name>/` reproduces the bundle byte-for-byte and "
-        "`start` opens a session with no regeneration.\n\n"
+        "`SKILL.md`, `schema.json`, `db.json`, `api.json`, plus `scenarios.json` "
+        "and `manifest.json` when present. Each file is a verbatim string, so "
+        "writing the values back to a fresh `skills-store/<name>/` reproduces the "
+        "bundle byte-for-byte and `start` opens a session with no regeneration.\n\n"
         "`sizes` reports each file's uncompressed byte length. Send "
         "`Accept-Encoding: gzip` to receive a gzip-compressed body "
         "(`Content-Encoding: gzip`). Read-only; no session side effects.\n\n"
