@@ -72,7 +72,7 @@ The two HTTP paths route through `SimulationCreator._pipeline`
 `ensure_skill` directly. Only the combined path continues past generation into
 instance startup.
 
-**Reuse gate.** `SkillRegistry.ensure_skill` (`core/skill_registry.py:46`)
+**Reuse gate.** `SkillRegistry.ensure_skill` (`core/skill_registry.py:48`)
 reuses an existing skill only if all four core files (`SKILL.md`,
 `schema.json`, `db.json`, `api.json`) are present *and* `regenerate` is false.
 Otherwise it regenerates. (`regenerate` originates from the `regenerate_skill`
@@ -260,7 +260,7 @@ The resulting `<skills_folder>/<name>/` directory contains:
 | `db.json` | `generate_seed` (Stage 7) | Initial seed entities, schema-valid, loaded into the state store on first use. |
 | `scenarios.json` | `generate_scenarios` (Stage 5) | Representative user stories (`title`, `intent`, `operations`). **Only written when scenarios were generated** — omitted otherwise. |
 | `api.json` | input spec (`generator.py:111`) | Verbatim copy of the input OpenAPI spec, kept for reference, reuse checks, and so `POST /api/v1/simulation/start` can reconstruct the spec at run time without a fresh submission. |
-| `manifest.json` | `build_manifest` (`skills/manifest.py:81`) | Provenance for the bundle: harness version, model, canonical input-spec digest, generation timestamp, plus a sha256 digest and byte size per sibling artifact. Purely for reproducibility/debugging — **optional, never required for reuse**. |
+| `manifest.json` | `build_manifest` (`skills/manifest.py:94`) | Provenance for the bundle: harness version, model, canonical input-spec digest, generation timestamp, plus a sha256 digest and byte size per sibling artifact. Purely for reproducibility/debugging — **optional, never required for reuse**. |
 
 The reuse gate (§2) treats a skill as complete only when `SKILL.md`,
 `schema.json`, `db.json`, and `api.json` all exist; `scenarios.json` and
@@ -285,7 +285,7 @@ absence. The ten skills that predate provenance support have no
 | Concern | Location |
 |---|---|
 | Route + input validation | `api/v1/simulations.py:119` |
-| Reuse vs generate gate | `core/skill_registry.py:46` |
+| Reuse vs generate gate | `core/skill_registry.py:48` |
 | Atomic file writer | `skills/generator.py:55` |
 | Pipeline orchestrator | `skills/generation/pipeline.py:42` |
 | Stage 1 analyze | `skills/generation/stages/analyze/__init__.py:70` |
