@@ -3,13 +3,16 @@
 import json
 import shutil
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from pydantic import SecretStr
 
+from simulation_harness import __version__
 from simulation_harness.config.models import GenerationConfig
 from simulation_harness.skills.generation import run_pipeline
 from simulation_harness.skills.generation.repair import StageTimeoutError
+from simulation_harness.skills.manifest import MANIFEST_FILENAME, build_manifest
 
 # Backward-compat re-export: these moved to skills.generation.naming, but
 # tests/unit/skills/test_generator.py imports them from this module.
@@ -65,8 +68,9 @@ class SkillGenerator:
         2. Run the generation pipeline → SkillBundle
         3. Write SKILL.md, schema.json, db.json, api.json to temp dir
         4. Write scenarios.json to temp dir (if bundle.scenarios is non-empty)
-        5. Atomic rename: temp dir → <skills_folder>/<name>/
-        6. On failure: clean up temp dir
+        5. Write manifest.json last, digesting the artifacts above off disk
+        6. Atomic rename: temp dir → <skills_folder>/<name>/
+        7. On failure: clean up temp dir
 
         Args:
             openapi_spec: OpenAPI specification dictionary
@@ -105,6 +109,19 @@ class SkillGenerator:
                     json.dumps(bundle.scenarios, indent=2)
                 )
             (temp_dir / "api.json").write_text(json.dumps(openapi_spec, indent=2))
+            # Last write: build_manifest digests its siblings off disk, so every
+            # other artifact must already exist. Being inside this try block
+            # means a failure here removes the whole temp dir — a published
+            # bundle is never half-described.
+            manifest = build_manifest(
+                temp_dir,
+                skill_name=simulation_name,
+                openapi_spec=openapi_spec,
+                model=self.model,
+                harness_version=__version__,
+                generated_at=datetime.now(timezone.utc),
+            )
+            (temp_dir / MANIFEST_FILENAME).write_text(json.dumps(manifest, indent=2))
             try:
                 temp_dir.rename(final_dir)
             except (FileExistsError, OSError):
