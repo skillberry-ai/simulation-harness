@@ -117,3 +117,27 @@ def test_each_call_creates_independent_staging(
     root_a, _ = _build(skill_dir, staging_roots)
     root_b, _ = _build(skill_dir, staging_roots)
     assert root_a != root_b
+
+
+def test_manifest_is_not_staged(tmp_path: Path, staging_roots: Any) -> None:
+    """manifest.json is build provenance with no value to the simulating agent,
+    so it is kept out of the agent-readable staging tree."""
+    skill_dir = _make_skill_dir(tmp_path)
+    (skill_dir / "manifest.json").write_text('{"manifestVersion": 1}')
+    root_dir, _ = _build(skill_dir, staging_roots)
+    staged = Path(root_dir) / ".skills" / "petstore"
+    assert not (staged / "manifest.json").exists()
+    # The artifacts the agent actually reads still travel with it.
+    assert (staged / "SKILL.md").exists()
+    assert (staged / "schema.json").exists()
+    assert (staged / "db.json").exists()
+
+
+def test_excluding_manifest_leaves_the_source_intact(
+    tmp_path: Path, staging_roots: Any
+) -> None:
+    """Ignoring a file during the copy must not remove it from the skill dir."""
+    skill_dir = _make_skill_dir(tmp_path)
+    (skill_dir / "manifest.json").write_text('{"manifestVersion": 1}')
+    _build(skill_dir, staging_roots)
+    assert (skill_dir / "manifest.json").exists()

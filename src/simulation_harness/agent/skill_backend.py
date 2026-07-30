@@ -34,6 +34,10 @@ flows through the StoreRegistry against the *original* skill directory, never
 through this backend — and the staging directory is rebuilt for each
 simulation. The caller owns the staging directory and must remove it when the
 simulation ends (see ``DeepAgent.shutdown``).
+
+``manifest.json`` is excluded from the copy: it is build provenance with no
+value to the simulating agent, and the agent's readable surface is kept to the
+artifacts it actually uses.
 """
 
 import shutil
@@ -65,5 +69,9 @@ def build_skill_sources(skill_dir: Path) -> tuple[str, list[str]]:
     """
     staging = Path(tempfile.mkdtemp(prefix="skill-sources-"))
     dest = staging / ".skills" / skill_dir.name
-    shutil.copytree(skill_dir, dest, ignore=shutil.ignore_patterns(".skills"))
+    shutil.copytree(
+        skill_dir,
+        dest,
+        ignore=shutil.ignore_patterns(".skills", "manifest.json"),
+    )
     return str(staging), ["/.skills/"]
