@@ -24,6 +24,16 @@ updates:
       - ci
     commit-message:
       prefix: chore
+    ignore:
+      # We reference actions by floating major tag (e.g. codeql-action@v4,
+      # checkout@v7), so minor/patch releases are picked up automatically at
+      # run time. Dependabot cannot see that and would otherwise open a PR for
+      # every patch (v4 -> 4.37.4), which *narrows* the ref and adds churn.
+      # Major bumps (v4 -> v5) still come through, since those need a review.
+      - dependency-name: github/codeql-action
+        update-types:
+          - version-update:semver-minor
+          - version-update:semver-patch
 
   # Base image used by the Dockerfile
   - package-ecosystem: docker
