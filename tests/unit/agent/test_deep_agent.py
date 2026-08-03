@@ -3,9 +3,10 @@
 import pytest
 from pydantic import SecretStr
 from unittest.mock import Mock, AsyncMock, patch
-from simulation_harness.agent.deep_agent import DeepAgent, _READONLY_FS_RULES
+from simulation_harness.agent.deep_agent import DeepAgent, _READONLY_FS_TOOLS
 from simulation_harness.openapi.parser import OpenAPISpec, OpenAPIOperation
-from deepagents.middleware.filesystem import _check_fs_permission
+from deepagents.backends.filesystem import FilesystemBackend
+from deepagents.middleware.filesystem import FilesystemMiddleware
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -257,31 +258,32 @@ async def test_shutdown(mock_spec: MagicMock, mock_operation: MagicMock) -> None
     assert agent.session_manager._running is False
 
 
-def test_readonly_fs_rules_deny_writes_including_dotpaths() -> None:
-    """_READONLY_FS_RULES must deny writes to both normal and dot-prefixed paths.
+def test_readonly_fs_tools_exposes_no_write_capable_tool(tmp_path: Path) -> None:
+    """The agent must not be handed any tool that can mutate the filesystem.
 
-    Approach: call deepagents' internal `_check_fs_permission` helper directly
-    against the module-level `_READONLY_FS_RULES` constant.  This tests the
-    *actual* glob-match behavior (not just the string content of the paths list)
-    and uses the same code path that FilesystemMiddleware's `_permissions`
-    enforcement uses at runtime.
+    Approach: build a real FilesystemMiddleware with `_READONLY_FS_TOOLS` and
+    inspect the tools it actually produces.  This asserts the property we care
+    about — a write-capable tool is never in the model's tool surface — rather
+    than the string content of the allowlist, so it also catches deepagents
+    changing what `tools=` yields.
     """
-    # Writes to dot-prefixed paths (the gap in the old `/**`-only rule)
-    assert (
-        _check_fs_permission(_READONLY_FS_RULES, "write", "/.skills/foo.txt") == "deny"
-    )
-    assert _check_fs_permission(_READONLY_FS_RULES, "write", "/.hidden") == "deny"
-    # dot dir nested deeper: /a/b/.hidden is the dot entry; /a/b/.hidden/c is inside it
-    assert _check_fs_permission(_READONLY_FS_RULES, "write", "/a/b/.hidden") == "deny"
-    assert _check_fs_permission(_READONLY_FS_RULES, "write", "/a/b/.hidden/c") == "deny"
-    # Writes to ordinary paths must also be denied
-    assert _check_fs_permission(_READONLY_FS_RULES, "write", "/foo.txt") == "deny"
-    assert _check_fs_permission(_READONLY_FS_RULES, "write", "/a/b/c.json") == "deny"
-    # Reads must always be allowed (rule only covers 'write')
-    assert (
-        _check_fs_permission(_READONLY_FS_RULES, "read", "/.skills/foo.txt") == "allow"
-    )
-    assert _check_fs_permission(_READONLY_FS_RULES, "read", "/foo.txt") == "allow"
+    backend = FilesystemBackend(root_dir=str(tmp_path), virtual_mode=True)
+    exposed = {
+        t.name
+        for t in FilesystemMiddleware(backend=backend, tools=_READONLY_FS_TOOLS).tools
+    }
+
+    # Nothing that can write, edit, delete, or shell out.
+    assert exposed.isdisjoint({"write_file", "edit_file", "delete", "execute"})
+    # The read-only tools the agent genuinely needs are present.
+    assert exposed == {"ls", "read_file", "glob", "grep"}
+
+    # Guard against the allowlist silently becoming a no-op upstream: the
+    # default (no `tools=`) set must be strictly larger and include the
+    # mutating tools we are excluding.
+    default = {t.name for t in FilesystemMiddleware(backend=backend).tools}
+    assert exposed < default
+    assert {"write_file", "edit_file"} <= default
 
 
 def test_stateful_branch_wires_lean_create_agent_with_skills(
@@ -289,8 +291,8 @@ def test_stateful_branch_wires_lean_create_agent_with_skills(
 ) -> None:
     """skill_dir present -> create_agent with skills + filesystem middleware.
 
-    Read-only enforcement is wired into FilesystemMiddleware via its private
-    `_permissions` parameter (deepagents 0.6.x), not a standalone middleware.
+    Read-only enforcement is wired into FilesystemMiddleware via its public
+    `tools=` allowlist (deepagents 0.7.0+), not a standalone middleware.
     """
     skill_dir = tmp_path / "petstore"
     skill_dir.mkdir()
@@ -339,10 +341,10 @@ def test_stateful_branch_wires_lean_create_agent_with_skills(
         "SkillsMiddleware",
         "FilesystemMiddleware",
     ]
-    # Read-only rules are enforced inside FilesystemMiddleware (no standalone
-    # permission middleware in deepagents 0.6.x).
+    # Read-only enforcement: the wired-up FilesystemMiddleware exposes only the
+    # non-mutating tools, so no write-capable tool reaches the model.
     fs_middleware = middleware[1]
-    assert fs_middleware._permissions == _READONLY_FS_RULES
+    assert {t.name for t in fs_middleware.tools} == set(_READONLY_FS_TOOLS)
 
     # The model must be passed UNBOUND — bind_tools must NOT have been called
     # before handing the llm to create_agent.
