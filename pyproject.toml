@@ -18,11 +18,14 @@ dependencies = [
     "langchain-core>=0.1.0",
     "langchain-openai>=0.0.5",
     "langgraph>=0.2.0",
-    # Capped at 0.7.1: read-only filesystem enforcement now goes through
-    # FilesystemMiddleware's (private) `_permissions` parameter — see
-    # agent/deep_agent.py. The standalone `_PermissionMiddleware` was removed
-    # in 0.5.5+. Revisit deep_agent.py if `_permissions` moves to the backend.
-    "deepagents>=0.5.3,<=0.7.1",
+    # Floor is 0.7.0: that release added FilesystemMiddleware's public `tools=`
+    # allowlist, which agent/deep_agent.py uses for read-only enforcement.
+    # (0.5.3/0.5.4 additionally lack the `_permissions` kwarg the old code used,
+    # so the previous >=0.5.3 floor was already broken.)
+    # Capped below the next minor because deepagents is pre-1.0, where minor
+    # releases carry breaking changes — this cap is a semver guard, not a
+    # hand-verified version, so widening it only needs a green CI run.
+    "deepagents>=0.7.0,<0.8.0",
     "jinja2>=3.0.0",
     "mcp>=1.0.0",
     "fastapi>=0.100.0",

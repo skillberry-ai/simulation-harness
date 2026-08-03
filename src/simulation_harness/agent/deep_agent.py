@@ -18,7 +18,7 @@ from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.graph.state import CompiledStateGraph
 from pydantic import SecretStr
 from deepagents.backends.filesystem import FilesystemBackend
-from deepagents.middleware.filesystem import FilesystemMiddleware, FilesystemPermission
+from deepagents.middleware.filesystem import FilesystemMiddleware, FsToolName
 from deepagents.middleware.skills import SkillsMiddleware
 
 from simulation_harness.openapi.parser import OpenAPIOperation, OpenAPISpec
@@ -31,24 +31,21 @@ from simulation_harness.agent.skill_backend import build_skill_sources
 
 logger = get_logger(__name__)
 
-# Deny all write (write_file / edit_file) operations everywhere in the virtual
-# filesystem, including paths whose segments start with a dot.  Without the
-# dotfile patterns `/**` alone is insufficient: wcmatch's GLOBSTAR flag does
-# NOT imply DOTGLOB, so `/**` silently skips segments like `.skills`.
+# The agent only ever *reads* the generated skill from the virtual filesystem;
+# all mutation goes through the `state_*` tools instead.  So we allowlist the
+# read-only filesystem tools and never hand the model a write-capable one.
 #
-# Pattern coverage:
-#   /**           — any non-dot path at any depth (the baseline)
-#   /.*           — dot entry at the root (e.g. /.hidden)
-#   /.*/**        — anything inside a root-level dot dir (e.g. /.skills/x)
-#   /**/.*        — dot entry nested at any depth (e.g. /a/b/.hidden)
-#   /**/.*/**     — anything inside a nested dot dir (e.g. /a/b/.hidden/c)
-_READONLY_FS_RULES = [
-    FilesystemPermission(
-        operations=["write"],
-        paths=["/**", "/.*", "/.*/**", "/**/.*", "/**/.*/**"],
-        mode="deny",
-    )
-]
+# Omitted from the deepagents default set on purpose:
+#   write_file, edit_file, delete — the agent must not mutate the skill
+#   execute                       — needs a SandboxBackendProtocol backend,
+#                                   which FilesystemBackend is not, so it could
+#                                   only ever return an error
+#
+# This is a stronger guarantee than the deny-rules it replaces: a tool that is
+# never exposed cannot be called at all, so there is no glob pattern to get
+# wrong (the previous rules needed five patterns to cover dot-prefixed paths,
+# because wcmatch's GLOBSTAR does not imply DOTGLOB).
+_READONLY_FS_TOOLS: list[FsToolName] = ["ls", "read_file", "glob", "grep"]
 
 
 class DeepAgent:
@@ -163,14 +160,13 @@ class DeepAgent:
             self._skill_staging_dir = Path(root_dir)
             backend = FilesystemBackend(root_dir=root_dir, virtual_mode=True)
 
-            # Read-only filesystem enforcement: deepagents 0.6.x folded the
-            # standalone _PermissionMiddleware into FilesystemMiddleware via the
-            # (still private) `_permissions` parameter.
+            # Read-only filesystem enforcement: expose only the non-mutating
+            # filesystem tools (public `tools=` allowlist, deepagents 0.7.0+).
             middleware = [
                 SkillsMiddleware(backend=backend, sources=sources),
                 FilesystemMiddleware(
                     backend=backend,
-                    _permissions=_READONLY_FS_RULES,
+                    tools=_READONLY_FS_TOOLS,
                 ),
             ]
 

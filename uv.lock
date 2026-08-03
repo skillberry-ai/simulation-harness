@@ -2575,7 +2575,7 @@ dev = [
 requires-dist = [
     { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.7.0" },
     { name = "coverage", marker = "extra == 'dev'", specifier = ">=7.0.0" },
-    { name = "deepagents", specifier = ">=0.5.3,<=0.7.1" },
+    { name = "deepagents", specifier = ">=0.7.0,<0.8.0" },
     { name = "fastapi", specifier = ">=0.100.0" },
     { name = "import-linter", marker = "extra == 'dev'", specifier = ">=2.0" },
     { name = "jinja2", specifier = ">=3.0.0" },
