@@ -18,11 +18,11 @@ dependencies = [
     "langchain-core>=0.1.0",
     "langchain-openai>=0.0.5",
     "langgraph>=0.2.0",
-    # Capped at 0.6.12: read-only filesystem enforcement now goes through
+    # Capped at 0.7.1: read-only filesystem enforcement now goes through
     # FilesystemMiddleware's (private) `_permissions` parameter — see
     # agent/deep_agent.py. The standalone `_PermissionMiddleware` was removed
     # in 0.5.5+. Revisit deep_agent.py if `_permissions` moves to the backend.
-    "deepagents>=0.5.3,<=0.6.12",
+    "deepagents>=0.5.3,<=0.7.1",
     "jinja2>=3.0.0",
     "mcp>=1.0.0",
     "fastapi>=0.100.0",
