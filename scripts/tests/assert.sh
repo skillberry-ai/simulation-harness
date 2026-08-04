@@ -2,6 +2,8 @@
 #
 # assert.sh — minimal assertion helpers for the scripts/ test suite.
 # Sourced by scripts/tests/test-*.sh. Not executable on its own.
+# Sourced-only: deliberately sets no shell options, since that would affect
+# the caller's shell.
 
 ASSERT_FAILURES=0
 ASSERT_CHECKS=0

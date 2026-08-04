@@ -5,6 +5,8 @@
 #
 # Not executable on its own and deliberately free of side effects: it only
 # reads git history and writes to stdout, which is what makes it testable.
+# Sourced-only: deliberately sets no shell options, since that would affect
+# the caller's shell.
 
 # Commit types, in the order their sections appear in the notes.
 RELEASE_NOTES_TYPES=(feat fix perf refactor docs test build ci chore)

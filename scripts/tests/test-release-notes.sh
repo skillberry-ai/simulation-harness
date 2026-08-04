@@ -80,4 +80,23 @@ assert_eq "range since tag lists only newer commits" "$since_tag" "$(cat <<'EOF'
 EOF
 )"
 
+# A real merge commit: its own "Merge branch ..." subject must be excluded
+# from the notes (--no-merges), while the commit it brings in is still
+# listed. This exercises merge-commit exclusion, which the linear fixture
+# above never touches.
+git -C "$TMPDIR_TEST/repo" tag -a v0.2.0 -m "Release v0.2.0"
+git -C "$TMPDIR_TEST/repo" checkout -q -b feature-branch
+commit "feat(widgets): add widget"
+git -C "$TMPDIR_TEST/repo" checkout -q main
+git -C "$TMPDIR_TEST/repo" merge -q --no-ff -m "Merge branch 'feature-branch'" feature-branch
+
+since_merge="$(cd "$TMPDIR_TEST/repo" && generate_release_notes 'v0.2.0..HEAD')"
+assert_contains "merge range includes the merged branch's own commit" "$since_merge" "add widget"
+
+case "$since_merge" in
+    *"Merge branch"*) merge_subject_present="yes" ;;
+    *)                 merge_subject_present="no" ;;
+esac
+assert_eq "merge range excludes the merge commit's own subject" "$merge_subject_present" "no"
+
 assert_summary
