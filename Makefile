@@ -1,4 +1,4 @@
-.PHONY: help install dev-install start stop restart test test-unit test-integration test-cov lint format type-check lint-imports check openapi clean \
+.PHONY: help install dev-install start stop restart test test-unit test-integration test-cov test-scripts lint format type-check lint-imports check openapi clean \
         docker-build docker-build-dev docker-clean docker-clean-dev
 
 IMAGE_NAME ?= simulation-harness
@@ -22,6 +22,7 @@ help:
 	@echo "    test-unit        Run unit tests only"
 	@echo "    test-integration Run integration tests only"
 	@echo "    test-cov         Run tests with coverage report"
+	@echo "    test-scripts     Run the shell script test suite"
 	@echo ""
 	@echo "  Code Quality:"
 	@echo "    lint             Run ruff linter"
@@ -87,6 +88,9 @@ test-cov:
 	uv run pytest --cov=simulation_harness --cov-report=html --cov-report=term
 	@echo ""
 	@echo "Coverage report generated in htmlcov/index.html"
+
+test-scripts:
+	@for t in scripts/tests/test-*.sh; do echo "== $$t"; bash "$$t" || exit 1; done
 
 # Code quality targets
 lint:
