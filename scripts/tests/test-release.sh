@@ -108,6 +108,21 @@ assert_eq "changelog starts with the header" \
 assert_eq "pushed the tag to origin" \
     "$(git -C "$ORIGIN" tag -l)" "v0.1.0"
 
+# The repo's own end-of-file-fixer pre-commit hook requires exactly one trailing
+# newline. A trailing blank line makes the hook rewrite CHANGELOG.md, which fails
+# the release commit and rolls the whole release back — with an error that blames
+# signing. Assert the invariant the hook enforces: the file is byte-identical to
+# itself with all trailing newlines collapsed to one.
+eof_is_single_newline() {
+    if cmp -s "$1" <(printf '%s\n' "$(cat "$1")"); then
+        printf 'yes\n'
+    else
+        printf 'no\n'
+    fi
+}
+assert_eq "changelog ends with exactly one newline (end-of-file-fixer safe)" \
+    "$(eof_is_single_newline "$FIXTURE/CHANGELOG.md")" "yes"
+
 # --- signing: the one mandatory project guarantee ---------------------------
 #
 # `cat-file -t` reports "tag" for signed and unsigned annotated tags alike, so
@@ -150,6 +165,8 @@ assert_contains "newest section listed first" \
 assert_contains "second release notes scoped to new commits" "$changelog" "**state:** repair reload"
 assert_eq "both tags present on origin" \
     "$(git -C "$ORIGIN" tag -l | sort -V | tr '\n' ' ')" "v0.1.0 v0.2.0 "
+assert_eq "changelog still ends with exactly one newline after a second release" \
+    "$(eof_is_single_newline "$FIXTURE/CHANGELOG.md")" "yes"
 
 # --- third release: no non-merge conventional commits since the previous tag
 # (the "No changes recorded." fallback path) must still leave a blank line
@@ -163,6 +180,8 @@ assert_contains "changelog records no changes for the empty range" \
 line_before_prior_header="$(awk '/^## v0\.2\.0/{print prev; exit} {prev=$0}' "$FIXTURE/CHANGELOG.md")"
 assert_empty "blank line separates the no-changes section from the prior header" \
     "$line_before_prior_header"
+assert_eq "changelog still ends with exactly one newline after a no-changes release" \
+    "$(eof_is_single_newline "$FIXTURE/CHANGELOG.md")" "yes"
 
 # --- a pre-release tag is not a release ------------------------------------
 # The shared definition in scripts/lib/release-tag.sh must not treat v0.4.0-rc1

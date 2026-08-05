@@ -373,8 +373,15 @@ else
         cat "$SECTION_FILE"
     } > CHANGELOG.md.new
 fi
-mv CHANGELOG.md.new CHANGELOG.md
-rm -f -- "$SECTION_FILE"
+# The section above deliberately ends in a blank line so consecutive releases stay
+# separated. When the new section is the last thing in the file that leaves a
+# trailing blank line, and the repo's own end-of-file-fixer pre-commit hook
+# rewrites the file to strip it — which fails the release commit and rolls the
+# whole release back. Normalize the assembled file to exactly one trailing
+# newline: command substitution strips every trailing newline, then add one back.
+# Internal blank lines, including the separators between sections, are untouched.
+printf '%s\n' "$(cat CHANGELOG.md.new)" > CHANGELOG.md
+rm -f -- CHANGELOG.md.new "$SECTION_FILE"
 
 # ---- commit, tag, push -----------------------------------------------------
 
@@ -385,7 +392,10 @@ git add pyproject.toml CHANGELOG.md
 # (they fall back to the "tag already exists locally" error), so change it there
 # too.
 git commit -S -s -m "chore(release): $TAG" \
-    || die "commit failed (signing is required; do not fall back to unsigned)"
+    || die "the release commit failed — see the output above. Either a pre-commit
+hook rewrote a staged file (the repo runs end-of-file-fixer and trailing-whitespace,
+both of which fail the commit when they change something), or signing failed.
+Signing is mandatory: do not retry without it. The worktree is restored below."
 
 info "Creating the signed annotated tag $TAG"
 git tag -s "$TAG" -m "Release $TAG" \
