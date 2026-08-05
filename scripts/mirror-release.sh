@@ -24,19 +24,23 @@ die()  { err "$*"; exit 1; }
 
 REPO_ROOT="$(git rev-parse --show-toplevel)" || die "not inside a git repository"
 
+TARGET_DEFAULT='git@github.com:rossoctl/lab-runtime-simulation.git'
+
 : "${SOURCE:=git@github.ibm.com:kaegis/simulation-harness.git}"
-: "${TARGET:=git@github.com:rossoctl/lab-runtime-simulation.git}"
+: "${TARGET:=$TARGET_DEFAULT}"
 : "${CLONE_DIR:=$REPO_ROOT/../../rossoctl/lab-runtime-simulation}"
 : "${SOURCE_GH_REPO:=github.ibm.com/kaegis/simulation-harness}"
 : "${TARGET_GH_REPO:=github.com/rossoctl/lab-runtime-simulation}"
 
-RELEASE_TAG_RE='^v[0-9]+\.[0-9]+\.[0-9]+$'
+# shellcheck source=scripts/lib/release-tag.sh
+source "$REPO_ROOT/scripts/lib/release-tag.sh"
 
 usage() {
     cat >&2 <<EOF
-Usage: $PROG [options] [vX.Y.Z]
+Usage: $PROG [options] [vX.Y.Z | X.Y.Z]
 
-Publish release vX.Y.Z of $SOURCE to $TARGET. With no version, uses the
+Publish release vX.Y.Z of $SOURCE to $TARGET. Either form of the version is
+accepted; a bare X.Y.Z gets the leading v added. With no version, uses the
 highest release tag on the source.
 
 The mirror ends up with main at the release commit (plus a notice commit on
@@ -45,9 +49,13 @@ in-progress work is never published.
 
 Options:
   --dry-run           Stop after the dry-run push; change nothing.
+  --yes               Skip the confirmation prompt before the real push.
   --no-reset-local    Skip refreshing the local clone at CLONE_DIR.
   --no-release-page   Skip creating the GitHub release on the mirror.
   -h, --help          Show this help and exit.
+
+The real push asks you to type the target URL to confirm, whenever the target
+is the built-in default and stdin is a terminal. --yes skips that.
 
 Environment overrides (used by scripts/tests/test-mirror-release.sh):
   SOURCE, TARGET, CLONE_DIR, SOURCE_GH_REPO, TARGET_GH_REPO
@@ -58,15 +66,21 @@ EOF
 DRY_RUN=0
 RESET_LOCAL=1
 RELEASE_PAGE=1
+ASSUME_YES=0
 REF=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --dry-run)         DRY_RUN=1; shift ;;
+        --yes)             ASSUME_YES=1; shift ;;
         --no-reset-local)  RESET_LOCAL=0; shift ;;
         --no-release-page) RELEASE_PAGE=0; shift ;;
         -h|--help)         usage 0 ;;
-        --)                shift; break ;;
+        # No `--` case on purpose: the only positional is a release tag, which
+        # can never look like an option, and a `--` that failed to drain "$@"
+        # into REF fell through to "latest release" — publishing the newest
+        # release when the operator asked for an older one, i.e. the exact
+        # inversion of a rollback. `--` now hits the unknown-option die below.
         -*)                die "unknown option: $1" ;;
         *)                 [[ -z "$REF" ]] || die "unexpected extra argument: $1"
                            REF="$1"; shift ;;
@@ -101,8 +115,20 @@ if ! git ls-remote --quiet "$TARGET" >/dev/null 2>&1; then
     warn "expected if the target is brand new/empty; otherwise check the URL and push credentials."
 fi
 
-if (( RESET_LOCAL )) && [[ ! -d "$CLONE_DIR/.git" ]]; then
-    die "local clone of the mirror not found at $CLONE_DIR (or pass --no-reset-local)"
+if (( RESET_LOCAL )); then
+    if [[ ! -d "$CLONE_DIR/.git" ]]; then
+        die "local clone of the mirror not found at $CLONE_DIR (or pass --no-reset-local)"
+    fi
+    # The refresh at the end is a `reset --hard`. Prove the directory really is
+    # a clone of the target before then: pointed anywhere else, the reset would
+    # silently destroy unrelated work and land it on an unrelated branch.
+    clone_origin="$(git -C "$CLONE_DIR" remote get-url origin 2>/dev/null || true)"
+    if [[ "$clone_origin" != "$TARGET" ]]; then
+        die "$CLONE_DIR has origin '${clone_origin:-<none>}', not the target '$TARGET' — refusing to reset it (or pass --no-reset-local)"
+    fi
+    if [[ -n "$(git -C "$CLONE_DIR" status --porcelain)" ]]; then
+        warn "$CLONE_DIR has local changes; the reset --hard at the end will discard them."
+    fi
 fi
 
 # ---- resolve the release tag ----------------------------------------------
@@ -122,7 +148,14 @@ if [[ -z "$REF" ]]; then
     info "No release given; using the latest: $REF"
 fi
 
-[[ "$REF" =~ $RELEASE_TAG_RE ]] || die "'$REF' is not a release tag (expected vX.Y.Z)"
+# `make release VERSION=0.2.0` takes the bare form and `make mirror
+# VERSION=v0.2.0` the prefixed one; accept either here so guessing wrong does
+# not cost a retry.
+if [[ "$REF" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    REF="v$REF"
+fi
+
+release_tag_is "$REF" || die "'$REF' is not a release tag (expected vX.Y.Z)"
 git ls-remote --exit-code --tags --refs "$SOURCE" "refs/tags/$REF" >/dev/null 2>&1 \
     || die "tag $REF not found on $SOURCE"
 
@@ -162,7 +195,7 @@ while read -r ref; do
 done < <(git for-each-ref --format='%(refname)' refs/heads)
 
 while read -r ref; do
-    if [[ ! "${ref#refs/tags/}" =~ $RELEASE_TAG_RE ]]; then
+    if ! release_tag_is "$ref"; then
         git update-ref -d "$ref"
     fi
 done < <(git for-each-ref --format='%(refname)' refs/tags)
@@ -230,7 +263,7 @@ echo
 
 info "Performing a dry-run push (no changes made yet)..."
 echo
-git push --prune --force --dry-run origin "${MIRROR_REFSPECS[@]}" \
+git push --atomic --prune --force --dry-run origin "${MIRROR_REFSPECS[@]}" \
     || die "dry-run push failed — aborting before any changes were made"
 echo
 
@@ -239,11 +272,49 @@ if (( DRY_RUN )); then
     exit 0
 fi
 
+# ---- confirmation --------------------------------------------------------
+
+# Reinstated after a subagent ran the sibling release script at its defaults and
+# published for real. Only gets in the way when it matters: overridden targets
+# (the offline tests) and non-interactive runs never prompt.
+confirm_real_push() {
+    if (( ASSUME_YES )); then
+        warn "--yes given: skipping the confirmation prompt."
+        return 0
+    fi
+    if [[ "$TARGET" != "$TARGET_DEFAULT" ]]; then
+        return 0
+    fi
+    if [[ ! -t 0 ]]; then
+        warn "stdin is not a terminal: skipping the confirmation prompt."
+        return 0
+    fi
+    # Read from the terminal rather than stdin where possible, so a piped stdin
+    # cannot answer the prompt for the operator.
+    if [[ -r /dev/tty ]]; then
+        exec 3</dev/tty
+    else
+        exec 3<&0
+    fi
+    local confirm=""
+    printf '\033[33mType the target URL to confirm the force-push:\033[0m\n  %s\n> ' "$TARGET"
+    IFS= read -r confirm <&3 || die "no input received — aborting (nothing was pushed)"
+    exec 3<&-
+    [[ "$confirm" == "$TARGET" ]] \
+        || die "confirmation did not match the target URL — aborting (nothing was pushed)"
+}
+
+confirm_real_push
+
 # ---- the real push -------------------------------------------------------
 
 info "Force-pushing $REF to the target..."
-git push --prune --force origin "${MIRROR_REFSPECS[@]}" \
-    || die "push failed — the target may be partially updated; re-run to retry"
+# --atomic: without it a partly-rejected push (e.g. the target's default branch
+# refusing deletion) leaves the mirror half-shaped, and every re-run fails the
+# same way — unrecoverable from the CLI. Atomic means a rejection leaves the
+# target untouched, so re-running after fixing the cause actually works.
+git push --atomic --prune --force origin "${MIRROR_REFSPECS[@]}" \
+    || die "push failed — it was atomic, so the target is unchanged; fix the cause and re-run"
 info "Target is now an exact mirror of release $REF."
 
 # ---- public release page -------------------------------------------------
@@ -268,6 +339,11 @@ fi
 # ---- refresh the local clone --------------------------------------------
 
 if (( RESET_LOCAL )); then
+    # Re-verify immediately before the destructive step, not just in preflight.
+    clone_origin="$(git -C "$CLONE_DIR" remote get-url origin 2>/dev/null || true)"
+    if [[ "$clone_origin" != "$TARGET" ]]; then
+        die "$CLONE_DIR has origin '${clone_origin:-<none>}', not the target '$TARGET' — refusing to reset it"
+    fi
     info "Refreshing the local clone at $CLONE_DIR (fetch + reset --hard origin/main)"
     git -C "$CLONE_DIR" fetch origin || die "failed to fetch in $CLONE_DIR"
     git -C "$CLONE_DIR" reset --hard origin/main || die "failed to reset $CLONE_DIR"

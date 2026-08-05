@@ -34,7 +34,7 @@ help:
 	@echo ""
 	@echo "  Releasing:"
 	@echo "    release          Cut a release (VERSION=X.Y.Z, required)"
-	@echo "    mirror           Publish a release to the external mirror (VERSION optional)"
+	@echo "    mirror           Publish a release to the external mirror (VERSION=[v]X.Y.Z, optional)"
 	@echo ""
 	@echo "  Cleanup:"
 	@echo "    clean            Remove generated files and caches"
@@ -127,7 +127,7 @@ endif
 	./scripts/release.sh $(VERSION)
 
 mirror:
-	./scripts/mirror-release.sh $(VERSION)
+	./scripts/mirror-release.sh $(if $(strip $(VERSION)),"$(VERSION)")
 
 # Cleanup target
 clean:

@@ -80,6 +80,122 @@ assert_contains "notice names the new release" \
 out="$(mirror --dry-run)"
 assert_contains "defaults to the highest release tag" "$out" "v0.2.0"
 
+# --- a bare X.Y.Z is accepted as well as vX.Y.Z -----------------------------
+# `make release VERSION=0.2.0` is bare and `make mirror VERSION=v0.2.0` is
+# prefixed; guessing wrong must not cost a retry.
+out="$(mirror --dry-run 0.1.0)"
+assert_contains "bare X.Y.Z is normalised to vX.Y.Z" "$out" "Release : v0.1.0"
+
+# --- a pre-release tag is not a release ------------------------------------
+git -C "$SRC" tag -a v0.3.0-rc1 -m "prerelease"
+out="$(mirror --dry-run)"
+assert_contains "pre-release tag is not the latest release" "$out" "using the latest: v0.2.0"
+assert_fails "pre-release tag is rejected as an explicit ref" bash -c \
+    "SOURCE='$SRC' TARGET='$TGT' CLONE_DIR='$WORK/unused' \
+     '$REPO_ROOT/scripts/mirror-release.sh' --no-release-page --no-reset-local v0.3.0-rc1"
+mirror v0.2.0 >/dev/null
+assert_eq "pre-release tag is pruned from the target" \
+    "$(git -C "$TGT" tag -l | sort -V | tr '\n' ' ')" "v0.1.0 v0.2.0 "
+
+# --- the -- option terminator ----------------------------------------------
+# It used to leave REF empty, so `mirror-release.sh -- v0.1.0` silently
+# published the *latest* release — the inverse of the intended rollback.
+out="$(mirror -- v0.1.0 || true)"
+assert_contains "rejects the -- option terminator" "$out" "unknown option: --"
+assert_eq "-- run publishes nothing" \
+    "$(git -C "$TGT" rev-parse 'refs/heads/main^')" "$V020"
+
+# --- --yes is accepted (the prompt itself only arms for the default target) --
+mirror --yes v0.2.0 >/dev/null
+assert_eq "--yes runs unattended" \
+    "$(git -C "$TGT" rev-parse 'refs/heads/main^')" "$V020"
+
+# --- confirmation before a push to the default target -----------------------
+# The prompt only arms when TARGET is the built-in default, which is the real
+# public URL — so exercise it against a copy of the script whose built-in
+# default is a fixture path. Nothing here can reach a real remote.
+CONFIRM_TGT="$WORK/confirm.git"
+CONFIRM_SH="$WORK/mirror-confirm.sh"
+sed "s|^TARGET_DEFAULT=.*|TARGET_DEFAULT='$CONFIRM_TGT'|" \
+    "$REPO_ROOT/scripts/mirror-release.sh" > "$CONFIRM_SH"
+chmod +x "$CONFIRM_SH"
+assert_eq "the copy's built-in default was rewritten to the fixture" \
+    "$(grep -c "^TARGET_DEFAULT='$CONFIRM_TGT'$" "$CONFIRM_SH")" "1"
+
+confirm_cmd() {
+    printf "cd '%s' && SOURCE='%s' TARGET='%s' CLONE_DIR='%s' '%s' %s v0.1.0" \
+        "$REPO_ROOT" "$SRC" "$CONFIRM_TGT" "$WORK/unused" "$CONFIRM_SH" \
+        "--no-release-page --no-reset-local $*"
+}
+fresh_confirm_target() {
+    rm -rf -- "$CONFIRM_TGT"
+    git init -q --bare -b main "$CONFIRM_TGT"
+}
+
+# Non-interactive: must not prompt, or every automated run would hang.
+fresh_confirm_target
+out="$(printf '' | bash -c "$(confirm_cmd)" 2>&1)"
+assert_contains "no prompt when stdin is not a terminal" "$out" "stdin is not a terminal"
+assert_contains "the unattended run still publishes" "$out" "Published v0.1.0"
+
+# Interactive: needs a pty, which script(1) provides. Skipped where it does not.
+if script -qec true /dev/null >/dev/null 2>&1; then
+    fresh_confirm_target
+    out="$(echo "wrong-url" | script -qec "$(confirm_cmd)" /dev/null 2>&1 || true)"
+    assert_contains "a terminal run asks for the target URL" "$out" "Type the target URL"
+    assert_contains "a mistyped URL aborts" "$out" "confirmation did not match"
+    assert_empty "the aborted run pushed nothing" "$(git -C "$CONFIRM_TGT" for-each-ref)"
+
+    out="$(echo "$CONFIRM_TGT" | script -qec "$(confirm_cmd)" /dev/null 2>&1)"
+    assert_contains "typing the target URL proceeds" "$out" "Published v0.1.0"
+
+    fresh_confirm_target
+    out="$(printf '\n' | script -qec "$(confirm_cmd --yes)" /dev/null 2>&1)"
+    assert_contains "--yes skips the prompt on a terminal" "$out" "--yes given"
+    assert_contains "--yes still publishes" "$out" "Published v0.1.0"
+else
+    printf '  \033[33mskip\033[0m script(1) unavailable: terminal prompt not exercised\n'
+fi
+
+# --- the real push is atomic ------------------------------------------------
+# A target whose default branch is not main cannot have that branch pruned:
+# without --atomic, main lands anyway and every re-run fails identically,
+# leaving the public repo half-shaped. Atomic means the target is untouched.
+ODD="$WORK/odd-default.git"
+git init -q --bare -b master "$ODD"
+git -C "$SRC" push -q "$ODD" "v0.1.0^{commit}:refs/heads/master"
+odd_before="$(git -C "$ODD" for-each-ref --format='%(refname)' | sort | tr '\n' ' ')"
+if SOURCE="$SRC" TARGET="$ODD" CLONE_DIR="$WORK/unused" \
+    "$REPO_ROOT/scripts/mirror-release.sh" --no-release-page --no-reset-local v0.1.0 \
+    >/dev/null 2>&1; then
+    odd_pushed=yes
+else
+    odd_pushed=no
+fi
+assert_eq "push to a target with an unprunable default branch fails" "$odd_pushed" "no"
+assert_eq "the rejected push left the target untouched" \
+    "$(git -C "$ODD" for-each-ref --format='%(refname)' | sort | tr '\n' ' ')" "$odd_before"
+
+# --- the local clone is only reset when it really is the target's clone ------
+git clone -q "$TGT" "$WORK/clone"
+git clone -q "$SRC" "$WORK/wrong-clone"
+assert_fails "refuses to reset a clone whose origin is not the target" bash -c \
+    "SOURCE='$SRC' TARGET='$TGT' CLONE_DIR='$WORK/wrong-clone' \
+     '$REPO_ROOT/scripts/mirror-release.sh' --no-release-page v0.1.0"
+assert_eq "the refused run pushed nothing" \
+    "$(git -C "$TGT" rev-parse 'refs/heads/main^')" "$V020"
+
+echo "stray" > "$WORK/clone/stray.txt"
+git -C "$WORK/clone" add stray.txt
+out="$(SOURCE="$SRC" TARGET="$TGT" CLONE_DIR="$WORK/clone" \
+    "$REPO_ROOT/scripts/mirror-release.sh" --no-release-page v0.1.0 2>&1)"
+assert_contains "warns that local changes in the clone will be discarded" "$out" \
+    "will discard them"
+assert_eq "the local clone is reset to the published state" \
+    "$(git -C "$WORK/clone" rev-parse HEAD)" "$(git -C "$TGT" rev-parse refs/heads/main)"
+assert_empty "the reset discarded the stray change" \
+    "$(git -C "$WORK/clone" status --porcelain)"
+
 # --- rejections ------------------------------------------------------------
 assert_fails "rejects an unknown tag" bash -c \
     "SOURCE='$SRC' TARGET='$TGT' CLONE_DIR='$WORK/unused' \
