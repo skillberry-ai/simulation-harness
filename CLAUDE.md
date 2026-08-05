@@ -38,6 +38,9 @@ mypy (with the `pydantic.mypy` plugin) type-checks **both `src/` and `tests/`**.
 | Type-check | `make type-check` (mypy) |
 | CI check | `make check` (lint + type-check + format-check) |
 | Refresh OpenAPI spec | `make openapi` (regenerates `openapi.json`) |
+| Cut a release | `make release VERSION=X.Y.Z` (see `docs/releasing.md`) |
+| Publish a release to the external mirror | `make mirror [VERSION=vX.Y.Z]` |
+| Shell script tests | `make test-scripts` |
 
 `pytest.ini_options` sets `asyncio_mode = "auto"`, so async tests don't need `@pytest.mark.asyncio`.
 

@@ -1,5 +1,5 @@
 .PHONY: help install dev-install start stop restart test test-unit test-integration test-cov test-scripts lint format type-check lint-imports check openapi clean \
-        docker-build docker-build-dev docker-clean docker-clean-dev
+        docker-build docker-build-dev docker-clean docker-clean-dev release mirror
 
 IMAGE_NAME ?= simulation-harness
 IMAGE_TAG  ?= latest
@@ -31,6 +31,10 @@ help:
 	@echo "    lint-imports     Check architectural import boundaries"
 	@echo "    check            Run lint, type-check, import + format check (CI mode)"
 	@echo "    openapi          Regenerate openapi.json from the FastAPI app"
+	@echo ""
+	@echo "  Releasing:"
+	@echo "    release          Cut a release (VERSION=X.Y.Z, required)"
+	@echo "    mirror           Publish a release to the external mirror (VERSION optional)"
 	@echo ""
 	@echo "  Cleanup:"
 	@echo "    clean            Remove generated files and caches"
@@ -114,6 +118,16 @@ check: lint type-check lint-imports
 openapi:
 	uv run python -m simulation_harness.openapi_export > openapi.json
 	@echo "Wrote openapi.json"
+
+# Release and mirroring targets
+release:
+ifndef VERSION
+	$(error VERSION is required, e.g. make release VERSION=0.1.0)
+endif
+	./scripts/release.sh $(VERSION)
+
+mirror:
+	./scripts/mirror-release.sh $(VERSION)
 
 # Cleanup target
 clean:
