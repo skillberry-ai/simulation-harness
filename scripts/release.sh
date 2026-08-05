@@ -6,8 +6,10 @@
 # from Conventional Commit subjects since the last release, commits and signs
 # an annotated tag, pushes, and creates the GitHub Release on the internal repo.
 #
-# Pushing the tag also triggers .github/workflows/docker-publish.yml, which
-# publishes a version-tagged container image.
+# This does NOT build a container image. GitHub Actions is unavailable on
+# github.ibm.com, so docker-publish.yml never runs here despite its v*.*.* tag
+# trigger. The image is built on the mirror when the release is published there
+# by scripts/mirror-release.sh — see docs/releasing.md, "Container images".
 #
 # Usage:
 #   scripts/release.sh [--dry-run] <X.Y.Z>

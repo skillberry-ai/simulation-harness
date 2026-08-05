@@ -16,8 +16,10 @@ from Conventional Commit subjects since the previous tag, commits
 `chore(release): v0.2.0`, creates a signed annotated tag, pushes, and creates
 the GitHub Release on `github.ibm.com/kaegis/simulation-harness`.
 
-Pushing the tag also triggers `.github/workflows/docker-publish.yml`, which
-publishes a version-tagged container image.
+Cutting a release does **not** build a container image. GitHub Actions is not
+available on `github.ibm.com`, so `.github/workflows/docker-publish.yml` never
+runs here despite its `tags: ["v*.*.*"]` trigger. The versioned image is built
+on the mirror instead — see [Container images](#container-images) below.
 
 Preview without writing anything:
 
@@ -40,8 +42,9 @@ make mirror VERSION=0.2.0         # same thing; the v is optional here
 The mirror ends up with `main` at the release commit plus one auto-generated
 notice commit that prepends a detached-mirror banner to `README.md`, and with
 every `vX.Y.Z` tag. Everything else is pruned, so in-progress branches are never
-published. The script finishes by creating the public release page and resetting
-the local clone at `../../rossoctl/lab-runtime-simulation` to the new state.
+published. The script finishes by creating the release page on the mirror and
+resetting the local clone at `../../rossoctl/lab-runtime-simulation` to the new
+state.
 
 Both `X.Y.Z` and `vX.Y.Z` are accepted here, because `make release` takes the
 bare form. A release tag is strictly `vX.Y.Z`: a pre-release such as `v0.3.0-rc1`
@@ -64,13 +67,37 @@ so a rejected ref leaves the mirror untouched rather than half-shaped.
 | Flag | Use it when |
 |---|---|
 | `--yes` | Running unattended, or you have already reviewed the dry run and do not want the type-the-URL prompt. |
-| `--no-release-page` | `gh` is missing or not authenticated against the public repo. The refs still get published; run again later without the flag to add the page. |
+| `--no-release-page` | `gh` is missing or not authenticated against `github.com`. The refs still get published; run again later without the flag to add the page. |
 | `--no-reset-local` | There is no local clone of the mirror at `CLONE_DIR`, or you have work there you do not want touched. |
 
 Without `--no-reset-local`, the local clone at `CLONE_DIR` is **hard reset** to
 the newly published `origin/main`: any uncommitted work there is lost. The script
 warns first if that directory is dirty, and refuses outright if its `origin` is
 not the mirror.
+
+## Container images
+
+GitHub Actions is not available on `github.ibm.com`, so no workflow in this repo
+ever runs here — including `.github/workflows/docker-publish.yml`. Cutting a
+release therefore produces no image.
+
+The mirror is where CI actually runs. `docker-publish.yml` is mirrored along with
+everything else, Actions is enabled on `github.com/rossoctl/lab-runtime-simulation`,
+and it triggers on both `push` to `main` and `tags: ["v*.*.*"]`. So publishing a
+release to the mirror builds the image, tagged from the release tag, and pushes it
+to `ghcr.io/rossoctl/simulation-harness` — the name comes from
+`github.repository_owner`, so it follows the mirror's owner, not this repo's name.
+
+Two consequences worth knowing:
+
+- **The image is downstream of publishing, not of releasing.** A release you cut
+  but never mirror has no image anywhere. If you need an image for a release, you
+  have to publish that release to the mirror.
+- **A single `make mirror` fires the workflow twice** — once for the `main` update
+  and once for the tag, since the atomic push carries both. That is wasteful but
+  harmless; the two runs tag the image differently.
+
+To build an image locally without involving the mirror, use `make docker-build`.
 
 ## Roll back the mirror
 
