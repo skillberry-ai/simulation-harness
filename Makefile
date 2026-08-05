@@ -1,4 +1,4 @@
-.PHONY: help install dev-install start stop restart test test-unit test-integration test-cov test-scripts lint format type-check lint-imports check openapi clean \
+.PHONY: help install dev-install hooks start stop restart test test-unit test-integration test-cov test-scripts lint format type-check lint-imports check openapi clean \
         docker-build docker-build-dev docker-clean docker-clean-dev release mirror
 
 IMAGE_NAME ?= simulation-harness
@@ -10,7 +10,8 @@ help:
 	@echo ""
 	@echo "  Setup:"
 	@echo "    install          Install production dependencies"
-	@echo "    dev-install      Install development dependencies"
+	@echo "    dev-install      Install development dependencies and git hooks"
+	@echo "    hooks            (Re)install the pre-commit and commit-msg hooks"
 	@echo ""
 	@echo "  Running:"
 	@echo "    start            Start the harness server"
@@ -51,6 +52,22 @@ install:
 
 dev-install:
 	uv sync --extra dev
+	$(MAKE) hooks
+
+# Both hook types are needed: pre-commit runs ruff/detect-secrets/shellcheck, and
+# commit-msg enforces Conventional Commits. Installing only the first silently
+# drops commit-message checking, which is easy to miss. Idempotent, so it is safe
+# to re-run and safe as a dev-install step.
+hooks:
+	@if [ -n "$$(git config --get core.hooksPath)" ]; then \
+		echo "error: core.hooksPath is set to '$$(git config --get core.hooksPath)'."; \
+		echo "pre-commit refuses to install hooks while it is set. Clear it with:"; \
+		echo "    git config --unset core.hooksPath"; \
+		echo "then re-run 'make hooks'."; \
+		exit 1; \
+	fi
+	uv run pre-commit install --install-hooks
+	uv run pre-commit install --hook-type commit-msg
 
 # Running targets
 start:

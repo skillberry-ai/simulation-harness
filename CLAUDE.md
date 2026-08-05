@@ -130,7 +130,7 @@ Never add `Co-authored-by`, `Made-with`, or similar trailers that GitHub parses 
 
 ## Code-quality automation
 
-- **Pre-commit** (`.pre-commit-config.yaml`): ruff lint+format, detect-secrets, and Conventional Commit message enforcement. Install once: `uv run pre-commit install --install-hooks && uv run pre-commit install --hook-type commit-msg`.
+- **Pre-commit** (`.pre-commit-config.yaml`): ruff lint+format, detect-secrets, shellcheck, and Conventional Commit message enforcement. `make dev-install` installs both hook types; `make hooks` re-installs them on their own. Both are needed — installing only `pre-commit` silently drops commit-message checking. If `core.hooksPath` is set, pre-commit refuses to install and `make hooks` will tell you to clear it.
 - **Agent hook** (`.claude/settings.json` → `.claude/hooks/format-python.sh`): auto-formats and autofixes Python files after every Edit/Write.
 - **CI** (`.github/workflows/ci.yml`): lint, type-check, import-boundary, and test gates on every PR. CodeQL + Dependabot cover security scanning.
 - **Import boundaries** (`[tool.importlinter]` in `pyproject.toml`): `make lint-imports` keeps `models`/`utils`/`openapi`/`state` from depending on higher layers.
