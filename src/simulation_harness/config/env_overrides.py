@@ -43,8 +43,31 @@ def apply_env_overrides(config: HarnessConfig) -> HarnessConfig:
       HARNESS_SESSIONS_MAX_MESSAGES, HARNESS_SESSIONS_IDLE_TIMEOUT_SECONDS,
       HARNESS_SESSIONS_MAX_CONCURRENT_QUEUE_DEPTH
       HARNESS_AUTOSTART_ENABLED, HARNESS_AUTOSTART_SIMULATION
+      HARNESS_LLM_PROVIDER, HARNESS_LLM_SKILL_GENERATION_MODEL,
+      HARNESS_LLM_SIMULATION_MODEL, HARNESS_LLM_SKILL_GENERATION_MAX_TOKENS
     """
     data = config.model_dump()
+
+    # The llm: block is overridable because an orchestrator may deploy the image
+    # without mounting a harness.yaml ConfigMap, leaving the baked-in models as
+    # the only ones reachable. provider is included alongside the model names:
+    # the provider and the model prefix must stay consistent with the endpoint
+    # LLM_API_BASE points at, so overriding one without the other is a trap.
+    llm_provider = os.getenv("HARNESS_LLM_PROVIDER")
+    if llm_provider is not None:
+        data["llm"]["provider"] = llm_provider
+
+    skill_generation_model = os.getenv("HARNESS_LLM_SKILL_GENERATION_MODEL")
+    if skill_generation_model is not None:
+        data["llm"]["skill_generation_model"] = skill_generation_model
+
+    simulation_model = os.getenv("HARNESS_LLM_SIMULATION_MODEL")
+    if simulation_model is not None:
+        data["llm"]["simulation_model"] = simulation_model
+
+    skill_generation_max_tokens = _int_env("HARNESS_LLM_SKILL_GENERATION_MAX_TOKENS")
+    if skill_generation_max_tokens is not None:
+        data["llm"]["skill_generation_max_tokens"] = skill_generation_max_tokens
 
     server_host = os.getenv("HARNESS_SERVER_HOST")
     if server_host is not None:

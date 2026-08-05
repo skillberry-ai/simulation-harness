@@ -94,6 +94,7 @@ logging:
 
 **Configuration notes:**
 - The YAML is read once at startup; changes require a process restart. Override the path via `HARNESS_CONFIG_PATH`.
+- Individual values can be overridden with `HARNESS_*` env vars — including the models, via `HARNESS_LLM_SKILL_GENERATION_MODEL` and `HARNESS_LLM_SIMULATION_MODEL`. See the [full table](deploy/README.md#env-var-config-overrides), useful when the YAML isn't yours to edit.
 - Secrets are **not** in the YAML. Set `LLM_API_KEY` (and optional `LLM_API_BASE`) via `.env` or environment variables — see [`.env.example`](.env.example).
 - The MCP transport (`sse` vs `streamable_http`) is fixed at startup — both expose identical `tools/list` and `tools/call` semantics.
 

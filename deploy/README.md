@@ -92,6 +92,10 @@ These override the values in the mounted `harness.yaml`:
 | Variable                                       | Maps to                                     |
 |-----------------------------------------------|---------------------------------------------|
 | `HARNESS_CONFIG_PATH`                          | path to the YAML file                       |
+| `HARNESS_LLM_PROVIDER`                         | `llm.provider`                              |
+| `HARNESS_LLM_SKILL_GENERATION_MODEL`           | `llm.skill_generation_model`                |
+| `HARNESS_LLM_SIMULATION_MODEL`                 | `llm.simulation_model`                      |
+| `HARNESS_LLM_SKILL_GENERATION_MAX_TOKENS`      | `llm.skill_generation_max_tokens`           |
 | `HARNESS_SERVER_HOST`                          | `server.host`                               |
 | `HARNESS_SERVER_PORT`                          | `server.port`                               |
 | `HARNESS_SKILLS_FOLDER`                        | `skills.folder`                             |
@@ -114,13 +118,19 @@ The four LLM settings a consumer typically tunes split across **two** channels:
 |---|---|---|
 | `LLM_API_KEY`            | `harness-secrets` **Secret** (`secret.yaml`) | env var, injected via `envFrom` |
 | `LLM_API_BASE` (optional)| `harness-secrets` **Secret** (`secret.yaml`) | env var, injected via `envFrom` |
-| `skill_generation_model` | `harness-config` **ConfigMap** (`harness.yaml`) | edit the `llm:` block — **no env-var override** |
-| `simulation_model`       | `harness-config` **ConfigMap** (`harness.yaml`) | edit the `llm:` block — **no env-var override** |
+| `skill_generation_model` | `harness-config` **ConfigMap** (`harness.yaml`) | edit the `llm:` block, or set `HARNESS_LLM_SKILL_GENERATION_MODEL` |
+| `simulation_model`       | `harness-config` **ConfigMap** (`harness.yaml`) | edit the `llm:` block, or set `HARNESS_LLM_SIMULATION_MODEL` |
 
 The API key/base are read only from the process environment (never from YAML),
-so they belong in the Secret. The two model names live only in `harness.yaml`
-and are **not** in the `HARNESS_*` override table above — the only supported way
-to change them in-cluster is to edit the ConfigMap.
+so they belong in the Secret. The model names have two channels: the `llm:` block
+in the ConfigMap, and the `HARNESS_LLM_*` env vars in the override table above
+(env wins). Prefer the ConfigMap when you own the manifests; the env vars exist
+for orchestrators that deploy this image **without** mounting a `harness.yaml`,
+where the ConfigMap route isn't available and the baked-in defaults would
+otherwise be the only reachable models.
+
+If you override the model, consider `HARNESS_LLM_PROVIDER` too — `provider` and
+the model prefix must stay consistent with the endpoint `LLM_API_BASE` points at.
 
 Edit the `llm:` block in `deploy/k8s/configmap.yaml`:
 
