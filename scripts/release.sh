@@ -142,6 +142,10 @@ push_release() {
 # that merely happens to sit at HEAD — created by hand, or by something else —
 # must not trigger a resume: there would be no version bump and no CHANGELOG
 # section to publish, and the run would report success having done neither.
+#
+# The subject below must stay in step with the `git commit -m` in the mutation
+# phase; it is matched literally, so rewording one without the other silently
+# disables resuming on both arms.
 head_is_release_commit() {
     [[ -f pyproject.toml ]] || return 1
     [[ "$(git log -1 --format=%s)" == "chore(release): $TAG" ]] || return 1
@@ -204,7 +208,12 @@ if [[ -n "$ls_remote_out" ]]; then
     )"
 fi
 
-if [[ -n "$remote_tag_commit" && "$remote_tag_commit" == "$head_commit" ]]; then
+# Both arms are gated on head_is_release_commit: a tag that merely sits at HEAD
+# is not evidence of a previous run of this script. A hand-pushed vX.Y.Z would
+# otherwise resume straight to the GitHub release step and report success with
+# no version bump and no CHANGELOG section behind it.
+if [[ -n "$remote_tag_commit" && "$remote_tag_commit" == "$head_commit" ]] \
+    && head_is_release_commit; then
     warn "$TAG already exists on $RELEASE_REMOTE and HEAD is unchanged since — a previous run got this far."
     warn "Resuming at the GitHub release step; nothing will be committed or pushed."
     resume_notes
@@ -369,6 +378,10 @@ rm -f -- "$SECTION_FILE"
 
 info "Committing the release"
 git add pyproject.toml CHANGELOG.md
+# This subject is load-bearing: head_is_release_commit() matches it literally to
+# decide whether a re-run may resume. Reword it and both resume arms stop firing
+# (they fall back to the "tag already exists locally" error), so change it there
+# too.
 git commit -S -s -m "chore(release): $TAG" \
     || die "commit failed (signing is required; do not fall back to unsigned)"
 

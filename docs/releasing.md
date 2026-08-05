@@ -91,11 +91,13 @@ exactly one move:
 | Commit and tag exist locally, nothing on the remote | The push failed. It pushes `main` and the tag `--atomic`, so this is the only push-failure state — the tag is never published without its release commit. | Fix the cause and re-run `scripts/release.sh <same version>`. It detects the release commit and its tag at `HEAD` and resumes at the push. Do **not** `git pull` — that puts a merge commit on top of the release commit. |
 | Tag pushed, no GitHub Release | `gh release create` failed. | Re-run the same command; it resumes at the GitHub Release step. |
 | Everything published | — | Mirror it. |
+| `tag vX.Y.Z already exists locally`, and you know a run got part-way | `HEAD` moved after the tag was made (an amend, or a commit on top), so the tag no longer sits on a release commit and resuming declines to fire. | If the tag was never pushed, drop it and start over: `git tag -d vX.Y.Z`, then re-run. If it was already pushed, leave it alone and cut the next version instead — a published tag is a fixed point. |
 
-Resuming is deliberately narrow: it fires only for a tag this script created, on
-a `chore(release): vX.Y.Z` commit at `HEAD` whose `pyproject.toml` already holds
-that version. A tag made by hand is still rejected with `tag vX.Y.Z already
-exists locally`, since there would be no bump and no changelog section to publish.
+Resuming is deliberately narrow: both resume paths fire only for a tag this
+script created, on a `chore(release): vX.Y.Z` commit at `HEAD` whose
+`pyproject.toml` already holds that version. A tag made or pushed by hand is
+rejected with `tag vX.Y.Z already exists locally`, since there would be no bump
+and no changelog section to publish.
 
 For `scripts/mirror-release.sh` the push is atomic too, so it either fully applied
 or changed nothing on the target. A failure after the push (release page, local

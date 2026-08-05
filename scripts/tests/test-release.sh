@@ -303,6 +303,24 @@ assert_eq "pyproject.toml was not touched" \
     "$(sed -n 's/^version = "\(.*\)"$/\1/p' "$FIXTURE/pyproject.toml" | head -1)" "0.7.0"
 git -C "$FIXTURE" tag -d v0.9.0 >/dev/null
 
+# --- the same, for a tag that was already pushed by hand -------------------
+# The GitHub-release resume arm needs the same gate: a hand-pushed vX.Y.Z at
+# HEAD used to resume straight to "Done." with nothing released.
+git -C "$FIXTURE" tag -a v0.9.0 -m "hand-made tag"
+git -C "$FIXTURE" push -q origin v0.9.0
+out="$(run_release 0.9.0 || true)"
+assert_contains "a hand-pushed tag at HEAD is rejected, not resumed" "$out" \
+    "tag v0.9.0 already exists locally"
+case "$out" in
+    *Resuming*) hand_pushed_resumed=yes ;;
+    *)          hand_pushed_resumed=no ;;
+esac
+assert_eq "the hand-pushed tag triggers no resume" "$hand_pushed_resumed" "no"
+assert_eq "pyproject.toml is still untouched" \
+    "$(sed -n 's/^version = "\(.*\)"$/\1/p' "$FIXTURE/pyproject.toml" | head -1)" "0.7.0"
+git -C "$FIXTURE" push -q origin :refs/tags/v0.9.0
+git -C "$FIXTURE" tag -d v0.9.0 >/dev/null
+
 # --- an already-published tag resumes at the release step ------------------
 # Exercises the remote-tag resolution: the arm keys on the commit the *remote*
 # tag points at, read from the ls-remote output rather than from the local tag.
