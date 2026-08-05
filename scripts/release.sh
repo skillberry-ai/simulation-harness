@@ -74,15 +74,18 @@ source "$REPO_ROOT/scripts/lib/release-tag.sh"
 : "${RELEASE_GH_REPO:=github.ibm.com/kaegis/simulation-harness}"
 : "${RELEASE_SKIP_GH:=0}"
 
-NOTES_FILE="$(mktemp "${TMPDIR:-/tmp}/release-notes.XXXXXX")"
-
 # ROLLBACK_TO is armed with the pre-mutation HEAD just before the worktree is
 # touched and disarmed once the tag exists. While armed, any exit — a failed
 # signed commit, a failed tag — restores the worktree to exactly what preflight
 # found, which it proved clean. Without it a failed commit leaves a bumped
 # pyproject.toml and a written CHANGELOG.md staged, and the obvious next move
 # (committing them) permanently poisons that version number.
+#
+# Declared, along with every tempfile the script owns, before the first one is
+# created, so the trap can be installed before anything exists to leak.
 ROLLBACK_TO=""
+NOTES_FILE=""
+SECTION_FILE=""
 on_exit() {
     if [[ -n "$ROLLBACK_TO" ]]; then
         warn "release aborted part-way — restoring the worktree to $ROLLBACK_TO"
@@ -90,9 +93,16 @@ on_exit() {
         git reset --hard --quiet "$ROLLBACK_TO" \
             || warn "could not restore the worktree; inspect 'git status' before retrying"
     fi
-    rm -f -- "$NOTES_FILE"
+    local f
+    for f in "$NOTES_FILE" "$SECTION_FILE"; do
+        if [[ -n "$f" ]]; then
+            rm -f -- "$f"
+        fi
+    done
 }
 trap on_exit EXIT
+
+NOTES_FILE="$(mktemp "${TMPDIR:-/tmp}/release-notes.XXXXXX")"
 
 # ---- helpers ---------------------------------------------------------------
 
@@ -118,8 +128,24 @@ changelog_section() {
 
 push_release() {
     info "Pushing main and $TAG to $RELEASE_REMOTE"
-    git push "$RELEASE_REMOTE" main "$TAG" \
-        || die "push failed; the local commit and tag are intact — fix the cause and re-run 'scripts/release.sh $VERSION', which resumes at the push"
+    # --atomic: main and the tag are one release, so they must land together or
+    # not at all. Non-atomically, a rule that rejects only the branch leaves the
+    # tag published with no release commit on main — and the next run then sees
+    # the pushed tag, resumes at the GitHub release step, and reports success
+    # with the remote still behind. Atomic routes that failure to the
+    # resume-at-push arm instead.
+    git push --atomic "$RELEASE_REMOTE" main "$TAG" \
+        || die "push failed; nothing was published (the push is atomic) and the local commit and tag are intact — fix the cause and re-run 'scripts/release.sh $VERSION', which resumes at the push"
+}
+
+# True only when HEAD is a release commit this script produced for $TAG. A tag
+# that merely happens to sit at HEAD — created by hand, or by something else —
+# must not trigger a resume: there would be no version bump and no CHANGELOG
+# section to publish, and the run would report success having done neither.
+head_is_release_commit() {
+    [[ -f pyproject.toml ]] || return 1
+    [[ "$(git log -1 --format=%s)" == "chore(release): $TAG" ]] || return 1
+    [[ "$(current_version)" == "$VERSION" ]]
 }
 
 # Fill NOTES_FILE from the already-written CHANGELOG.md section, used on both
@@ -154,13 +180,28 @@ create_gh_release() {
 info "Fetching $RELEASE_REMOTE"
 git fetch --quiet --tags "$RELEASE_REMOTE" || die "failed to fetch $RELEASE_REMOTE"
 
-remote_tag_commit=""
-ls_remote_out="$(git ls-remote --tags --refs "$RELEASE_REMOTE" "refs/tags/$TAG")" \
+# Ask for the peeled ref too ("refs/tags/<tag>^{}"), which is the commit an
+# annotated tag points at on the remote. Resolving the *remote* tag's commit
+# matters: using the local tag's commit would only prove the remote has some tag
+# with that name, and `git fetch --tags` will not force-update a local tag that
+# has diverged from it — so a diverged local tag would resume at the GitHub
+# release step and never push main.
+ls_remote_out="$(git ls-remote --tags "$RELEASE_REMOTE" "refs/tags/$TAG" "refs/tags/$TAG^{}")" \
     || die "failed to query tags on $RELEASE_REMOTE"
 local_tag_commit="$(git rev-parse --verify --quiet "refs/tags/$TAG^{commit}" || true)"
 head_commit="$(git rev-parse HEAD)"
+
+remote_tag_commit=""
 if [[ -n "$ls_remote_out" ]]; then
-    remote_tag_commit="$local_tag_commit"
+    # Prefer the peeled commit; fall back to the ref's own object id, which is
+    # the commit when the remote tag is lightweight.
+    remote_tag_commit="$(
+        awk -v peeled="refs/tags/$TAG^{}" -v plain="refs/tags/$TAG" '
+            $2 == peeled { print $1; found = 1; exit }
+            $2 == plain  { plain_sha = $1 }
+            END { if (!found && plain_sha != "") print plain_sha }
+        ' <<< "$ls_remote_out"
+    )"
 fi
 
 if [[ -n "$remote_tag_commit" && "$remote_tag_commit" == "$head_commit" ]]; then
@@ -182,7 +223,8 @@ fi
 # this arm the run below would die in preflight on "local main differs from
 # $RELEASE_REMOTE/main", so the push could never be retried — and the advice to
 # pull would put a merge commit on top of the release commit.
-if [[ -z "$ls_remote_out" && -n "$local_tag_commit" && "$local_tag_commit" == "$head_commit" ]]; then
+if [[ -z "$ls_remote_out" && -n "$local_tag_commit" && "$local_tag_commit" == "$head_commit" ]] \
+    && head_is_release_commit; then
     warn "$TAG exists locally at HEAD but not on $RELEASE_REMOTE — a previous run committed and tagged, then failed to push."
     warn "Resuming at the push; nothing will be committed or re-tagged."
 
@@ -291,7 +333,7 @@ mv pyproject.toml.new pyproject.toml
 # ---- prepend the CHANGELOG section ----------------------------------------
 
 info "Prepending the v$VERSION section to CHANGELOG.md"
-section="$(mktemp "${TMPDIR:-/tmp}/release-section.XXXXXX")"
+SECTION_FILE="$(mktemp "${TMPDIR:-/tmp}/release-section.XXXXXX")"
 {
     printf '## %s — %s\n\n' "$TAG" "$(date -u +%Y-%m-%d)"
     # Normalize to exactly one trailing blank line, regardless of how the
@@ -299,12 +341,12 @@ section="$(mktemp "${TMPDIR:-/tmp}/release-section.XXXXXX")"
     # always present — command substitution strips all trailing newlines,
     # then we add exactly one blank line back.
     printf '%s\n\n' "$(cat "$NOTES_FILE")"
-} > "$section"
+} > "$SECTION_FILE"
 
 if [[ -f CHANGELOG.md ]]; then
     {
         printf '# Changelog\n\n'
-        cat "$section"
+        cat "$SECTION_FILE"
         # Drop the existing first line only when it is the header we are about
         # to re-emit. Anything else — a hand-written preamble, a differently
         # worded title — is content, and stripping it would lose it silently.
@@ -317,11 +359,11 @@ if [[ -f CHANGELOG.md ]]; then
 else
     {
         printf '# Changelog\n\n'
-        cat "$section"
+        cat "$SECTION_FILE"
     } > CHANGELOG.md.new
 fi
 mv CHANGELOG.md.new CHANGELOG.md
-rm -f -- "$section"
+rm -f -- "$SECTION_FILE"
 
 # ---- commit, tag, push -----------------------------------------------------
 

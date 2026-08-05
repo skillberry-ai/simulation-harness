@@ -278,11 +278,14 @@ fi
 # published for real. Only gets in the way when it matters: overridden targets
 # (the offline tests) and non-interactive runs never prompt.
 confirm_real_push() {
-    if (( ASSUME_YES )); then
-        warn "--yes given: skipping the confirmation prompt."
+    # Order matters: the "--yes" notice must only appear when a prompt would
+    # genuinely have been shown, or it claims to have skipped something that was
+    # never armed.
+    if [[ "$TARGET" != "$TARGET_DEFAULT" ]]; then
         return 0
     fi
-    if [[ "$TARGET" != "$TARGET_DEFAULT" ]]; then
+    if (( ASSUME_YES )); then
+        warn "--yes given: skipping the confirmation prompt."
         return 0
     fi
     if [[ ! -t 0 ]]; then

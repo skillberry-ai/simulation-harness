@@ -106,9 +106,16 @@ assert_eq "-- run publishes nothing" \
     "$(git -C "$TGT" rev-parse 'refs/heads/main^')" "$V020"
 
 # --- --yes is accepted (the prompt itself only arms for the default target) --
-mirror --yes v0.2.0 >/dev/null
+out="$(mirror --yes v0.2.0)"
 assert_eq "--yes runs unattended" \
     "$(git -C "$TGT" rev-parse 'refs/heads/main^')" "$V020"
+# No prompt is armed for an overridden target, so --yes must not claim to have
+# skipped one.
+case "$out" in
+    *"--yes given"*) yes_noise=yes ;;
+    *)               yes_noise=no ;;
+esac
+assert_eq "--yes is quiet when no prompt was armed" "$yes_noise" "no"
 
 # --- confirmation before a push to the default target -----------------------
 # The prompt only arms when TARGET is the built-in default, which is the real

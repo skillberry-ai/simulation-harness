@@ -258,4 +258,86 @@ assert_eq "changelog still starts with the header" \
 assert_eq "the header is not duplicated" \
     "$(grep -c '^# Changelog$' "$FIXTURE/CHANGELOG.md")" "1"
 
+# --- the push is atomic: main and the tag land together or not at all -------
+# An `update` hook that rejects only refs/heads/main used to leave the tag
+# published with no release commit on main, after which the next run saw the
+# pushed tag, resumed at the GitHub release step and reported success with the
+# remote still behind.
+origin_main_before="$(git -C "$ORIGIN" rev-parse main)"
+cat > "$ORIGIN/hooks/update" <<'EOF'
+#!/bin/sh
+case "$1" in
+    refs/heads/main) echo "main rejected by test hook" >&2; exit 1 ;;
+esac
+exit 0
+EOF
+chmod +x "$ORIGIN/hooks/update"
+
+if run_release 0.7.0 >/dev/null 2>&1; then
+    branch_reject_failed=no
+else
+    branch_reject_failed=yes
+fi
+assert_eq "release fails when only the branch update is rejected" "$branch_reject_failed" "yes"
+assert_empty "the rejected push published no tag" "$(git -C "$ORIGIN" tag -l v0.7.0)"
+assert_eq "the rejected push left origin/main alone" \
+    "$(git -C "$ORIGIN" rev-parse main)" "$origin_main_before"
+
+rm -f "$ORIGIN/hooks/update"
+out="$(run_release 0.7.0)"
+assert_contains "the atomic failure is resumable" "$out" "Resuming at the push"
+assert_eq "the resumed push publishes the tag" "$(git -C "$ORIGIN" tag -l v0.7.0)" "v0.7.0"
+assert_eq "the resumed push publishes the commit" \
+    "$(git -C "$ORIGIN" rev-parse main)" "$(git -C "$FIXTURE" rev-parse HEAD)"
+
+# --- a tag this script did not create must not trigger a resume ------------
+# The resume-at-push arm keys on more than "a tag named vX.Y.Z sits at HEAD":
+# a hand-made tag has no version bump and no CHANGELOG section behind it, so
+# resuming would push and report success having released nothing.
+git -C "$FIXTURE" tag -a v0.9.0 -m "hand-made tag"
+out="$(run_release 0.9.0 || true)"
+assert_contains "a hand-made tag at HEAD is rejected, not resumed" "$out" \
+    "tag v0.9.0 already exists locally"
+assert_empty "the hand-made tag was not published" "$(git -C "$ORIGIN" tag -l v0.9.0)"
+assert_eq "pyproject.toml was not touched" \
+    "$(sed -n 's/^version = "\(.*\)"$/\1/p' "$FIXTURE/pyproject.toml" | head -1)" "0.7.0"
+git -C "$FIXTURE" tag -d v0.9.0 >/dev/null
+
+# --- an already-published tag resumes at the release step ------------------
+# Exercises the remote-tag resolution: the arm keys on the commit the *remote*
+# tag points at, read from the ls-remote output rather than from the local tag.
+out="$(run_release 0.7.0)"
+assert_contains "an already-published tag resumes at the release step" "$out" \
+    "Resuming at the GitHub release step"
+assert_contains "the resumed run pushes nothing" "$out" "nothing will be committed or pushed"
+
+# --- a local tag diverged from the same-named remote tag -------------------
+# Comparing the *local* tag's commit to HEAD would resume at the GitHub release
+# step and never push main. Whichever guard fires first, the requirement is that
+# this state never resumes and never publishes.
+origin_main_before="$(git -C "$ORIGIN" rev-parse main)"
+git -C "$FIXTURE" tag -a v0.8.0 -m "remote version" HEAD~1
+git -C "$FIXTURE" push -q origin v0.8.0
+git -C "$FIXTURE" tag -d v0.8.0 >/dev/null
+git -C "$FIXTURE" tag -a v0.8.0 -m "local version" HEAD
+out="$(run_release 0.8.0 || true)"
+case "$out" in
+    *Resuming*) diverged_resumed=yes ;;
+    *)          diverged_resumed=no ;;
+esac
+assert_eq "a diverged local tag does not resume" "$diverged_resumed" "no"
+assert_eq "the diverged run published nothing" \
+    "$(git -C "$ORIGIN" rev-parse main)" "$origin_main_before"
+assert_eq "the diverged remote tag is untouched" \
+    "$(git -C "$ORIGIN" rev-parse 'refs/tags/v0.8.0^{commit}')" \
+    "$(git -C "$FIXTURE" rev-parse 'HEAD~1')"
+git -C "$FIXTURE" tag -d v0.8.0 >/dev/null
+git -C "$FIXTURE" push -q origin :refs/tags/v0.8.0
+
+# --- tempfiles are cleaned up ----------------------------------------------
+before_tmp="$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'release-*' 2>/dev/null | wc -l)"
+run_release --dry-run 1.0.0 >/dev/null
+assert_eq "a dry run leaves no release tempfiles behind" \
+    "$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'release-*' 2>/dev/null | wc -l)" "$before_tmp"
+
 assert_summary

@@ -124,7 +124,7 @@ release:
 ifndef VERSION
 	$(error VERSION is required, e.g. make release VERSION=0.1.0)
 endif
-	./scripts/release.sh $(VERSION)
+	./scripts/release.sh "$(VERSION)"
 
 mirror:
 	./scripts/mirror-release.sh $(if $(strip $(VERSION)),"$(VERSION)")

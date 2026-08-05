@@ -88,12 +88,17 @@ exactly one move:
 | State | What happened | What to do |
 |---|---|---|
 | Worktree unchanged, nothing tagged | The commit or the tag failed — most often signing. The script restores the worktree to what preflight found, so nothing is half-applied. | Fix signing, re-run the same command. Do **not** commit leftovers by hand: a version bump with no tag makes that version number permanently unreleasable. |
-| Commit and tag exist locally, nothing on the remote | The push failed. | Fix the cause and re-run `scripts/release.sh <same version>`. It detects the local tag at `HEAD` and resumes at the push. Do **not** `git pull` — that puts a merge commit on top of the release commit. |
+| Commit and tag exist locally, nothing on the remote | The push failed. It pushes `main` and the tag `--atomic`, so this is the only push-failure state — the tag is never published without its release commit. | Fix the cause and re-run `scripts/release.sh <same version>`. It detects the release commit and its tag at `HEAD` and resumes at the push. Do **not** `git pull` — that puts a merge commit on top of the release commit. |
 | Tag pushed, no GitHub Release | `gh release create` failed. | Re-run the same command; it resumes at the GitHub Release step. |
 | Everything published | — | Mirror it. |
 
-For `scripts/mirror-release.sh` the push is atomic, so it either fully applied or
-changed nothing on the target. A failure after the push (release page, local
+Resuming is deliberately narrow: it fires only for a tag this script created, on
+a `chore(release): vX.Y.Z` commit at `HEAD` whose `pyproject.toml` already holds
+that version. A tag made by hand is still rejected with `tag vX.Y.Z already
+exists locally`, since there would be no bump and no changelog section to publish.
+
+For `scripts/mirror-release.sh` the push is atomic too, so it either fully applied
+or changed nothing on the target. A failure after the push (release page, local
 clone reset) is safe to retry by re-running the same command.
 
 ## Tests
