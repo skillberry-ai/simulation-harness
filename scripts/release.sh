@@ -282,6 +282,15 @@ fi
 cur="$(current_version)"
 [[ -n "$cur" ]] || die "could not read the current version from pyproject.toml"
 
+# uv.lock pins the project's own version, so it has to be re-locked alongside the
+# bump. Check for uv here, in preflight, rather than after the worktree has been
+# mutated: a missing uv is a "fix your PATH and re-run" problem, not something to
+# discover half-way through a release.
+if [[ -f uv.lock ]]; then
+    command -v uv >/dev/null 2>&1 \
+        || die "uv.lock exists but uv is not on PATH — uv is needed to re-lock the version bump"
+fi
+
 # Highest existing release tag, per the definition shared with
 # mirror-release.sh (scripts/lib/release-tag.sh), so the two can never disagree
 # about which tags are releases. Pre-release tags are not releases.
@@ -317,9 +326,14 @@ sed 's/^/    /' "$NOTES_FILE"
 echo
 
 if (( DRY_RUN )); then
-    info "dry run: nothing was written. Would bump pyproject.toml, prepend"
-    info "CHANGELOG.md, commit 'chore(release): $TAG', tag, push to"
-    info "$RELEASE_REMOTE, and create the GitHub release."
+    info "dry run: nothing was written. Would bump pyproject.toml,"
+    if [[ -f uv.lock ]]; then
+        info "re-lock uv.lock, prepend CHANGELOG.md, commit"
+    else
+        info "prepend CHANGELOG.md, commit"
+    fi
+    info "'chore(release): $TAG', tag, push to $RELEASE_REMOTE, and"
+    info "create the GitHub release."
     exit 0
 fi
 
@@ -340,6 +354,18 @@ awk -v v="$VERSION" '
 mv pyproject.toml.new pyproject.toml
 
 [[ "$(current_version)" == "$VERSION" ]] || die "failed to update the version in pyproject.toml"
+
+# ---- re-lock ---------------------------------------------------------------
+
+# uv.lock carries the project's own version in its [[package]] entry, so the bump
+# above leaves it stale. Left unfixed the release ships a lockfile that disagrees
+# with pyproject.toml, and the next `uv run` silently rewrites it — the change then
+# turns up as an unrelated dirty file in whoever's branch touches it next.
+# The rollback trap is armed, so a failure here restores the bump.
+if [[ -f uv.lock ]]; then
+    info "Re-locking uv.lock for $VERSION"
+    uv lock || die "uv lock failed — see the output above. The worktree is restored below."
+fi
 
 # ---- prepend the CHANGELOG section ----------------------------------------
 
@@ -387,6 +413,9 @@ rm -f -- CHANGELOG.md.new "$SECTION_FILE"
 
 info "Committing the release"
 git add pyproject.toml CHANGELOG.md
+if [[ -f uv.lock ]]; then
+    git add uv.lock
+fi
 # This subject is load-bearing: head_is_release_commit() matches it literally to
 # decide whether a re-run may resume. Reword it and both resume arms stop firing
 # (they fall back to the "tag already exists locally" error), so change it there

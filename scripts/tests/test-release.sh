@@ -371,6 +371,28 @@ assert_eq "the diverged remote tag is untouched" \
 git -C "$FIXTURE" tag -d v0.8.0 >/dev/null
 git -C "$FIXTURE" push -q origin :refs/tags/v0.8.0
 
+# --- uv.lock is refreshed and committed with the version bump --------------
+# uv.lock records the project's own version, so bumping pyproject.toml without
+# re-locking ships a lockfile that disagrees with the release. v0.1.1 did exactly
+# that: the bump landed, the lock stayed at 0.1.0, and the next `uv run` rewrote
+# it — surfacing as an unrelated dirty file in someone else's branch.
+# UV_OFFLINE keeps this hermetic; the fixture has no dependencies to resolve.
+export UV_OFFLINE=1
+( cd "$FIXTURE" && uv lock -q )
+git -C "$FIXTURE" add uv.lock
+git -C "$FIXTURE" commit -q -m "build: add a lockfile"
+git -C "$FIXTURE" push -q origin main
+assert_eq "fixture lockfile starts at the pre-release version" \
+    "$(grep -c 'version = "0.7.0"' "$FIXTURE/uv.lock")" "1"
+
+run_release 0.9.0 >/dev/null
+assert_eq "release refreshes uv.lock to the released version" \
+    "$(grep -c 'version = "0.9.0"' "$FIXTURE/uv.lock")" "1"
+assert_contains "uv.lock is part of the release commit" \
+    "$(git -C "$FIXTURE" show --stat --format= HEAD)" "uv.lock"
+assert_empty "release leaves no unstaged lockfile change behind" \
+    "$(git -C "$FIXTURE" status --porcelain --untracked-files=no)"
+
 # --- tempfiles are cleaned up ----------------------------------------------
 before_tmp="$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'release-*' 2>/dev/null | wc -l)"
 run_release --dry-run 1.0.0 >/dev/null

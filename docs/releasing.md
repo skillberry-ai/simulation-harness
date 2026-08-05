@@ -11,10 +11,12 @@ make release VERSION=0.2.0        # or: ./scripts/release.sh 0.2.0
 ```
 
 This runs on `main` only, with a clean worktree and in sync with `origin/main`.
-It bumps `version` in `pyproject.toml`, prepends a `CHANGELOG.md` section built
-from Conventional Commit subjects since the previous tag, commits
-`chore(release): v0.2.0`, creates a signed annotated tag, pushes, and creates
-the GitHub Release on `github.ibm.com/kaegis/simulation-harness`.
+It bumps `version` in `pyproject.toml`, re-locks `uv.lock` (which pins the
+project's own version, so it would otherwise go stale — `uv` must be on `PATH`),
+prepends a `CHANGELOG.md` section built from Conventional Commit subjects since
+the previous tag, commits `chore(release): v0.2.0`, creates a signed annotated
+tag, pushes, and creates the GitHub Release on
+`github.ibm.com/kaegis/simulation-harness`.
 
 Cutting a release does **not** build a container image. GitHub Actions is not
 available on `github.ibm.com`, so `.github/workflows/docker-publish.yml` never
