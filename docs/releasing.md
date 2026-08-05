@@ -26,13 +26,15 @@ Preview without writing anything:
 ```
 
 If a run pushes the tag and then fails, re-run the same command — it detects the
-pushed tag and resumes at the GitHub Release step.
+pushed tag and resumes at the GitHub Release step. See
+[Recovering from a partial run](#recovering-from-a-partial-run).
 
 ## Publish a release to the mirror
 
 ```sh
 make mirror                       # latest release
 make mirror VERSION=v0.2.0        # a specific release
+make mirror VERSION=0.2.0         # same thing; the v is optional here
 ```
 
 The mirror ends up with `main` at the release commit plus one auto-generated
@@ -41,11 +43,34 @@ every `vX.Y.Z` tag. Everything else is pruned, so in-progress branches are never
 published. The script finishes by creating the public release page and resetting
 the local clone at `../../rossoctl/lab-runtime-simulation` to the new state.
 
+Both `X.Y.Z` and `vX.Y.Z` are accepted here, because `make release` takes the
+bare form. A release tag is strictly `vX.Y.Z`: a pre-release such as `v0.3.0-rc1`
+is not a release, is never mirrored, and is never treated as the previous
+release. That definition lives once in `scripts/lib/release-tag.sh` and is shared
+by both scripts.
+
 Preview the exact ref changes without pushing:
 
 ```sh
 ./scripts/mirror-release.sh --dry-run
 ```
+
+Before the real push the script asks you to type the target URL, whenever the
+target is the built-in default and stdin is a terminal. The push is `--atomic`,
+so a rejected ref leaves the mirror untouched rather than half-shaped.
+
+### Escape hatches
+
+| Flag | Use it when |
+|---|---|
+| `--yes` | Running unattended, or you have already reviewed the dry run and do not want the type-the-URL prompt. |
+| `--no-release-page` | `gh` is missing or not authenticated against the public repo. The refs still get published; run again later without the flag to add the page. |
+| `--no-reset-local` | There is no local clone of the mirror at `CLONE_DIR`, or you have work there you do not want touched. |
+
+Without `--no-reset-local`, the local clone at `CLONE_DIR` is **hard reset** to
+the newly published `origin/main`: any uncommitted work there is lost. The script
+warns first if that directory is dirty, and refuses outright if its `origin` is
+not the mirror.
 
 ## Roll back the mirror
 
@@ -55,6 +80,22 @@ There is no separate rollback path — publish an earlier release:
 make mirror VERSION=v0.1.0
 ```
 
+## Recovering from a partial run
+
+`scripts/release.sh` does four things that can fail separately. Each state has
+exactly one move:
+
+| State | What happened | What to do |
+|---|---|---|
+| Worktree unchanged, nothing tagged | The commit or the tag failed — most often signing. The script restores the worktree to what preflight found, so nothing is half-applied. | Fix signing, re-run the same command. Do **not** commit leftovers by hand: a version bump with no tag makes that version number permanently unreleasable. |
+| Commit and tag exist locally, nothing on the remote | The push failed. | Fix the cause and re-run `scripts/release.sh <same version>`. It detects the local tag at `HEAD` and resumes at the push. Do **not** `git pull` — that puts a merge commit on top of the release commit. |
+| Tag pushed, no GitHub Release | `gh release create` failed. | Re-run the same command; it resumes at the GitHub Release step. |
+| Everything published | — | Mirror it. |
+
+For `scripts/mirror-release.sh` the push is atomic, so it either fully applied or
+changed nothing on the target. A failure after the push (release page, local
+clone reset) is safe to retry by re-running the same command.
+
 ## Tests
 
 The scripts have an offline test suite that builds throwaway git repos as
@@ -63,3 +104,10 @@ fixtures. It touches no network remote and calls no `gh`:
 ```sh
 make test-scripts
 ```
+
+## Open item: retire the old wrappers
+
+`~/bin/mirror-sync` and `~/work/rossoctl/sync-harness.sh` predate these scripts
+and are deliberately kept for now, as a fallback until the first live release has
+been cut and mirrored and verified. Once that has happened, they should be
+retired so there is only one path to the mirror.
