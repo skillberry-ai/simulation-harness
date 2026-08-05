@@ -6,6 +6,9 @@
     "client",
     "server"
   ],
+  "engines": {
+    "node": ">=22.22.0"
+  },
   "scripts": {
     "build": "npm run build --workspace client && npm run build --workspace server",
     "lint": "eslint \"client/src/**/*.{ts,tsx}\" \"server/src/**/*.ts\" \"tests/**/*.{ts,tsx}\"",
@@ -15,12 +18,15 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-react": "^7.34.0",
     "prettier": "^3.3.0",
+    "react-router": "^8.3.0",
     "typescript": "^5.5.0",
     "vitest": "^3.2.6"
   },
