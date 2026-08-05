@@ -7,7 +7,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-# shellcheck disable=SC1091 source=scripts/tests/assert.sh
+# shellcheck source=scripts/tests/assert.sh
 source "$SCRIPT_DIR/assert.sh"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/test-release.XXXXXX")"
@@ -119,5 +119,18 @@ assert_contains "newest section listed first" \
 assert_contains "second release notes scoped to new commits" "$changelog" "**state:** repair reload"
 assert_eq "both tags present on origin" \
     "$(git -C "$ORIGIN" tag -l | sort -V | tr '\n' ' ')" "v0.1.0 v0.2.0 "
+
+# --- third release: no non-merge conventional commits since the previous tag
+# (the "No changes recorded." fallback path) must still leave a blank line
+# separating the new section from the prior "## v" header.
+run_release 0.3.0 >/dev/null
+assert_contains "third release tags despite no new commits" \
+    "$(git -C "$FIXTURE" tag -l)" "v0.3.0"
+changelog="$(cat "$FIXTURE/CHANGELOG.md")"
+assert_contains "changelog records no changes for the empty range" \
+    "$changelog" "No changes recorded."
+line_before_prior_header="$(awk '/^## v0\.2\.0/{print prev; exit} {prev=$0}' "$FIXTURE/CHANGELOG.md")"
+assert_empty "blank line separates the no-changes section from the prior header" \
+    "$line_before_prior_header"
 
 assert_summary

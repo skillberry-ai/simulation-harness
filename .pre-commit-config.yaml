@@ -33,6 +33,7 @@ repos:
     rev: v0.10.0.1
     hooks:
       - id: shellcheck
+        args: [--external-sources]
         files: ^scripts/.*\.sh$
 
   # Static security analysis (SAST) over application code.

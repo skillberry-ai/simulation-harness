@@ -62,7 +62,7 @@ TAG="v$VERSION"
 REPO_ROOT="$(git rev-parse --show-toplevel)" || die "not inside a git repository"
 cd "$REPO_ROOT"
 
-# shellcheck disable=SC1091 source=scripts/lib/release-notes.sh
+# shellcheck source=scripts/lib/release-notes.sh
 source "$REPO_ROOT/scripts/lib/release-notes.sh"
 
 : "${RELEASE_REMOTE:=origin}"
@@ -121,7 +121,9 @@ info "Fetching $RELEASE_REMOTE"
 git fetch --quiet --tags "$RELEASE_REMOTE" || die "failed to fetch $RELEASE_REMOTE"
 
 remote_tag_commit=""
-if [[ -n "$(git ls-remote --tags --refs "$RELEASE_REMOTE" "refs/tags/$TAG")" ]]; then
+ls_remote_out="$(git ls-remote --tags --refs "$RELEASE_REMOTE" "refs/tags/$TAG")" \
+    || die "failed to query tags on $RELEASE_REMOTE"
+if [[ -n "$ls_remote_out" ]]; then
     remote_tag_commit="$(git rev-parse --verify --quiet "refs/tags/$TAG^{commit}" || true)"
 fi
 
@@ -222,7 +224,11 @@ info "Prepending the v$VERSION section to CHANGELOG.md"
 section="$(mktemp "${TMPDIR:-/tmp}/release-section.XXXXXX")"
 {
     printf '## %s — %s\n\n' "$TAG" "$(date -u +%Y-%m-%d)"
-    cat "$NOTES_FILE"
+    # Normalize to exactly one trailing blank line, regardless of how the
+    # notes ended, so the separator before the next "## v..." header is
+    # always present — command substitution strips all trailing newlines,
+    # then we add exactly one blank line back.
+    printf '%s\n\n' "$(cat "$NOTES_FILE")"
 } > "$section"
 
 if [[ -f CHANGELOG.md ]]; then
