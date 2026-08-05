@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.1 — 2026-08-05
+
+### Fixes
+
+- **deps:** upgrade cryptography to 50.0.0 for PYSEC-2026-3552
+
 ## v0.1.0 — 2026-08-05
 
 ### Features
