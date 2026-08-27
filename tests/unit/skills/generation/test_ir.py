@@ -1,13 +1,17 @@
+import pytest
+from pydantic import ValidationError
+from typing import Any
+
 from simulation_harness.skills.generation.ir import (
     Entity,
     Field,
     Operation,
+    OperationEvidence,
     OperationKind,
     Scenario,
     SpecModel,
     StoreMetadata,
 )
-from typing import Any
 
 
 def _entity(name: Any = "Feature", coll: Any = "features", pk: Any = "id") -> Entity:
@@ -79,3 +83,38 @@ def test_scenario_defaults_operations_to_empty_list() -> None:
     s = Scenario(title="Book a room", intent="Find and book an available room.")
     assert s.operations == []
     assert s.title == "Book a room"
+
+
+def test_spec_model_evidence_defaults_to_empty() -> None:
+    """Existing SpecModel(...) constructions must keep working untouched."""
+    assert _ir().evidence == {}
+
+
+def test_operation_evidence_forbids_extra_fields() -> None:
+    with pytest.raises(ValidationError):
+        OperationEvidence(description="ok", bogus="nope")  # type: ignore[call-arg]
+
+
+def test_operation_evidence_fields_default_to_none() -> None:
+    ev = OperationEvidence()
+    assert ev.description is None
+    assert ev.request_example is None
+    assert ev.response_example is None
+
+
+def test_validate_consistency_accepts_known_evidence_key() -> None:
+    ir = _ir(evidence={"getFeature": OperationEvidence(description="Reads it.")})
+    assert ir.validate_consistency() == []
+
+
+def test_validate_consistency_flags_unknown_evidence_key() -> None:
+    """Evidence is a sibling map, so it can drift from operations; catch it."""
+    ir = _ir(evidence={"ghostOp": OperationEvidence(description="Nobody's op.")})
+    errors = ir.validate_consistency()
+    assert any("ghostOp" in e and "operation_id" in e for e in errors)
+
+
+def test_spec_model_round_trips_evidence() -> None:
+    ir = _ir(evidence={"getFeature": OperationEvidence(description="Reads it.")})
+    restored = SpecModel.model_validate(ir.model_dump())
+    assert restored.evidence["getFeature"].description == "Reads it."
