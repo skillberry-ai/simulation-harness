@@ -305,7 +305,7 @@ DESC_SPEC: dict[str, Any] = {
 
 def test_extract_operation_evidence_surfaces_description() -> None:
     ev = A.extract_operation_evidence(OpenAPISpec(DESC_SPEC))
-    assert "refunded to the gift card" in ev["cancel_pending_order"].description or ""
+    assert "refunded to the gift card" in (ev["cancel_pending_order"].description or "")
 
 
 def test_extract_operation_evidence_drops_description_equal_to_summary() -> None:
@@ -339,6 +339,55 @@ def test_extract_operation_evidence_strips_whitespace_only_description() -> None
         }
     )
     assert A.extract_operation_evidence(spec) == {}
+
+
+def test_extract_operation_evidence_dedup_ignores_padding() -> None:
+    """A padded description whose *stripped* form equals the summary is still
+    redundant — the dedup comparison must run after stripping, not on the raw
+    value. Uses an inline spec (not DESC_SPEC) so
+    ``test_extract_operation_evidence_omits_operations_without_description``'s
+    ``set(ev) == {"cancel_pending_order"}`` assertion stays true.
+    """
+    spec = OpenAPISpec(
+        {
+            "openapi": "3.0.0",
+            "info": {"title": "T", "version": "1.0"},
+            "paths": {
+                "/t": {
+                    "post": {
+                        "operationId": "t",
+                        "summary": "Get an order.",
+                        "description": "  Get an order.  ",
+                        "responses": {"200": {"description": "ok"}},
+                    }
+                }
+            },
+        }
+    )
+    assert A.extract_operation_evidence(spec) == {}
+
+
+def test_extract_operation_evidence_strips_surviving_description() -> None:
+    """A surviving (non-redundant) description is stored stripped, not raw —
+    pins rule 1's strip independently of rule 2's dedup."""
+    spec = OpenAPISpec(
+        {
+            "openapi": "3.0.0",
+            "info": {"title": "T", "version": "1.0"},
+            "paths": {
+                "/t": {
+                    "post": {
+                        "operationId": "t",
+                        "summary": "Get an order.",
+                        "description": "  Refunds the payment too.  ",
+                        "responses": {"200": {"description": "ok"}},
+                    }
+                }
+            },
+        }
+    )
+    ev = A.extract_operation_evidence(spec)
+    assert ev["t"].description == "Refunds the payment too."
 
 
 def test_extract_operation_evidence_drops_non_string_description() -> None:
