@@ -6,7 +6,7 @@ import asyncio
 from collections.abc import Callable
 
 from simulation_harness.openapi.parser import OpenAPISpec
-from simulation_harness.skills.generation.ir import SpecModel
+from simulation_harness.skills.generation.ir import OperationEvidence, SpecModel
 from simulation_harness.skills.generation.repair import (
     GenerationStageError,
     guard_timeout,
@@ -23,7 +23,12 @@ from simulation_harness.skills.generation.stages.analyze.merge import (
     validate_coverage,
 )
 
-__all__ = ["analyze", "extract_operations", "inline_schema_evidence"]
+__all__ = [
+    "analyze",
+    "extract_operation_evidence",
+    "extract_operations",
+    "inline_schema_evidence",
+]
 
 
 def extract_operations(spec: OpenAPISpec) -> list[dict]:
@@ -39,6 +44,47 @@ def extract_operations(spec: OpenAPISpec) -> list[dict]:
         }
         for op in spec.operations
     ]
+
+
+def extract_operation_evidence(spec: OpenAPISpec) -> dict[str, OperationEvidence]:
+    """Build the sparse ``operation_id -> OperationEvidence`` map for the IR.
+
+    Kept separate from :func:`extract_operations` on purpose. The stub dicts that
+    function returns are dumped wholesale into the classify prompt
+    (``classify_batch``), and classify is a shape-only consumer — bucketing needs
+    shape, contracts need intent. Evidence must not ride on the stubs.
+
+    Normalization lives here so every consumer inherits it identically:
+
+    - ``description`` is stripped; empty becomes ``None``. The parser defaults an
+      absent description to ``""``, so this is load-bearing.
+    - A description equal to the operation's ``summary`` after stripping is
+      dropped as redundant — the summary already reaches every consumer. True of
+      6 of 16 tau2-retail operations and 13 of 14 tau2-airline ones.
+    - A non-``str`` description (some specs put an object there) is dropped
+      rather than raised on. This runs before any LLM call, so raising would
+      abort generation on a spec that otherwise parses fine.
+    - An operation with no surviving evidence gets **no key**, keeping the map
+      sparse and :meth:`SpecModel.validate_consistency` meaningful.
+
+    Examples are not populated yet. The accessors exist
+    (:meth:`~simulation_harness.openapi.parser.OpenAPIOperation.get_request_example`
+    and its response counterpart) but wiring them needs a token-budget policy.
+    """
+    evidence: dict[str, OperationEvidence] = {}
+    for op in spec.operations:
+        description: str | None = (
+            op.description if isinstance(op.description, str) else None
+        )
+        if description is not None:
+            description = description.strip() or None
+        summary = op.summary.strip() if isinstance(op.summary, str) else ""
+        if description is not None and description == summary:
+            description = None
+        if description is None:
+            continue
+        evidence[op.operation_id] = OperationEvidence(description=description)
+    return evidence
 
 
 def inline_schema_evidence(spec: OpenAPISpec) -> dict:
@@ -79,6 +125,7 @@ async def analyze(
     cb = progress_cb or (lambda _p: None)
     spec = OpenAPISpec(spec_dict)
     stubs = extract_operations(spec)
+    evidence = extract_operation_evidence(spec)
     components = spec_dict.get("components", {}).get("schemas", {})
     # RPC/tool-style specs declare no components.schemas; fall back to the
     # schemas carried inline in operation request/response bodies.
@@ -128,7 +175,7 @@ async def analyze(
     coverage = validate_coverage(stubs, semantics)
     if coverage:
         raise GenerationStageError("classify", coverage)
-    ir = build_spec_model(slug, stubs, dm, semantics)
+    ir = build_spec_model(slug, stubs, dm, semantics, evidence=evidence)
     consistency = ir.validate_consistency()
     if consistency:
         raise GenerationStageError("analyze", consistency)

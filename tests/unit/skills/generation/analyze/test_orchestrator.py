@@ -267,3 +267,149 @@ async def test_analyze_raises_on_coverage_gap() -> None:
                 concurrency=5,
             )
     assert exc.value.stage == "classify"
+
+
+DESC_SPEC: dict[str, Any] = {
+    "openapi": "3.0.0",
+    "info": {"title": "Retail", "version": "1.0"},
+    "paths": {
+        "/cancel_pending_order": {
+            "post": {
+                "operationId": "cancel_pending_order",
+                "summary": "Cancel a pending order.",
+                "description": (
+                    "Cancel a pending order. The status becomes 'cancelled' and "
+                    "the payment is refunded to the gift card immediately."
+                ),
+                "responses": {"200": {"description": "ok"}},
+            }
+        },
+        "/get_order": {
+            "post": {
+                "operationId": "get_order",
+                "summary": "Get an order.",
+                "description": "Get an order.",
+                "responses": {"200": {"description": "ok"}},
+            }
+        },
+        "/list_orders": {
+            "post": {
+                "operationId": "list_orders",
+                "summary": "List orders.",
+                "responses": {"200": {"description": "ok"}},
+            }
+        },
+    },
+}
+
+
+def test_extract_operation_evidence_surfaces_description() -> None:
+    ev = A.extract_operation_evidence(OpenAPISpec(DESC_SPEC))
+    assert "refunded to the gift card" in ev["cancel_pending_order"].description or ""
+
+
+def test_extract_operation_evidence_drops_description_equal_to_summary() -> None:
+    """6 of 16 tau2-retail ops duplicate summary into description; drop those."""
+    ev = A.extract_operation_evidence(OpenAPISpec(DESC_SPEC))
+    assert "get_order" not in ev
+
+
+def test_extract_operation_evidence_omits_operations_without_description() -> None:
+    """Sparse map: no description means no key, not an empty OperationEvidence."""
+    ev = A.extract_operation_evidence(OpenAPISpec(DESC_SPEC))
+    assert "list_orders" not in ev
+    assert set(ev) == {"cancel_pending_order"}
+
+
+def test_extract_operation_evidence_strips_whitespace_only_description() -> None:
+    spec = OpenAPISpec(
+        {
+            "openapi": "3.0.0",
+            "info": {"title": "T", "version": "1.0"},
+            "paths": {
+                "/t": {
+                    "post": {
+                        "operationId": "t",
+                        "summary": "T.",
+                        "description": "   \n  ",
+                        "responses": {"200": {"description": "ok"}},
+                    }
+                }
+            },
+        }
+    )
+    assert A.extract_operation_evidence(spec) == {}
+
+
+def test_extract_operation_evidence_drops_non_string_description() -> None:
+    """Runs before any LLM call, so a malformed description must not raise."""
+    spec = OpenAPISpec(
+        {
+            "openapi": "3.0.0",
+            "info": {"title": "T", "version": "1.0"},
+            "paths": {
+                "/t": {
+                    "post": {
+                        "operationId": "t",
+                        "summary": "T.",
+                        "description": {"unexpected": "object"},
+                        "responses": {"200": {"description": "ok"}},
+                    }
+                }
+            },
+        }
+    )
+    assert A.extract_operation_evidence(spec) == {}
+
+
+def test_extract_operations_returns_exactly_the_five_stub_keys() -> None:
+    """REGRESSION GUARD — do not relax.
+
+    classify_batch does `json.dumps(stubs, indent=2)`, dumping these dicts
+    wholesale into the classify prompt. classify is a shape-only consumer, so any
+    new key here silently inflates every classify request with content it must
+    not see. Operation-level prose belongs in extract_operation_evidence.
+    """
+    for stub in A.extract_operations(OpenAPISpec(DESC_SPEC)):
+        assert set(stub) == {"operation_id", "method", "path", "tag", "summary"}
+
+
+async def test_analyze_populates_ir_evidence() -> None:
+    dm = DataModel(
+        api_name="Retail",
+        entities=[
+            Entity(
+                name="Order",
+                collection="orders",
+                primary_key="order_id",
+                fields=[{"name": "order_id", "type": "string", "required": True}],
+            )
+        ],
+        store_metadata=StoreMetadata(
+            collections=["orders"], pk_map={"orders": "order_id"}
+        ),
+    )
+    semantics = [
+        {"operation_id": "cancel_pending_order", "kind": "update", "entity": "Order"},
+        {"operation_id": "get_order", "kind": "read", "entity": "Order"},
+        {"operation_id": "list_orders", "kind": "list", "entity": "Order"},
+    ]
+    with (
+        patch.object(A, "extract_data_model", AsyncMock(return_value=dm)),
+        patch.object(A, "classify_batch", AsyncMock(return_value=semantics)),
+    ):
+        ir = await A.analyze(
+            DESC_SPEC,
+            "retail",
+            extract_llm=object(),
+            classify_llm=object(),
+            retries=0,
+            batch_cap=40,
+            concurrency=1,
+        )
+
+    assert "refunded to the gift card" in (
+        ir.evidence["cancel_pending_order"].description or ""
+    )
+    assert set(ir.evidence) == {"cancel_pending_order"}
+    assert ir.validate_consistency() == []

@@ -6,6 +6,7 @@ import collections
 
 from simulation_harness.skills.generation.ir import (
     Operation,
+    OperationEvidence,
     OperationKind,
     SpecModel,
 )
@@ -34,7 +35,11 @@ def validate_coverage(stubs: list[dict], semantics: list[dict]) -> list[str]:
 
 
 def build_spec_model(
-    slug: str, stubs: list[dict], dm: DataModel, semantics: list[dict]
+    slug: str,
+    stubs: list[dict],
+    dm: DataModel,
+    semantics: list[dict],
+    evidence: dict[str, OperationEvidence] | None = None,
 ) -> SpecModel:
     sem_by_id = {r["operation_id"]: r for r in semantics}
     operations = [
@@ -56,4 +61,5 @@ def build_spec_model(
         entities=dm.entities,
         operations=operations,
         store_metadata=dm.store_metadata,
+        evidence=evidence or {},
     )
