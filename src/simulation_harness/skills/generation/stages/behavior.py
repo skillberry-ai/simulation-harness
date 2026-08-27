@@ -33,18 +33,23 @@ def _load_prompt() -> str:
 
 
 def _ops_summary(ir: SpecModel) -> str:
-    return json.dumps(
-        [
+    records = []
+    for op in ir.operations:
+        # Numeric relationships are often stated only in prose (a refund amount,
+        # a fee). Derivation Rules is the declared single source of truth for
+        # numbers, so it needs the description. The map is sparse — a missing key
+        # is normal.
+        evidence = ir.evidence.get(op.operation_id)
+        records.append(
             {
                 "operation_id": op.operation_id,
                 "kind": op.kind.value,
                 "summary": op.summary,
+                "description": evidence.description if evidence else None,
                 "entity": op.entity,
             }
-            for op in ir.operations
-        ],
-        indent=2,
-    )
+        )
+    return json.dumps(records, indent=2)
 
 
 async def generate_behavior(ir: SpecModel, llm, *, retries: int) -> str:

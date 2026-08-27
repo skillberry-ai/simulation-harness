@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from unittest.mock import AsyncMock, patch
 
@@ -5,6 +7,7 @@ from simulation_harness.skills.generation.ir import (
     Entity,
     Field,
     Operation,
+    OperationEvidence,
     OperationKind,
     SpecModel,
     StoreMetadata,
@@ -68,3 +71,29 @@ def test_behavior_prompt_contains_required_headings() -> None:
     prompt = B._load_prompt()
     for heading in B.REQUIRED_HEADINGS:
         assert heading in prompt
+
+
+def test_ops_summary_carries_description() -> None:
+    ir = _ir()
+    ir.evidence = {
+        "getFeature": OperationEvidence(
+            description="Returns a feature; total equals the sum of line prices."
+        )
+    }
+
+    records = json.loads(B._ops_summary(ir))
+
+    assert records[0]["description"] == (
+        "Returns a feature; total equals the sum of line prices."
+    )
+
+
+def test_ops_summary_description_none_without_evidence_entry() -> None:
+    records = json.loads(B._ops_summary(_ir()))
+    assert records[0]["description"] is None
+
+
+def test_behavior_prompt_declares_numeric_prose_authoritative() -> None:
+    prompt = B._load_prompt()
+    assert "are authoritative" in prompt
+    assert "description" in prompt

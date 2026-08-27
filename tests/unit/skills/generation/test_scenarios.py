@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from unittest.mock import AsyncMock, patch
 
@@ -5,6 +7,7 @@ from simulation_harness.skills.generation.ir import (
     Entity,
     Field,
     Operation,
+    OperationEvidence,
     OperationKind,
     SpecModel,
     StoreMetadata,
@@ -61,3 +64,24 @@ async def test_generate_scenarios_raises_when_empty() -> None:
     with patch.object(SC, "call_json", AsyncMock(return_value={"scenarios": []})):
         with pytest.raises(GenerationStageError):
             await SC.generate_scenarios(_ir(), llm=object(), count=3, retries=0)
+
+
+def test_ops_summary_omits_description() -> None:
+    """REGRESSION GUARD — do not relax.
+
+    scenarios enumerates user flows from shape and summary. Feeding it prose was
+    considered and rejected: it sends every operation in ONE prompt, so on the
+    largest spec in the corpus that is ~18k extra input tokens for no decided
+    benefit. Wiring it is a scope change, not a bug fix.
+    """
+    ir = _ir()
+    ir.evidence = {
+        op.operation_id: OperationEvidence(description="Prose that must not leak.")
+        for op in ir.operations
+    }
+
+    records = json.loads(SC._ops_summary(ir))
+
+    assert records, "fixture must contain at least one operation"
+    for record in records:
+        assert "description" not in record
