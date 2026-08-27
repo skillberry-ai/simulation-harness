@@ -138,6 +138,13 @@ async def run_pipeline(
                 timeout=timeout,
             )
         except (GenerationStageError, StructuredCallError, StageTimeoutError) as e:
+            logger.warning(
+                "scenarios stage skipped (%s: %s) — SKILL.md has no Example "
+                "Scenarios section and the seed stage gets no scenarios to "
+                "design against",
+                type(e).__name__,
+                e,
+            )
             cb(f"scenarios_skipped {type(e).__name__}")
             return []
 

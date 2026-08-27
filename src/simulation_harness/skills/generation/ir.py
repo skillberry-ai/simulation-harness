@@ -109,6 +109,7 @@ class SpecModel(BaseModel):
         errors: list[str] = []
         entity_names = {e.name for e in self.entities}
         declared = set(self.store_metadata.collections)
+        operation_ids = {op.operation_id for op in self.operations}
 
         for op in self.operations:
             if op.entity is not None and op.entity not in entity_names:
@@ -116,7 +117,6 @@ class SpecModel(BaseModel):
                     f"operation '{op.operation_id}' references unknown entity "
                     f"'{op.entity}'"
                 )
-        operation_ids = {op.operation_id for op in self.operations}
         for oid in self.evidence:
             if oid not in operation_ids:
                 errors.append(f"evidence key '{oid}' is not a known operation_id")

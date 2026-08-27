@@ -802,3 +802,6 @@ def test_get_request_example_none_when_no_request_body() -> None:
     op = spec.get_operation_by_id("listThings")
     assert op is not None
     assert op.get_request_example() is None
+
+
+# Made with Bob
