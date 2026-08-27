@@ -47,6 +47,37 @@ def sanitize_operation_id(raw: str, *, method: str, path: str) -> str:
     return candidate[:_MAX_TOOL_NAME_LEN].strip("_-")
 
 
+def _media_example(content: Any) -> Any | None:
+    """Pick an example out of an OpenAPI ``content`` map.
+
+    Tries ``application/json`` first, then the remaining content types in
+    declaration order. Within a media-type object ``example`` wins over
+    ``examples``; within ``examples``, the first entry carrying a literal
+    ``value`` wins. ``externalValue`` entries are skipped — they hold a URL, not
+    a value.
+    """
+    if not isinstance(content, dict):
+        return None
+
+    candidates: list[dict[str, Any]] = []
+    preferred = content.get("application/json")
+    if isinstance(preferred, dict):
+        candidates.append(preferred)
+    for content_type, media in content.items():
+        if content_type != "application/json" and isinstance(media, dict):
+            candidates.append(media)
+
+    for media in candidates:
+        if "example" in media:
+            return media["example"]
+        examples = media.get("examples")
+        if isinstance(examples, dict):
+            for entry in examples.values():
+                if isinstance(entry, dict) and "value" in entry:
+                    return entry["value"]
+    return None
+
+
 class OpenAPIOperation:
     """Represents a single OpenAPI operation."""
 
@@ -160,6 +191,42 @@ class OpenAPIOperation:
                 schema = content_data.get("schema")
                 if isinstance(schema, dict):
                     return schema
+        return None
+
+    def get_request_example(self) -> Any | None:
+        """Get the request body's media-type example, if any.
+
+        Reads the ``example`` / ``examples`` **siblings** of ``schema`` inside the
+        media-type object — the one example location
+        :meth:`get_request_schema` cannot surface, since anything *inside* the
+        schema is already returned by it.
+
+        .. note::
+           ``OpenAPIOperation`` holds no back-reference to the enclosing
+           :class:`OpenAPISpec`, so a ``$ref`` inside an Example Object is
+           returned **unresolved**. Callers holding the spec should resolve it
+           themselves. Known limitation of an as-yet-unwired API.
+        """
+        if not self.request_body:
+            return None
+        return _media_example(self.request_body.get("content", {}))
+
+    def get_success_response_example(self) -> Any | None:
+        """Get the success (2xx) response's media-type example, if any.
+
+        Same selection rules and the same ``$ref`` caveat as
+        :meth:`get_request_example`. Scans 2xx responses in declaration order and
+        returns the first example found, so a create returning ``201`` or an
+        async ``202`` is handled — not just ``200``.
+        """
+        for status_code, response in self.responses.items():
+            if not (isinstance(status_code, str) and status_code[:1] == "2"):
+                continue
+            if not isinstance(response, dict):
+                continue
+            example = _media_example(response.get("content", {}))
+            if example is not None:
+                return example
         return None
 
     def get_required_parameters(self) -> list[dict[str, Any]]:
