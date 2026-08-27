@@ -5,6 +5,7 @@ from simulation_harness.skills.generation.ir import (
     Entity,
     Field,
     Operation,
+    OperationEvidence,
     OperationKind,
     SpecModel,
     StoreMetadata,
@@ -207,3 +208,39 @@ def test_operation_prompt_requests_derived_fields() -> None:
     from simulation_harness.skills.generation.stages.operations import _load_prompt
 
     assert "Derived fields" in _load_prompt()
+
+
+def test_op_context_carries_summary_and_description() -> None:
+    """Both were dropped: the contract-writing stage saw shapes only (#28)."""
+    ir = _ir([_op("createTask", "/tasks")])
+    ir.operations[0].summary = "Create a task."
+    ir.evidence = {
+        "createTask": OperationEvidence(
+            description="Creates a task and appends an audit entry."
+        )
+    }
+
+    ctx = O._op_context(OpenAPISpec(CREATE_SPEC), ir, ir.operations[0])
+
+    assert ctx["summary"] == "Create a task."
+    assert ctx["description"] == "Creates a task and appends an audit entry."
+
+
+def test_op_context_description_none_without_evidence_entry() -> None:
+    """The evidence map is sparse — a missing key is normal, not an error."""
+    ir = _ir([_op("createTask", "/tasks")])
+    assert ir.evidence == {}
+
+    ctx = O._op_context(OpenAPISpec(CREATE_SPEC), ir, ir.operations[0])
+
+    assert ctx["description"] is None
+
+
+def test_operation_prompt_declares_description_normative() -> None:
+    """Prose alone is not enough: the prompt also carries 'do not invent
+    fields', and without this clause the model resolves the tension the
+    conservative way — which is how #28 arose."""
+    prompt = O._load_prompt()
+    assert "behavioural contract, not commentary" in prompt
+    assert "does not license inventing fields" in prompt
+    assert "description" in prompt

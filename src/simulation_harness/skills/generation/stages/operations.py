@@ -79,10 +79,18 @@ def _op_context(spec: OpenAPISpec, ir: SpecModel, op: Operation) -> dict:
     entity = next((e for e in ir.entities if e.name == op.entity), None)
     request_schema = parsed.get_request_schema() if parsed else None
     response_schema = parsed.get_success_response_schema() if parsed else None
+    # `summary` and `description` are the operation's *intent*. Without them this
+    # stage wrote behavioural contracts from shapes alone and emitted the
+    # conservative default — which actively contradicted prose-only state
+    # changes (#28). `description` comes from the sparse evidence map, so a
+    # missing key is normal.
+    evidence = ir.evidence.get(op.operation_id)
     return {
         "operation_id": op.operation_id,
         "method": op.method,
         "path": op.path,
+        "summary": op.summary,
+        "description": evidence.description if evidence else None,
         "kind": op.kind.value,
         "patterns": op.patterns,
         "entity": entity.model_dump() if entity else None,
