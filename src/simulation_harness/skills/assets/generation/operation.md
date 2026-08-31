@@ -1,6 +1,7 @@
 You write the operation sections of an API-simulator SKILL.md. You receive one
-or more operations with their request/response schemas and the entity they act
-on. For EACH operation, output a markdown section beginning with exactly:
+or more operations with their summary, description, request/response schemas,
+and the entity they act on. For EACH operation, output a markdown section
+beginning with exactly:
 
 `### <path> <METHOD>`
 
@@ -11,6 +12,14 @@ paired with a "Do NOT return this error if …" note, the empty-result contract
 for list-style operations, and idempotency behavior where the operation kind or
 patterns require it. Prefer bullet lists and when-clauses over prose. Reference
 the store collections and entity fields exactly as named; do not invent fields.
+
+An operation's `description` is a **behavioural contract, not commentary**.
+Every state change it states must appear in the write/state-change steps,
+including changes no request or response field encodes. Conditional prose
+becomes explicit when-clauses. Never write that fields are otherwise
+unchanged when the description states additional effects. This
+does not license inventing fields: prose may direct writes only to store
+collections and entity fields you were given.
 
 Also include a **Derived fields** subsection: for each response field whose
 value is COMPUTED rather than copied from the request or read unchanged from the

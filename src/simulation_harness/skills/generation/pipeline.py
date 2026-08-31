@@ -30,6 +30,10 @@ from simulation_harness.skills.generation.stages.operations import (
 from simulation_harness.skills.generation.stages.schema import generate_schema
 from simulation_harness.skills.generation.stages.scenarios import generate_scenarios
 from simulation_harness.skills.generation.stages.seed import generate_seed
+from simulation_harness.utils.logging import get_logger
+
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -134,6 +138,13 @@ async def run_pipeline(
                 timeout=timeout,
             )
         except (GenerationStageError, StructuredCallError, StageTimeoutError) as e:
+            logger.warning(
+                "scenarios stage skipped (%s: %s) — SKILL.md has no Example "
+                "Scenarios section and the seed stage gets no scenarios to "
+                "design against",
+                type(e).__name__,
+                e,
+            )
             cb(f"scenarios_skipped {type(e).__name__}")
             return []
 
@@ -152,6 +163,12 @@ async def run_pipeline(
                 timeout=timeout,
             )
         except (GenerationStageError, StructuredCallError, StageTimeoutError) as e:
+            logger.warning(
+                "behavior stage skipped (%s: %s) — SKILL.md falls back to the "
+                "static preamble invariants",
+                type(e).__name__,
+                e,
+            )
             cb(f"behavior_skipped {type(e).__name__}")
             return ""
 

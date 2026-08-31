@@ -1,6 +1,8 @@
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from simulation_harness.config.models import GenerationConfig
 from simulation_harness.skills.generation import pipeline as P
 from simulation_harness.skills.generation.ir import (
@@ -220,3 +222,92 @@ async def test_run_pipeline_behavior_stage_failure_skips_gracefully() -> None:
     assert "### Derivation Rules" not in bundle.skill_md
     assert any(p.startswith("behavior_skipped") for p in phases)
     assert "assembling" in phases
+
+
+async def test_run_pipeline_behavior_failure_logs_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The degrade to the static preamble must leave a trace in logs/.
+
+    Carrying descriptions into this stage raises its timeout probability, and a
+    progress callback alone is invisible after the run.
+    """
+    import logging
+
+    caplog.set_level(logging.WARNING)
+    with (
+        patch.object(P, "analyze", AsyncMock(return_value=_ir())),
+        patch.object(P, "generate_schema", AsyncMock(return_value=SCHEMA)),
+        patch.object(P, "generate_scenarios", AsyncMock(return_value=[])),
+        patch.object(
+            P,
+            "generate_behavior",
+            AsyncMock(side_effect=GenerationStageError("behavior", ["boom"])),
+        ),
+        patch.object(
+            P, "generate_seed", AsyncMock(return_value={"features": [{"id": "f1"}]})
+        ),
+        patch.object(
+            P, "generate_section", AsyncMock(return_value="### /features/{id} GET\nok")
+        ),
+        patch.object(P, "build_chat"),
+    ):
+        await P.run_pipeline(
+            SPEC,
+            "aha",
+            api_key=None,
+            base_url=None,
+            gen_config=GenerationConfig(),
+            model="m",
+        )
+
+    assert any(
+        "behavior stage skipped" in message and "GenerationStageError" in message
+        for message in caplog.messages
+    )
+
+
+async def test_run_pipeline_scenarios_failure_logs_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The degrade to no scenarios must leave a trace in logs/.
+
+    A progress callback alone is invisible after the run.
+    """
+    import logging
+
+    caplog.set_level(logging.WARNING)
+    with (
+        patch.object(P, "analyze", AsyncMock(return_value=_ir())),
+        patch.object(P, "generate_schema", AsyncMock(return_value=SCHEMA)),
+        patch.object(
+            P,
+            "generate_scenarios",
+            AsyncMock(side_effect=GenerationStageError("scenarios", ["boom"])),
+        ),
+        patch.object(
+            P,
+            "generate_behavior",
+            AsyncMock(return_value="### Derivation Rules\n- total = sum of prices"),
+        ),
+        patch.object(
+            P, "generate_seed", AsyncMock(return_value={"features": [{"id": "f1"}]})
+        ),
+        patch.object(
+            P, "generate_section", AsyncMock(return_value="### /features/{id} GET\nok")
+        ),
+        patch.object(P, "build_chat"),
+    ):
+        await P.run_pipeline(
+            SPEC,
+            "aha",
+            api_key=None,
+            base_url=None,
+            gen_config=GenerationConfig(),
+            model="m",
+        )
+
+    assert any(
+        "scenarios stage skipped" in message and "GenerationStageError" in message
+        for message in caplog.messages
+    )

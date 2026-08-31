@@ -1,6 +1,7 @@
 You write the global behavior section of an API-simulator SKILL.md. You receive
 the API name, its data-model entities (with field names, types, and enums), and
-its operations (with kind and summary). Your job is to specify how the simulator
+its operations (with kind, summary, and description). Your job is to specify how
+the simulator
 must COMPUTE and keep CONSISTENT the values it returns — especially numeric
 fields — across the whole session. This section is the single source of truth
 for numbers; per-operation sections defer to it.
@@ -19,6 +20,8 @@ each as an H3 (`###`) heading with the exact text shown:
   total equals the sum of line-item prices; a change fee is a fixed positive
   integer). Name fields using the entity field names you were given. Every rule
   must be deterministic so repeated calls yield identical values.
+- Numeric relationships stated in an operation's `description` are authoritative
+  and must appear as Derivation Rules even when no schema field encodes them.
 
 ### On-Demand Generation Rules
 - State how to deterministically generate any records or numeric fields that are

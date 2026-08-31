@@ -135,7 +135,11 @@ and validates before the bundle is returned.
 ### Stage 1 — Analyze (spec → IR)
 
 `analyze()` (`skills/generation/stages/analyze/__init__.py:70`) builds the
-intermediate representation (`SpecModel`, see §4) in three sub-steps:
+intermediate representation (`SpecModel`, see §4) in three sub-steps. Before
+any of them, it also runs `extract_operation_evidence` alongside
+`extract_operations` — a pure read of the spec's operation `description`
+fields (normalized and deduplicated against `summary`), with no LLM call
+involved:
 
 1. **Extract data model** — `extract_data_model`
    (`stages/analyze/extract.py`). Feeds the component (or synthesized) schemas
@@ -237,10 +241,20 @@ source of truth for "what operations and entities exist". Key parts:
   `summary`, owning `entity`, `kind`, and `patterns`.
 - **`StoreMetadata`** — the `collections` list and `pk_map` (collection →
   primary key).
+- **`SpecModel.evidence`** — a sparse `operation_id -> OperationEvidence` map
+  carrying operation-level prose (currently the OpenAPI `description`, deduped
+  against `summary`); only operations with surviving evidence get a key. It is
+  deliberately **not** a field on `Operation`: `Operation` is the shape
+  projection used to bucket, batch, and chunk operations, and `classify_batch`
+  serializes `Operation`-derived stub dicts wholesale into the classify prompt.
+  Riding intent along with shape would leak prose into a shape-only consumer,
+  so evidence is read explicitly only by the stages that need it (`operations`,
+  `behavior`) — `classify` and `scenarios` never see it.
 
 `SpecModel.validate_consistency()` enforces that operations reference known
-entities and that every entity/pk-map collection is declared — this is what
-keeps `SKILL.md`, `schema.json`, and `db.json` mutually coherent.
+entities, that every entity/pk-map collection is declared, and that every
+`evidence` key is a known `operation_id` — this is what keeps `SKILL.md`,
+`schema.json`, and `db.json` mutually coherent.
 
 ## 5. Output files
 

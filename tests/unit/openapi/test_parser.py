@@ -657,4 +657,151 @@ class TestParserSanitizesOperationIds:
         assert ids == ["get_users_id"]
 
 
+def _example_spec(media: dict[str, Any]) -> dict[str, Any]:
+    """Minimal spec whose POST /things carries `media` as its request and 201 body."""
+    return {
+        "openapi": "3.0.0",
+        "info": {"title": "Things", "version": "1.0"},
+        "paths": {
+            "/things": {
+                "post": {
+                    "operationId": "createThing",
+                    "requestBody": {"content": {"application/json": media}},
+                    "responses": {"201": {"content": {"application/json": media}}},
+                }
+            }
+        },
+    }
+
+
+def test_get_request_example_prefers_example_over_examples() -> None:
+    spec = OpenAPISpec(
+        _example_spec(
+            {
+                "schema": {"type": "object"},
+                "example": {"id": "direct"},
+                "examples": {"alt": {"value": {"id": "named"}}},
+            }
+        )
+    )
+    op = spec.get_operation_by_id("createThing")
+    assert op is not None
+    assert op.get_request_example() == {"id": "direct"}
+
+
+def test_get_request_example_falls_back_to_named_examples_value() -> None:
+    spec = OpenAPISpec(
+        _example_spec(
+            {
+                "schema": {"type": "object"},
+                "examples": {"first": {"value": {"id": "named"}}},
+            }
+        )
+    )
+    op = spec.get_operation_by_id("createThing")
+    assert op is not None
+    assert op.get_request_example() == {"id": "named"}
+
+
+def test_get_request_example_skips_external_value() -> None:
+    """externalValue holds a URL, not a value — it must not be returned."""
+    spec = OpenAPISpec(
+        _example_spec(
+            {
+                "schema": {"type": "object"},
+                "examples": {"remote": {"externalValue": "https://example.com/e.json"}},
+            }
+        )
+    )
+    op = spec.get_operation_by_id("createThing")
+    assert op is not None
+    assert op.get_request_example() is None
+
+
+def test_get_request_example_none_when_absent() -> None:
+    spec = OpenAPISpec(_example_spec({"schema": {"type": "object"}}))
+    op = spec.get_operation_by_id("createThing")
+    assert op is not None
+    assert op.get_request_example() is None
+
+
+def test_get_success_response_example_finds_non_200_status() -> None:
+    """createThing responds 201; the example must still be found."""
+    spec = OpenAPISpec(
+        _example_spec({"schema": {"type": "object"}, "example": {"id": "made"}})
+    )
+    op = spec.get_operation_by_id("createThing")
+    assert op is not None
+    assert op.get_success_response_example() == {"id": "made"}
+
+
+def test_get_success_response_example_ignores_error_statuses() -> None:
+    spec = OpenAPISpec(
+        {
+            "openapi": "3.0.0",
+            "info": {"title": "Things", "version": "1.0"},
+            "paths": {
+                "/things": {
+                    "post": {
+                        "operationId": "createThing",
+                        "responses": {
+                            "400": {
+                                "content": {
+                                    "application/json": {"example": {"error": "bad"}}
+                                }
+                            }
+                        },
+                    }
+                }
+            },
+        }
+    )
+    op = spec.get_operation_by_id("createThing")
+    assert op is not None
+    assert op.get_success_response_example() is None
+
+
+def test_get_request_example_falls_back_past_non_json_content_type() -> None:
+    spec = OpenAPISpec(
+        {
+            "openapi": "3.0.0",
+            "info": {"title": "Things", "version": "1.0"},
+            "paths": {
+                "/things": {
+                    "post": {
+                        "operationId": "createThing",
+                        "requestBody": {
+                            "content": {"application/xml": {"example": "<t/>"}}
+                        },
+                        "responses": {"200": {"description": "ok"}},
+                    }
+                }
+            },
+        }
+    )
+    op = spec.get_operation_by_id("createThing")
+    assert op is not None
+    assert op.get_request_example() == "<t/>"
+
+
+def test_get_request_example_none_when_no_request_body() -> None:
+    spec = OpenAPISpec(
+        {
+            "openapi": "3.0.0",
+            "info": {"title": "Things", "version": "1.0"},
+            "paths": {
+                "/things": {
+                    "get": {
+                        "operationId": "listThings",
+                        "responses": {"200": {"description": "ok"}},
+                    }
+                }
+            },
+        }
+    )
+    op = spec.get_operation_by_id("listThings")
+    assert op is not None
+    assert op.get_request_example() is None
+
+
 # Made with Bob

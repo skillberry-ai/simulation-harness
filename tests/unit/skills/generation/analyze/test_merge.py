@@ -1,4 +1,8 @@
-from simulation_harness.skills.generation.ir import Entity, StoreMetadata
+from simulation_harness.skills.generation.ir import (
+    Entity,
+    OperationEvidence,
+    StoreMetadata,
+)
 from simulation_harness.skills.generation.stages.analyze import merge as M
 from simulation_harness.skills.generation.stages.analyze.extract import DataModel
 from typing import Any
@@ -59,3 +63,24 @@ def test_build_spec_model_stitches_stub_and_semantics() -> None:
     assert op.kind.value == "read"
     assert op.entity == "Feature"
     assert ir.validate_consistency() == []
+
+
+def test_build_spec_model_attaches_evidence() -> None:
+    stubs = [_stub("getFeature")]
+    semantics = [_sem("getFeature")]
+    evidence = {"getFeature": OperationEvidence(description="Reads one feature.")}
+
+    ir = M.build_spec_model("aha", stubs, _dm(), semantics, evidence=evidence)
+
+    assert ir.evidence["getFeature"].description == "Reads one feature."
+    assert ir.validate_consistency() == []
+
+
+def test_build_spec_model_defaults_evidence_to_empty() -> None:
+    """Omitting evidence must keep the existing call signature working."""
+    stubs = [_stub("getFeature")]
+    semantics = [_sem("getFeature")]
+
+    ir = M.build_spec_model("aha", stubs, _dm(), semantics)
+
+    assert ir.evidence == {}
