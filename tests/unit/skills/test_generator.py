@@ -44,15 +44,11 @@ class TestSkillGeneratorInitialization:
         generator = SkillGenerator(
             api_key=api_key,
             model="gpt-4",
-            temperature=0.0,
-            max_tokens=20000,
             base_url="https://api.openai.com/v1",
         )
 
         assert generator.api_key == api_key
         assert generator.model == "gpt-4"
-        assert generator.temperature == 0.0
-        assert generator.max_tokens == 20000
         assert generator.base_url == "https://api.openai.com/v1"
 
     def test_generator_initialization_with_defaults(self) -> None:

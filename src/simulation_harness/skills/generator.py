@@ -30,8 +30,6 @@ class SkillGenerator:
         self,
         api_key: SecretStr,
         model: str = "gpt-4",
-        temperature: float = 0.0,
-        max_tokens: int = 20000,
         base_url: str | None = None,
         generation_config: GenerationConfig | None = None,
     ) -> None:
@@ -40,15 +38,15 @@ class SkillGenerator:
         Args:
             api_key: LLM API key (wrapped in SecretStr).
             model: Model to use for generation.
-            temperature: Temperature for response generation.
-            max_tokens: Maximum tokens in response.
             base_url: Optional base URL for API.
             generation_config: Multi-step pipeline tuning (defaults applied).
+
+        Per-call temperature and output-token limits are not set here: the
+        pipeline reads them per stage from ``generation_config``, so a single
+        generator-wide value would have no effect.
         """
         self.api_key = api_key
         self.model = model
-        self.temperature = temperature
-        self.max_tokens = max_tokens
         self.base_url = base_url
         self.generation_config = generation_config or GenerationConfig()
 

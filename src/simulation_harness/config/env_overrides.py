@@ -44,7 +44,7 @@ def apply_env_overrides(config: HarnessConfig) -> HarnessConfig:
       HARNESS_SESSIONS_MAX_CONCURRENT_QUEUE_DEPTH
       HARNESS_AUTOSTART_ENABLED, HARNESS_AUTOSTART_SIMULATION
       HARNESS_LLM_PROVIDER, HARNESS_LLM_SKILL_GENERATION_MODEL,
-      HARNESS_LLM_SIMULATION_MODEL, HARNESS_LLM_SKILL_GENERATION_MAX_TOKENS
+      HARNESS_LLM_SIMULATION_MODEL
     """
     data = config.model_dump()
 
@@ -64,10 +64,6 @@ def apply_env_overrides(config: HarnessConfig) -> HarnessConfig:
     simulation_model = os.getenv("HARNESS_LLM_SIMULATION_MODEL")
     if simulation_model is not None:
         data["llm"]["simulation_model"] = simulation_model
-
-    skill_generation_max_tokens = _int_env("HARNESS_LLM_SKILL_GENERATION_MAX_TOKENS")
-    if skill_generation_max_tokens is not None:
-        data["llm"]["skill_generation_max_tokens"] = skill_generation_max_tokens
 
     server_host = os.getenv("HARNESS_SERVER_HOST")
     if server_host is not None:

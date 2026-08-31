@@ -168,20 +168,6 @@ class TestLLMOverrides:
         assert out.llm.skill_generation_model == "azure/gpt-5.4"
         assert out.llm.simulation_model == "openai/gpt-4o-mini"
 
-    def test_skill_generation_max_tokens_override(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("HARNESS_LLM_SKILL_GENERATION_MAX_TOKENS", "40000")
-        out = apply_env_overrides(_base())
-        assert out.llm.skill_generation_max_tokens == 40000
-
-    def test_skill_generation_max_tokens_invalid_raises(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("HARNESS_LLM_SKILL_GENERATION_MAX_TOKENS", "lots")
-        with pytest.raises(ValueError, match="HARNESS_LLM_SKILL_GENERATION_MAX_TOKENS"):
-            apply_env_overrides(_base())
-
     def test_unset_llm_env_vars_leave_yaml_values_intact(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -189,7 +175,6 @@ class TestLLMOverrides:
             "HARNESS_LLM_PROVIDER",
             "HARNESS_LLM_SKILL_GENERATION_MODEL",
             "HARNESS_LLM_SIMULATION_MODEL",
-            "HARNESS_LLM_SKILL_GENERATION_MAX_TOKENS",
         ):
             monkeypatch.delenv(name, raising=False)
         c = _base()
@@ -197,7 +182,6 @@ class TestLLMOverrides:
         assert out.llm.provider == c.llm.provider
         assert out.llm.skill_generation_model == c.llm.skill_generation_model
         assert out.llm.simulation_model == c.llm.simulation_model
-        assert out.llm.skill_generation_max_tokens == c.llm.skill_generation_max_tokens
 
     def test_llm_overrides_update_global_config_singleton(
         self, monkeypatch: pytest.MonkeyPatch

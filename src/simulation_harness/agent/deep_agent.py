@@ -89,10 +89,15 @@ class DeepAgent:
         self._skill_staging_dir: Path | None = None
 
         # Initialize LLM
+        # `max_tokens` is ChatOpenAI's declared field name; langchain_openai
+        # serializes it to the API's `max_completion_tokens` for us (it is the
+        # field's alias). Spell it this way rather than as the alias, to match
+        # the rest of the codebase and to avoid depending on the alias surviving
+        # a langchain_openai upgrade.
         llm_kwargs = {
             "model": model,
             "temperature": temperature,
-            "max_completion_tokens": max_tokens,
+            "max_tokens": max_tokens,
             "api_key": api_key,
         }
         if base_url is not None:
