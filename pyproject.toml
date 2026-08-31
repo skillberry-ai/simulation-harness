@@ -67,6 +67,11 @@ dev = [
     "import-linter>=2.0",
     "pip-audit>=2.7.0",
     "bandit>=1.7.0",
+    # Not used directly: pip-audit pulls pip in via pip-api, and pip <26.2 is
+    # flagged by PYSEC-2026-3721 -- which made pip-audit fail on its own
+    # transitive dependency. Floor it so the scan stays green for the right
+    # reason. Drop this once pip-api's resolution no longer needs pinning.
+    "pip>=26.2",
 ]
 
 [tool.setuptools.packages.find]
