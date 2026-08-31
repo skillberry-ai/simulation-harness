@@ -1,5 +1,43 @@
 # Changelog
 
+## v0.1.2 — 2026-08-31
+
+### Breaking changes
+
+- **config:** LLMConfig forbids extra keys, so a harness.yaml still setting `llm.skill_generation_max_tokens` now fails validation at startup with a message naming that key. Delete the line to fix it. deploy/k8s/configmap.yaml never set it.
+
+### Features
+
+- **config:** allow LLM model selection via HARNESS_* env vars
+- **openapi:** add media-type example accessors
+- **generation:** add OperationEvidence to the IR
+- **generation:** extract operation descriptions into the IR
+- **generation:** pass description to the behavior stage
+- tau2_retail example
+- **scripts:** surface breaking changes in release notes
+
+### Fixes
+
+- **scripts:** re-lock uv.lock as part of the release commit
+- **generation:** pass summary and description to the operations stage
+- **generation:** log when the behavior stage degrades silently
+- **tests:** parenthesize evidence description check, add strip coverage
+- **generation:** log scenarios-stage degrade, tidy caplog and IR nit
+- **deps:** bump dompurify to 3.4.14 for GHSA-55q2-fjhq-7xh7
+- **deps:** floor pip at 26.2 for PYSEC-2026-3721
+
+### Refactoring
+
+- **config:** drop skill-generation token config that did nothing
+
+### Documentation
+
+- **generation:** document SpecModel.evidence and the shape/intent split
+
+### Chores
+
+- prepare the repo for its public home
+
 ## v0.1.1 — 2026-08-05
 
 ### Fixes
