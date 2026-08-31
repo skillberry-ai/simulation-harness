@@ -29,7 +29,7 @@ class SkillGenerator:
     def __init__(
         self,
         api_key: SecretStr,
-        model: str = "gpt-4",
+        model: str = "gpt-4.1",
         base_url: str | None = None,
         generation_config: GenerationConfig | None = None,
     ) -> None:

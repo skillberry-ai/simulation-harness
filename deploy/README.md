@@ -137,17 +137,23 @@ Edit the `llm:` block in `deploy/k8s/configmap.yaml`:
 data:
   harness.yaml: |
     llm:
-      provider: openai                       # litellm provider family
-      skill_generation_model: azure/gpt-5.4  # one-time, per-spec skill generation
-      simulation_model: azure/gpt-5.4        # hot path — every tools/call
+      provider: openai                  # provider family
+      skill_generation_model: gpt-4.1   # one-time, per-spec skill generation
+      simulation_model: gpt-4.1         # hot path — every tools/call
       temperature: 0
     # ...
 ```
 
-Model strings are **litellm-style** (`azure/gpt-5.4`, `openai/gpt-4o`, …); the
-`provider:` field and the model prefix must be consistent with the endpoint
-`LLM_API_BASE` points at. The two models are independent — e.g. a larger model
+Model ids are passed **verbatim** as the `model` field to the OpenAI-compatible
+endpoint `LLM_API_BASE` points at (default: `api.openai.com`), so use a bare id
+such as `gpt-4.1` — not a prefixed `openai/gpt-4.1`. If you route through a
+gateway that namespaces models (e.g. `azure/…` on a LiteLLM proxy), use whatever
+name that gateway expects. The two models are independent — e.g. a larger model
 for generation and a cheaper one for the simulation hot path.
+
+Note that every generation call sends an explicit `temperature` (see the
+`generation:` block), so OpenAI reasoning models that accept only the default
+temperature are not drop-in replacements here.
 
 **Config is read once at startup.** Editing the ConfigMap (or rotating the
 Secret) has no effect on a running pod. Trigger a restart to pick up changes:

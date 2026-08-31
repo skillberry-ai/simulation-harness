@@ -68,8 +68,8 @@ Runtime settings live in `config/harness.yaml`. The shipped defaults:
 ```yaml
 llm:
   provider: openai
-  skill_generation_model: azure/gpt-5.4
-  simulation_model: azure/gpt-5.4
+  skill_generation_model: gpt-4.1
+  simulation_model: gpt-4.1
   temperature: 0
 
 skills:
@@ -416,8 +416,22 @@ simulation-harness/
 
 ## Contributing
 
-Contributions are welcome. Please ensure:
-- All tests pass (`make test`)
-- Code passes lint and format checks (`make check`)
-- New features include tests and documentation
-- Changes align with design documents in `docs/design/`
+Contributions are welcome — see **[CONTRIBUTING.md](CONTRIBUTING.md)** for the
+full guide. In short:
+
+- Every commit needs a DCO sign-off (`git commit -s`) and a
+  [Conventional Commits](https://www.conventionalcommits.org/) subject.
+- `make check` (lint + type-check + format) and `make test` must pass.
+- New features include tests and documentation.
+- Changes align with the design documents in `docs/design/`.
+
+By participating you agree to our [Code of Conduct](CODE_OF_CONDUCT.md). To report
+a security vulnerability, follow [SECURITY.md](SECURITY.md) — please don't open a
+public issue.
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for
+attribution.
+
+Copyright IBM Corp. 2026

@@ -136,7 +136,7 @@ class TestApplyEnvOverrides:
 
 class TestLLMOverrides:
     """The llm: block is overridable so an orchestrator that mounts no ConfigMap
-    (e.g. rossoctl, which passes only env vars) can still choose the models.
+    (passing only env vars) can still choose the models.
     """
 
     def test_provider_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -147,9 +147,9 @@ class TestLLMOverrides:
     def test_skill_generation_model_override(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("HARNESS_LLM_SKILL_GENERATION_MODEL", "azure/gpt-5.4")
+        monkeypatch.setenv("HARNESS_LLM_SKILL_GENERATION_MODEL", "azure/gpt-4.1")
         out = apply_env_overrides(_base())
-        assert out.llm.skill_generation_model == "azure/gpt-5.4"
+        assert out.llm.skill_generation_model == "azure/gpt-4.1"
 
     def test_simulation_model_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("HARNESS_LLM_SIMULATION_MODEL", "openai/gpt-4o-mini")
@@ -162,10 +162,10 @@ class TestLLMOverrides:
         """A big model for generation and a cheap one for the hot path is the
         main use case, so overriding one must not disturb the other.
         """
-        monkeypatch.setenv("HARNESS_LLM_SKILL_GENERATION_MODEL", "azure/gpt-5.4")
+        monkeypatch.setenv("HARNESS_LLM_SKILL_GENERATION_MODEL", "azure/gpt-4.1")
         monkeypatch.setenv("HARNESS_LLM_SIMULATION_MODEL", "openai/gpt-4o-mini")
         out = apply_env_overrides(_base())
-        assert out.llm.skill_generation_model == "azure/gpt-5.4"
+        assert out.llm.skill_generation_model == "azure/gpt-4.1"
         assert out.llm.simulation_model == "openai/gpt-4o-mini"
 
     def test_unset_llm_env_vars_leave_yaml_values_intact(

@@ -7,8 +7,11 @@
 
 llm:
   provider: openai
-  skill_generation_model: azure/gpt-5.4
-  simulation_model: azure/gpt-5.4
+  # Model ids are passed verbatim to the OpenAI-compatible endpoint, so use a
+  # bare id (no "openai/" prefix). Point LLM_API_BASE at a proxy and override
+  # these with HARNESS_LLM_* if your gateway uses different names.
+  skill_generation_model: gpt-4.1   # one-time, per-spec skill generation
+  simulation_model: gpt-4.1         # hot path - every tools/call
   temperature: 0
   # max_tokens: 4096  # Optional
 

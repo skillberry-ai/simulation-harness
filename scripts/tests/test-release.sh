@@ -70,7 +70,7 @@ assert_fails "rejects a missing version" bash -c \
     "cd '$FIXTURE' && RELEASE_SKIP_GH=1 ./scripts/release.sh"
 
 # `--` must not silently swallow the version: it used to leave VERSION empty,
-# which printed usage here but published the wrong release in mirror-release.sh.
+# which printed usage here but let an empty version through to the release step.
 out="$(run_release -- 0.1.0 || true)"
 assert_contains "rejects the -- option terminator" "$out" "unknown option: --"
 assert_empty "-- run creates no tag" "$(git -C "$FIXTURE" tag -l)"

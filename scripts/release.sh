@@ -4,12 +4,11 @@
 #
 # Bumps the version in pyproject.toml, prepends a CHANGELOG.md section built
 # from Conventional Commit subjects since the last release, commits and signs
-# an annotated tag, pushes, and creates the GitHub Release on the internal repo.
+# an annotated tag, pushes, and creates the GitHub Release.
 #
-# This does NOT build a container image. GitHub Actions is unavailable on
-# github.ibm.com, so docker-publish.yml never runs here despite its v*.*.* tag
-# trigger. The image is built on the mirror when the release is published there
-# by scripts/mirror-release.sh — see docs/releasing.md, "Container images".
+# This script does not build a container image itself. Pushing the tag fires
+# .github/workflows/docker-publish.yml, which builds and pushes it — see
+# docs/releasing.md, "Container images".
 #
 # Usage:
 #   scripts/release.sh [--dry-run] <X.Y.Z>
@@ -36,7 +35,7 @@ Options:
 
 Environment overrides (used by scripts/tests/test-release.sh):
   RELEASE_REMOTE    git remote to push to (default: origin)
-  RELEASE_GH_REPO   HOST/OWNER/REPO for gh (default: github.ibm.com/kaegis/simulation-harness)
+  RELEASE_GH_REPO   HOST/OWNER/REPO for gh (default: github.com/skillberry-ai/simulation-harness)
   RELEASE_SKIP_GH   set to 1 to skip the gh release create call
 EOF
     exit "${1:-2}"
@@ -73,7 +72,7 @@ source "$REPO_ROOT/scripts/lib/release-notes.sh"
 source "$REPO_ROOT/scripts/lib/release-tag.sh"
 
 : "${RELEASE_REMOTE:=origin}"
-: "${RELEASE_GH_REPO:=github.ibm.com/kaegis/simulation-harness}"
+: "${RELEASE_GH_REPO:=github.com/skillberry-ai/simulation-harness}"
 : "${RELEASE_SKIP_GH:=0}"
 
 # ROLLBACK_TO is armed with the pre-mutation HEAD just before the worktree is
@@ -291,9 +290,8 @@ if [[ -f uv.lock ]]; then
         || die "uv.lock exists but uv is not on PATH — uv is needed to re-lock the version bump"
 fi
 
-# Highest existing release tag, per the definition shared with
-# mirror-release.sh (scripts/lib/release-tag.sh), so the two can never disagree
-# about which tags are releases. Pre-release tags are not releases.
+# Highest existing release tag, per the shared definition in
+# scripts/lib/release-tag.sh. Pre-release tags are not releases.
 prev_tag="$(release_tag_latest)"
 if [[ -z "$prev_tag" ]]; then
     # First release: the version may match pyproject.toml exactly.
@@ -440,4 +438,4 @@ create_gh_release
 
 echo
 info "Released $TAG."
-info "Publish it to the external mirror with: scripts/mirror-release.sh $TAG"
+info "The tag push fires docker-publish.yml, which builds and pushes the image."

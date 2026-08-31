@@ -70,5 +70,7 @@ deploy/k8s/secret.yaml
 docs/plans
 docs/reviews
 docs/superpowers
+.bob/
+.superpowers/
 
 # Made with Bob

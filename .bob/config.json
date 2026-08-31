@@ -1,3 +1,0 @@
-{
-  "customInstructions": "Python Environment Policy:\nALWAYS use 'uv' to run Python commands and tests in this project. The project uses a uv-managed virtual environment, and running Python directly will use the base system Python instead of the project's environment.\n\nRequired command patterns:\n- Run Python scripts: `uv run python <script.py>`\n- Run pytest: `uv run pytest <args>`\n- Run Python modules: `uv run python -m <module>`\n- Install dependencies: `uv pip install <package>`\n- Any other Python execution: prefix with `uv run`\n\nNEVER use bare `python`, `python3`, or `pytest` commands without the `uv run` prefix."
-}

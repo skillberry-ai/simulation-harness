@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68.0", "wheel"]
+requires = ["setuptools>=77.0", "wheel"]  # >=77 for PEP 639 license/license-files
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,6 +8,21 @@ version = "0.1.1"
 description = "MCP server simulation harness for testing and development"
 readme = "README.md"
 requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "IBM Corp." }]
+keywords = ["mcp", "openapi", "simulation", "llm", "testing", "agents"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+]
 dependencies = [
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
@@ -33,6 +48,12 @@ dependencies = [
     "uvicorn>=0.20.0",
     "structlog>=24.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/skillberry-ai/simulation-harness"
+Repository = "https://github.com/skillberry-ai/simulation-harness"
+Issues = "https://github.com/skillberry-ai/simulation-harness/issues"
+Changelog = "https://github.com/skillberry-ai/simulation-harness/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [

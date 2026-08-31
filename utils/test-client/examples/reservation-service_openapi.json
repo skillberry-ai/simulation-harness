@@ -5,7 +5,7 @@
     "description": "MCP server providing tools for searching restaurants, checking availability, and managing reservations through a provider abstraction layer.",
     "version": "1.0.0",
     "contact": {
-      "name": "Kaegis Reservation Tool"
+      "name": "Reservation Service Team"
     }
   },
   "servers": [

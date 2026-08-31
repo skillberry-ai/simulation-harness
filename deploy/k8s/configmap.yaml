@@ -10,8 +10,8 @@ data:
   harness.yaml: |
     llm:
       provider: openai
-      skill_generation_model: azure/gpt-5.4
-      simulation_model: azure/gpt-5.4
+      skill_generation_model: gpt-4.1
+      simulation_model: gpt-4.1
       temperature: 0
 
     skills:

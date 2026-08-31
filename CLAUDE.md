@@ -39,7 +39,6 @@ mypy (with the `pydantic.mypy` plugin) type-checks **both `src/` and `tests/`**.
 | CI check | `make check` (lint + type-check + format-check) |
 | Refresh OpenAPI spec | `make openapi` (regenerates `openapi.json`) |
 | Cut a release | `make release VERSION=X.Y.Z` (see `docs/releasing.md`) |
-| Publish a release to the external mirror | `make mirror [VERSION=vX.Y.Z]` |
 | Shell script tests | `make test-scripts` |
 
 `pytest.ini_options` sets `asyncio_mode = "auto"`, so async tests don't need `@pytest.mark.asyncio`.
@@ -48,7 +47,7 @@ mypy (with the `pydantic.mypy` plugin) type-checks **both `src/` and `tests/`**.
 
 - Runtime config: `config/harness.yaml` (read once at startup; restart to apply changes). Path is overridable via `HARNESS_CONFIG_PATH`.
 - Secrets: `LLM_API_KEY` (and optional `LLM_API_BASE`) come from `.env` or env vars — **not** from the YAML. See `.env.example`.
-- Default server port is **8086** in `config/harness.yaml` (not 8000 as the README suggests).
+- Default server port is **8086** (`server.port` in `config/harness.yaml`).
 
 ## Architecture (big picture)
 
@@ -68,7 +67,7 @@ The harness is a FastAPI service that, given an OpenAPI spec, spins up an LLM-dr
 - Failed tool calls preserve thread state; only successful calls increment the counter.
 
 ### Skill reuse
-`POST /api/v1/simulation` reuses an existing skill if `<skills_folder>/<name>/SKILL.md` exists. Pass `regenerate: true` to force regeneration. The skills folder defaults to `./skills-store` (per `harness.yaml`), not `./skills` as the README example shows.
+`POST /api/v1/simulation` reuses an existing skill if `<skills_folder>/<name>/SKILL.md` exists. Pass `regenerate: true` to force regeneration. The skills folder defaults to `./skills-store` (per `skills.folder` in `harness.yaml`).
 
 ### Error handling
 Domain exceptions in `utils/errors.py` are mapped to HTTP status by handlers in `main.py`:
@@ -84,7 +83,7 @@ MCP `tools/call` errors return two content blocks: a human-readable text message
 - `agent/templates/` and `skills/assets/` hold Jinja2 prompt templates packaged with the wheel (see `pyproject.toml` `package-data`).
 - `state/` is the session-scoped state store the agent uses for cross-call coherence (registry + tools the LLM can invoke).
 - `utils/simulate.py` is a CLI for posting a spec to a running harness; `utils/test-client/` is a separate interactive client with its own Makefile.
-- `skills-store/` is the configured skills folder for this checkout (the README shows `./skills/` as a placeholder).
+- `skills-store/` is the configured skills folder for this checkout, and is gitignored — generated skills are build output, not source.
 
 ## Conventions worth knowing
 
@@ -113,7 +112,9 @@ git commit -s -m "feat: Add new feature"
 ```
 
 This adds a line like `Signed-off-by: Your Name <your@email.com>` to the commit message.
-PRs without DCO sign-off will fail CI checks. To retroactively sign-off existing commits:
+Sign-off is enforced on PRs by the `DCO` job in `.github/workflows/ci.yml`, which runs
+`scripts/check-dco.sh`. Merge and bot commits are exempt. To retroactively sign-off
+existing commits:
 
 ```sh
 git rebase --signoff main
@@ -132,6 +133,6 @@ Never add `Co-authored-by`, `Made-with`, or similar trailers that GitHub parses 
 
 - **Pre-commit** (`.pre-commit-config.yaml`): ruff lint+format, detect-secrets, shellcheck, and Conventional Commit message enforcement. `make dev-install` installs both hook types; `make hooks` re-installs them on their own. Both are needed — installing only `pre-commit` silently drops commit-message checking. If `core.hooksPath` is set, pre-commit refuses to install and `make hooks` will tell you to clear it.
 - **Agent hook** (`.claude/settings.json` → `.claude/hooks/format-python.sh`): auto-formats and autofixes Python files after every Edit/Write.
-- **CI** (`.github/workflows/ci.yml`): lint, type-check, import-boundary, and test gates on every PR. CodeQL + Dependabot cover security scanning.
+- **CI** (`.github/workflows/ci.yml`): DCO, lint, type-check, import-boundary, and test gates on every PR. The `DCO` job runs `scripts/check-dco.sh <base> <head>`, which you can also run locally. CodeQL + Dependabot cover security scanning.
 - **Import boundaries** (`[tool.importlinter]` in `pyproject.toml`): `make lint-imports` keeps `models`/`utils`/`openapi`/`state` from depending on higher layers.
 - **Progressive disclosure**: detailed change patterns live in `.claude/skills/`; path-scoped module rules in `.claude/rules/`. Security analysis is in `THREAT_MODEL.md`.

@@ -62,14 +62,14 @@ def test_llm_model_env_overrides_applied_at_startup(
     monkeypatch.setenv("HARNESS_CONFIG_PATH", cfg_path)
     monkeypatch.setenv("HARNESS_SKILLS_FOLDER", str(tmp_path / "skills"))
     monkeypatch.setenv("LLM_API_KEY", "test-key")
-    monkeypatch.setenv("HARNESS_LLM_SKILL_GENERATION_MODEL", "azure/gpt-5.4")
+    monkeypatch.setenv("HARNESS_LLM_SKILL_GENERATION_MODEL", "azure/gpt-4.1")
     monkeypatch.setenv("HARNESS_LLM_SIMULATION_MODEL", "openai/gpt-4o-mini")
 
     import simulation_harness.main as m
 
     importlib.reload(m)
 
-    assert m.config.llm.skill_generation_model == "azure/gpt-5.4"
+    assert m.config.llm.skill_generation_model == "azure/gpt-4.1"
     assert m.config.llm.simulation_model == "openai/gpt-4o-mini"
 
 

@@ -24,6 +24,7 @@
 
 ## Checklist
 
+- [ ] Commits are signed off for the DCO (`git commit -s`)
 - [ ] Commits follow Conventional Commits (`feat:`, `fix:`, `chore:`, ...)
 - [ ] Docs updated (README / CLAUDE.md / docs/) where relevant
 - [ ] No secrets or credentials committed

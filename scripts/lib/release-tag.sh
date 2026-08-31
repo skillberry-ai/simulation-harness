@@ -1,20 +1,19 @@
 #!/usr/bin/env bash
 #
 # release-tag.sh — the one definition of what a release tag is.
-# Sourced by scripts/release.sh and scripts/mirror-release.sh.
+# Sourced by scripts/release.sh.
 #
-# Both scripts have to agree: release.sh picks the *previous* release tag to
-# build notes from, and mirror-release.sh prunes every tag that is not a
-# release tag. If the two definitions drifted, mirroring would delete exactly
-# the tag release.sh had treated as the last release. Defining it once here
-# makes that disagreement impossible rather than merely fixed.
+# release.sh uses it to pick the *previous* release tag to build notes from, so
+# the definition of "release tag" has to be stable and stated once. A release
+# tag is strictly vX.Y.Z; a pre-release such as v0.3.0-rc1 is not a release and
+# is never treated as the previous one.
 #
 # Sourced-only: deliberately sets no shell options, since that would affect
 # the caller's shell.
 
 # Extended regex matching a release tag exactly. Pre-release tags such as
-# v0.4.0-rc1 deliberately do NOT match: they are not releases, they are not
-# mirrored, and they are never the "previous release".
+# v0.4.0-rc1 deliberately do NOT match: they are not releases, and they are
+# never the "previous release".
 RELEASE_TAG_RE='^v[0-9]+\.[0-9]+\.[0-9]+$'
 
 # Loose glob for pre-filtering `git tag -l` / `git ls-remote` output. Never the

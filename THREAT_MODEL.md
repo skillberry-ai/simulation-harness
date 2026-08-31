@@ -70,7 +70,7 @@ Security assumptions:
 
 - mode: bootstrap
 - date: 2026-06-30
-- maintainer: kaegis/simulation-harness
+- maintainer: skillberry-ai/simulation-harness
 
 ## 8. Recommended mitigations
 

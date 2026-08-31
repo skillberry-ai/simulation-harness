@@ -12,6 +12,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  dco:
+    name: DCO
+    runs-on: ubuntu-latest
+    # Only a pull request has a base to diff against; a direct push to main has
+    # no meaningful range to check.
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # The check walks the PR's commits, so it needs their history, not
+          # just the tip. Without this the merge-base lookup fails.
+          fetch-depth: 0
+
+      - name: Check DCO sign-off
+        run: ./scripts/check-dco.sh "$BASE_SHA" "$HEAD_SHA"
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+
   lint:
     name: Lint (ruff)
     runs-on: ubuntu-latest
