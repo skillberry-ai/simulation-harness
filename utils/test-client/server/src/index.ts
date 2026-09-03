@@ -18,6 +18,22 @@ export function createProxyRateLimit(config: ProxyConfig) {
   });
 }
 
+/**
+ * Bounds the static asset and SPA-fallback routes, which both read from disk.
+ *
+ * A separate limiter instance from the proxy one so the two keep independent
+ * counters: loading the UI must not spend the proxy budget, and vice versa.
+ */
+export function createStaticRateLimit(config: ProxyConfig) {
+  return rateLimit({
+    windowMs: config.rateLimitWindowMs,
+    limit: config.rateLimitMax,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { error: 'rate_limited', message: 'Too many requests; slow down.' },
+  });
+}
+
 export function createApp(config: ProxyConfig): express.Express {
   const app = express();
   app.use(express.json({ limit: '10mb' }));
@@ -27,6 +43,11 @@ export function createApp(config: ProxyConfig): express.Express {
 
   const distDir = path.resolve(fileURLToPath(new URL('../../client/dist', import.meta.url)));
   if (fs.existsSync(distDir)) {
+    // Mounted once, ahead of both filesystem handlers below. Unpathed so it
+    // covers the SPA fallback as well as the asset routes, and placed after the
+    // proxy routers so in practice it only meters UI traffic: a matched /proxy
+    // request has already been answered and never reaches here.
+    app.use(createStaticRateLimit(config));
     app.use(express.static(distDir));
     app.get('*', (_req, res) => res.sendFile(path.join(distDir, 'index.html')));
   }

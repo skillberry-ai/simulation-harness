@@ -1,5 +1,7 @@
 export interface ProxyConfig {
   harnessUrl: string;
+  /** Origin of `harnessUrl`, or null when it is not a usable http(s) URL. */
+  harnessOrigin: string | null;
   port: number;
   mcpTransport: 'sse' | 'streamable-http';
   restTimeoutMs: number;
@@ -21,8 +23,19 @@ const stripSlash = (u: string): string => {
   return u.slice(0, end);
 };
 
-/** Loopback origins are always permitted — this proxy is a local dev tool. */
-const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+/**
+ * Loopback hosts are always permitted — this proxy is a local dev tool.
+ *
+ * Maps the hostname as `URL` reports it to the canonical spelling used to
+ * rebuild an origin, so the rebuilt value is a literal from this table rather
+ * than a slice of the request.
+ */
+const LOOPBACK_HOSTS = new Map<string, string>([
+  ['localhost', 'localhost'],
+  ['127.0.0.1', '127.0.0.1'],
+  ['[::1]', '[::1]'],
+  ['::1', '[::1]'],
+]);
 
 /**
  * Normalize a URL to a bare origin, or return null if it is not a usable
@@ -60,6 +73,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): ProxyConfig {
 
   return {
     harnessUrl,
+    harnessOrigin: configured,
     port: env.PORT ? Number(env.PORT) : 3000,
     mcpTransport: transport,
     restTimeoutMs: 600000,
@@ -75,14 +89,19 @@ export function loadConfig(env: NodeJS.ProcessEnv): ProxyConfig {
   };
 }
 
-function isAllowedOrigin(config: ProxyConfig, origin: string): boolean {
-  if (config.allowedOrigins.includes(origin)) return true;
-  // Loopback is always in scope, on any port.
-  try {
-    return LOOPBACK_HOSTS.has(new URL(origin).hostname);
-  } catch {
-    return false;
-  }
+/**
+ * Rebuild an origin from validated pieces.
+ *
+ * `scheme` is one of two literals, `host` comes from `LOOPBACK_HOSTS`, and the
+ * port is re-serialized from an integer. No substring of the caller's input
+ * survives into the result, which is what makes this a barrier rather than a
+ * check whose verdict is discarded.
+ */
+function rebuildOrigin(parsed: URL, host: string): string {
+  const scheme = parsed.protocol === 'https:' ? 'https' : 'http';
+  const port = Number(parsed.port);
+  const suffix = Number.isInteger(port) && port > 0 && port <= 65535 ? `:${port}` : '';
+  return `${scheme}://${host}${suffix}`;
 }
 
 /**
@@ -94,6 +113,12 @@ function isAllowedOrigin(config: ProxyConfig, origin: string): boolean {
  * into via `HARNESS_URL_ALLOWLIST`. Returns null when the header names a
  * disallowed or unparseable target, so callers can reject rather than silently
  * proxying somewhere unintended.
+ *
+ * Every non-null return is a string taken from configuration or rebuilt from
+ * literals — the header is used to *select* a base, never to *build* one. That
+ * distinction matters: an earlier version validated the header's origin and then
+ * returned the raw header, which let a path ride along (`http://localhost:8086/x`
+ * prefixed every upstream path) and left the request-forgery flow open.
  */
 export function resolveHarnessUrl(
   config: ProxyConfig,
@@ -102,9 +127,25 @@ export function resolveHarnessUrl(
   const trimmed = headerValue?.trim();
   if (!trimmed) return config.harnessUrl;
 
-  const origin = toOrigin(trimmed);
-  if (origin === null) return null;
-  if (!isAllowedOrigin(config, origin)) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+  const origin = parsed.origin;
 
-  return stripSlash(trimmed);
+  // Naming the configured harness returns the configured URL verbatim, so an
+  // operator-supplied base path (HARNESS_URL=http://host/base) is preserved.
+  if (config.harnessOrigin !== null && origin === config.harnessOrigin) return config.harnessUrl;
+
+  const allowlisted = config.allowedOrigins.find((entry) => entry === origin);
+  if (allowlisted !== undefined) return allowlisted;
+
+  // Loopback is always in scope, on any port.
+  const loopback = LOOPBACK_HOSTS.get(parsed.hostname);
+  if (loopback !== undefined) return rebuildOrigin(parsed, loopback);
+
+  return null;
 }
