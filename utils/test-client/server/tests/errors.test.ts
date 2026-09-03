@@ -73,6 +73,23 @@ describe('config', () => {
     }
   });
 
+  // Loopback is recognized from the *parsed* hostname, so the obfuscated IPv4
+  // spellings normalize before the check and come back canonicalized. Pinned
+  // because a rewrite that matched the raw header string instead would quietly
+  // change which hosts count as loopback.
+  it('resolveHarnessUrl normalizes obfuscated loopback spellings', () => {
+    const c = loadConfig({});
+    for (const url of ['http://127.1:9999', 'http://0x7f000001:9999', 'http://2130706433:9999']) {
+      expect(resolveHarnessUrl(c, url)).toBe('http://127.0.0.1:9999');
+    }
+    expect(resolveHarnessUrl(c, 'http://LOCALHOST:9999')).toBe('http://localhost:9999');
+    expect(resolveHarnessUrl(c, 'http://localhost:80')).toBe('http://localhost');
+    // Not spelled as one of the permitted hosts, so denied rather than guessed at.
+    expect(resolveHarnessUrl(c, 'http://[::ffff:127.0.0.1]:99')).toBeNull();
+    // Out-of-range port never parses.
+    expect(resolveHarnessUrl(c, 'http://127.0.0.1:99999')).toBeNull();
+  });
+
   it('resolveHarnessUrl rejects a non-loopback origin that is not allowlisted', () => {
     const c = loadConfig({});
     expect(resolveHarnessUrl(c, 'http://evil.test')).toBeNull();
