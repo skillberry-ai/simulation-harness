@@ -39,7 +39,7 @@ Tags produced per build:
 | `X.Y`         | git tag `vX.Y.Z`  | `0.3`         | ⚠️ moves with patches      |
 | `sha-<short>` | every build       | `sha-1a2b3c4` | ✅ ties to one commit      |
 | `main`        | push to `main`    | `main`        | ❌ moving                  |
-| `latest`      | push to `main`    | `latest`      | ❌ moving                  |
+| `latest`      | git tag `vX.Y.Z`  | `latest`      | ❌ moving                  |
 
 **Pin by digest in production.** A tag is a mutable pointer; a digest is the
 immutable content hash of the exact build. Every non-PR CI run prints the full
@@ -52,6 +52,12 @@ ghcr.io/<owner>/simulation-harness@sha256:<digest>
 
 At minimum pin an immutable `X.Y.Z` release tag; never deploy `latest` or `main`
 to a cluster.
+
+`latest` follows the newest **release**, not `main` — it is what a bare
+`docker pull` resolves to, so it never serves unreleased trunk. It is still a
+moving pointer, so it is not something to pin. Track trunk with `main`.
+Pre-release tags (`v0.3.0-rc1`) publish only their exact version and move neither
+`latest` nor a `X.Y` line.
 
 ## Kubernetes — Kustomize
 

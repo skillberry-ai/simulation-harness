@@ -40,13 +40,17 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # `latest` tracks the newest release, never main. metadata-action's
+          # default `latest=auto` applies it to non-prerelease semver tags only,
+          # so a push to main cannot move it — trunk builds are `main` and
+          # `sha-<sha>`. `latest` is the tag a bare `docker pull` resolves to, so
+          # it points at released code rather than unreleased trunk.
           tags: |
             type=ref,event=branch
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,format=short
-            type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push
         id: build
