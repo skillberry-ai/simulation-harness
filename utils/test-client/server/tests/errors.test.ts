@@ -27,6 +27,7 @@ describe('config', () => {
     const c = loadConfig({});
     expect(c).toEqual({
       harnessUrl: 'http://localhost:8086',
+      harnessOrigin: 'http://localhost:8086',
       port: 3000,
       mcpTransport: 'sse',
       restTimeoutMs: 600000,
@@ -72,6 +73,23 @@ describe('config', () => {
     }
   });
 
+  // Loopback is recognized from the *parsed* hostname, so the obfuscated IPv4
+  // spellings normalize before the check and come back canonicalized. Pinned
+  // because a rewrite that matched the raw header string instead would quietly
+  // change which hosts count as loopback.
+  it('resolveHarnessUrl normalizes obfuscated loopback spellings', () => {
+    const c = loadConfig({});
+    for (const url of ['http://127.1:9999', 'http://0x7f000001:9999', 'http://2130706433:9999']) {
+      expect(resolveHarnessUrl(c, url)).toBe('http://127.0.0.1:9999');
+    }
+    expect(resolveHarnessUrl(c, 'http://LOCALHOST:9999')).toBe('http://localhost:9999');
+    expect(resolveHarnessUrl(c, 'http://localhost:80')).toBe('http://localhost');
+    // Not spelled as one of the permitted hosts, so denied rather than guessed at.
+    expect(resolveHarnessUrl(c, 'http://[::ffff:127.0.0.1]:99')).toBeNull();
+    // Out-of-range port never parses.
+    expect(resolveHarnessUrl(c, 'http://127.0.0.1:99999')).toBeNull();
+  });
+
   it('resolveHarnessUrl rejects a non-loopback origin that is not allowlisted', () => {
     const c = loadConfig({});
     expect(resolveHarnessUrl(c, 'http://evil.test')).toBeNull();
@@ -97,10 +115,40 @@ describe('config', () => {
 
   it('the configured HARNESS_URL origin is permitted even when remote', () => {
     const c = loadConfig({ HARNESS_URL: 'https://harness.internal:8443' });
-    expect(resolveHarnessUrl(c, 'https://harness.internal:8443/x')).toBe(
-      'https://harness.internal:8443/x',
+    expect(resolveHarnessUrl(c, 'https://harness.internal:8443')).toBe(
+      'https://harness.internal:8443',
     );
     expect(resolveHarnessUrl(c, 'https://other.internal:8443')).toBeNull();
+  });
+
+  // Regression for the request-forgery alert. The allowlist only ever validated
+  // the *origin*, but the raw header used to be what got returned, so a path
+  // rode along and prefixed every upstream route:
+  // `x-harness-url: http://localhost:8086/x` produced
+  // `http://localhost:8086/x/api/v1/simulation`.
+  it('resolveHarnessUrl discards any path, query or fragment in the header', () => {
+    const c = loadConfig({ HARNESS_URL_ALLOWLIST: 'https://b.test:8443' });
+    expect(resolveHarnessUrl(c, 'http://localhost:8086/injected')).toBe('http://localhost:8086');
+    expect(resolveHarnessUrl(c, 'http://127.0.0.1:9/a/b?q=1#f')).toBe('http://127.0.0.1:9');
+    expect(resolveHarnessUrl(c, 'https://b.test:8443/deep/path')).toBe('https://b.test:8443');
+  });
+
+  // `http://localhost:8086@evil.test/` parses with localhost as *userinfo*; the
+  // host is evil.test. Checking the parsed origin rather than the raw string is
+  // what catches it.
+  it('resolveHarnessUrl rejects an origin smuggled behind userinfo', () => {
+    const c = loadConfig({});
+    expect(resolveHarnessUrl(c, 'http://localhost:8086@evil.test/')).toBeNull();
+    expect(resolveHarnessUrl(c, 'http://evil.test#localhost')).toBeNull();
+  });
+
+  // A base path belongs in HARNESS_URL, where the operator sets it, and is kept
+  // verbatim there — including when the header names that same origin.
+  it('preserves an operator-configured base path from HARNESS_URL', () => {
+    const c = loadConfig({ HARNESS_URL: 'https://harness.internal/base' });
+    expect(c.harnessUrl).toBe('https://harness.internal/base');
+    expect(resolveHarnessUrl(c, undefined)).toBe('https://harness.internal/base');
+    expect(resolveHarnessUrl(c, 'https://harness.internal')).toBe('https://harness.internal/base');
   });
 
   it('stripSlash-style trimming stays linear on pathological input', () => {

@@ -33,7 +33,7 @@ Copy `.env.example` to `.env`:
 - `PORT` — proxy/prod port (default `3000`).
 - `MCP_TRANSPORT` — `sse` (default) or `streamable-http`; must match the harness's `mcp.transport`.
 - `HARNESS_URL_ALLOWLIST` — comma-separated origins the `X-Harness-Url` header may target, beyond the `HARNESS_URL` origin. See below.
-- `RATE_LIMIT_WINDOW_MS` / `RATE_LIMIT_MAX` — proxy rate limit (default 600 requests per 60 s). Generous because the harness itself has a 10-minute REST timeout.
+- `RATE_LIMIT_WINDOW_MS` / `RATE_LIMIT_MAX` — request rate limit (default 600 requests per 60 s). Generous because the harness itself has a 10-minute REST timeout. Applied as two independent counters: one for the `/proxy` routes, one for the static asset and SPA-fallback routes, so loading the UI cannot exhaust the proxy budget.
 
 ### Retargeting the harness
 
@@ -56,6 +56,12 @@ HARNESS_URL_ALLOWLIST=https://harness.staging.example:8443
 
 Note that an origin is scheme + host + port, so a different port on an allowlisted host
 is a separate entry.
+
+The header selects one of those permitted bases; it never builds the upstream URL. Only
+the origin is honoured, so any path, query or fragment in `X-Harness-Url` is discarded —
+`http://localhost:8086/x` targets `http://localhost:8086`, not `http://localhost:8086/x`.
+If your harness is served under a base path, put it in `HARNESS_URL`, which is used
+verbatim.
 
 ## Testing
 
