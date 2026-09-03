@@ -16,11 +16,20 @@ from simulation_harness.skills.manifest import MANIFEST_FILENAME, build_manifest
 
 # Backward-compat re-export: these moved to skills.generation.naming, but
 # tests/unit/skills/test_generator.py imports them from this module.
-from simulation_harness.skills.generation.naming import (  # noqa: F401
+from simulation_harness.skills.generation.naming import (
     _FRONTMATTER_RE,
     _NAME_LINE_RE,
     _force_skill_name,
 )
+
+# Declared so the re-exports above read as intentional API rather than dead
+# imports, to both linters and readers.
+__all__ = [
+    "SkillGenerator",
+    "_FRONTMATTER_RE",
+    "_NAME_LINE_RE",
+    "_force_skill_name",
+]
 
 
 class SkillGenerator:

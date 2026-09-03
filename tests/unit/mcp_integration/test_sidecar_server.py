@@ -65,6 +65,26 @@ class TestCheckPortAvailable:
         # Should not raise
         _check_port_available(free_port)
 
+    def test_probes_the_host_it_is_given(self) -> None:
+        """The probe binds the supplied host, not a hardcoded interface."""
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind(("127.0.0.1", 0))
+            taken_port = sock.getsockname()[1]
+            with pytest.raises(PortInUseError):
+                _check_port_available(taken_port, "127.0.0.1")
+        finally:
+            sock.close()
+
+    def test_defaults_to_loopback(self) -> None:
+        """Default host is loopback rather than every interface."""
+        from simulation_harness.mcp_integration.sidecar_server import (
+            DEFAULT_SIDECAR_HOST,
+        )
+
+        assert DEFAULT_SIDECAR_HOST == "localhost"
+
 
 class TestSidecarMCPServer:
     """Tests for SidecarMCPServer."""

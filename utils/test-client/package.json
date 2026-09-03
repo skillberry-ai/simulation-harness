@@ -31,6 +31,7 @@
     "vitest": "^3.2.6"
   },
   "overrides": {
+    "qs": "^6.16.0",
     "dompurify": "3.4.14",
     "vite": "^6.4.3",
     "postcss": "^8.5.18",

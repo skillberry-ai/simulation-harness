@@ -671,8 +671,10 @@ def test_skill_reuse_reaches_ready_quickly(
         final1 = poll_until_ready(app_client, timeout=60.0)
         assert final1["status"] == "ready"
 
-        # Tear down
-        assert app_client.delete("/api/v1/simulation").status_code == 204
+        # Tear down. Keep the request outside the assert: under `python -O`
+        # asserts are stripped and the teardown would never run.
+        teardown = app_client.delete("/api/v1/simulation")
+        assert teardown.status_code == 204
 
         # Second simulation reuses the skill
         r2 = app_client.post(

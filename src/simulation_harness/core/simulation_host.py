@@ -243,7 +243,9 @@ class SimulationHost:
         if record.status == SimulationStatus.READY and mcp_port is not None:
             try:
                 config = get_config()
-                sidecar = SidecarMCPServer(record.instance, mcp_port, config.mcp)
+                sidecar = SidecarMCPServer(
+                    record.instance, mcp_port, config.mcp, config.server.host
+                )
                 await sidecar.start()
                 record.instance._sidecar = sidecar  # type: ignore[union-attr]
             except Exception as e:
@@ -295,8 +297,14 @@ class SimulationHost:
             task.cancel()
             try:
                 await task
-            except (asyncio.CancelledError, Exception):
-                pass
+            # CancelledError derives from BaseException, not Exception, so both
+            # arms are needed. Cancellation here is expected; anything else is
+            # a creation failure we are already discarding, but log it so a
+            # swallowed error is still traceable.
+            except asyncio.CancelledError:
+                logger.debug("Creation task cancelled during delete")
+            except Exception:
+                logger.debug("Creation task failed during delete", exc_info=True)
 
         if record is not None and record.instance is not None:
             try:

@@ -32,6 +32,30 @@ Copy `.env.example` to `.env`:
 - `HARNESS_URL` — upstream harness (default `http://localhost:8086`). The masthead URL field overrides this per request via the `X-Harness-Url` header.
 - `PORT` — proxy/prod port (default `3000`).
 - `MCP_TRANSPORT` — `sse` (default) or `streamable-http`; must match the harness's `mcp.transport`.
+- `HARNESS_URL_ALLOWLIST` — comma-separated origins the `X-Harness-Url` header may target, beyond the `HARNESS_URL` origin. See below.
+- `RATE_LIMIT_WINDOW_MS` / `RATE_LIMIT_MAX` — proxy rate limit (default 600 requests per 60 s). Generous because the harness itself has a 10-minute REST timeout.
+
+### Retargeting the harness
+
+Because `X-Harness-Url` reaches the proxy from the browser, it is attacker-controllable
+and would otherwise be a server-side request forgery primitive. The proxy therefore
+only forwards to:
+
+- **loopback**, on any port — `localhost`, `127.0.0.1`, `[::1]` — so the default local
+  workflow and the masthead port field need no configuration;
+- the origin of `HARNESS_URL`;
+- any origin listed in `HARNESS_URL_ALLOWLIST`.
+
+Anything else — a remote host, or a non-`http(s)` scheme — gets `400
+harness_url_not_allowed`, and no upstream request is made. To point the masthead at a
+remote harness, add its origin explicitly:
+
+```bash
+HARNESS_URL_ALLOWLIST=https://harness.staging.example:8443
+```
+
+Note that an origin is scheme + host + port, so a different port on an allowlisted host
+is a separate entry.
 
 ## Testing
 

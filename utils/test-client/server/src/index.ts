@@ -1,4 +1,5 @@
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -6,9 +7,21 @@ import { loadConfig, type ProxyConfig } from './config.js';
 import { createHarnessRouter } from './harness.js';
 import { createMcpRouter } from './mcp.js';
 
+/** Bounds runaway or scripted traffic against the proxy routes. */
+export function createProxyRateLimit(config: ProxyConfig) {
+  return rateLimit({
+    windowMs: config.rateLimitWindowMs,
+    limit: config.rateLimitMax,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { error: 'rate_limited', message: 'Too many proxy requests; slow down.' },
+  });
+}
+
 export function createApp(config: ProxyConfig): express.Express {
   const app = express();
   app.use(express.json({ limit: '10mb' }));
+  app.use('/proxy', createProxyRateLimit(config));
   app.use('/proxy', createHarnessRouter(config));
   app.use('/proxy', createMcpRouter(config));
 

@@ -416,11 +416,12 @@ async def test_create_simulation_starts_sidecar_when_mcp_port_provided(
         patch(
             "simulation_harness.core.simulation_host.SidecarMCPServer",
             return_value=mock_sidecar,
-        ) as _,
+        ) as mock_sidecar_cls,
         patch("simulation_harness.core.simulation_host.get_config") as mock_cfg,
     ):
         mock_cfg.return_value.mcp = MagicMock()
         mock_cfg.return_value.creation.max_duration_seconds = 30
+        mock_cfg.return_value.server.host = "127.0.0.1"
 
         await host.declare_simulation(
             name="test",
@@ -435,6 +436,8 @@ async def test_create_simulation_starts_sidecar_when_mcp_port_provided(
             await _wait_for_ready(host)
             mock_sidecar.start.assert_called_once()
             assert mock_inst._sidecar is mock_sidecar
+            # The sidecar binds server.host, not a hardcoded 0.0.0.0.
+            assert mock_sidecar_cls.call_args.args[3] == "127.0.0.1"
         finally:
             await host.delete_simulation()
 

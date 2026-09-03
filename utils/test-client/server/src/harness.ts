@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import type { ProxyConfig } from './config.js';
 import { resolveHarnessUrl } from './config.js';
-import { sendUpstreamError, sendUnreachable } from './errors.js';
+import { sendUpstreamError, sendUnreachable, sendForbiddenHarnessUrl } from './errors.js';
 
 interface Forward {
   method: 'GET' | 'POST' | 'PUT' | 'DELETE';
@@ -17,6 +17,10 @@ async function forward(
   res: Response,
 ): Promise<void> {
   const base = resolveHarnessUrl(config, req.header('x-harness-url'));
+  if (base === null) {
+    sendForbiddenHarnessUrl(res);
+    return;
+  }
   const url = `${base}${spec.upstreamPath(req)}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.restTimeoutMs);

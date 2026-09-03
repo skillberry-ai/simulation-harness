@@ -28,13 +28,12 @@ jobs:
         uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
-          queries: security-and-quality
+          # security-extended, not security-and-quality: the quality half mostly
+          # restated ruff and produced ~20 low-value notes in test files. Lint is
+          # gated separately by `make lint`.
+          queries: security-extended
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v4
-        # GitHub Advanced Security is not yet enabled for this (private) repo, so
-        # the SARIF upload fails with "Advanced Security must be enabled ...".
-        # Keep CodeQL non-blocking until GHAS is enabled, then remove this line.
-        continue-on-error: true
         with:
           category: "/language:${{ matrix.language }}"
