@@ -4,7 +4,7 @@ import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { ProxyConfig } from './config.js';
 import { resolveHarnessUrl } from './config.js';
-import { sendMcpError } from './errors.js';
+import { sendMcpError, sendForbiddenHarnessUrl } from './errors.js';
 
 export interface McpTool {
   name: string;
@@ -70,6 +70,10 @@ export function createMcpRouter(
 
   router.post('/mcp/list-tools', async (req: Request, res: Response) => {
     const base = resolveHarnessUrl(config, req.header('x-harness-url'));
+    if (base === null) {
+      sendForbiddenHarnessUrl(res);
+      return;
+    }
     try {
       res.json(await doList(base, config.mcpTransport));
     } catch (err) {
@@ -79,6 +83,10 @@ export function createMcpRouter(
 
   router.post('/mcp/call-tool', async (req: Request, res: Response) => {
     const base = resolveHarnessUrl(config, req.header('x-harness-url'));
+    if (base === null) {
+      sendForbiddenHarnessUrl(res);
+      return;
+    }
     const { name, arguments: args } = req.body as {
       name: string;
       arguments?: Record<string, unknown>;

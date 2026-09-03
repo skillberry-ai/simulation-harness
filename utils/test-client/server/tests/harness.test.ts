@@ -119,16 +119,49 @@ describe('harness router', () => {
     expect((res.json as { error: string }).error).toBe('harness_error');
   });
 
-  it('honors the X-Harness-Url header override', async () => {
+  it('honors an allowlisted X-Harness-Url header override', async () => {
     msw.use(
       http.get('http://override.test/api/v1/simulation', () =>
         HttpResponse.json({ name: 'overridden' }),
       ),
     );
-    const res = await call(makeApp(), 'GET', '/proxy/simulation', undefined, {
+    // Retargeting a remote harness requires the operator to opt in.
+    const allowlisted = loadConfig({
+      HARNESS_URL: 'http://harness.test',
+      HARNESS_URL_ALLOWLIST: 'http://override.test',
+    });
+    const app = express();
+    app.use(express.json());
+    app.use('/proxy', createHarnessRouter(allowlisted));
+
+    const res = await call(app, 'GET', '/proxy/simulation', undefined, {
       'x-harness-url': 'http://override.test',
     });
     expect((res.json as { name: string }).name).toBe('overridden');
+  });
+
+  it('rejects a non-allowlisted X-Harness-Url with 400 and no upstream call', async () => {
+    let reached = false;
+    msw.use(
+      http.get('http://evil.test/api/v1/simulation', () => {
+        reached = true;
+        return HttpResponse.json({ name: 'should-not-happen' });
+      }),
+    );
+    const res = await call(makeApp(), 'GET', '/proxy/simulation', undefined, {
+      'x-harness-url': 'http://evil.test',
+    });
+    expect(res.status).toBe(400);
+    expect((res.json as { error: string }).error).toBe('harness_url_not_allowed');
+    expect(reached).toBe(false);
+  });
+
+  it('rejects a non-http scheme in X-Harness-Url with 400', async () => {
+    const res = await call(makeApp(), 'GET', '/proxy/simulation', undefined, {
+      'x-harness-url': 'file:///etc/passwd',
+    });
+    expect(res.status).toBe(400);
+    expect((res.json as { error: string }).error).toBe('harness_url_not_allowed');
   });
 
   it('mirrors upstream non-2xx as harness_error', async () => {
