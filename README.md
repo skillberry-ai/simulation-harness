@@ -231,6 +231,25 @@ kubectl apply -k deploy/k8s/
 See [`deploy/README.md`](deploy/README.md) for the full env-var reference,
 probe semantics, and rollout commands.
 
+### Published image tags
+
+Images are published to `ghcr.io/skillberry-ai/simulation-harness`:
+
+| Tag | Points at | Moves when |
+|---|---|---|
+| `latest` | newest release | a `vX.Y.Z` tag is pushed |
+| `X.Y.Z` (e.g. `0.1.2`) | one exact release | never |
+| `X.Y` (e.g. `0.1`) | newest patch on that minor line | a `vX.Y.*` release is cut |
+| `main` | newest `main` build | every push to `main` |
+| `sha-<short-sha>` | one commit | never |
+
+`latest` follows **releases, not `main`** — it is what a bare `docker pull`
+resolves to, so it points at released code. Use `main` to track trunk.
+
+Pre-release tags (`v0.3.0-rc1`) publish only their exact version; they never move
+`latest` or a `X.Y` line. For production, pin `X.Y.Z` or a digest — the build
+summary prints the digest for each image.
+
 **Deployment notes:**
 - Each instance hosts exactly one simulation (one OpenAPI spec → one skill → one MCP endpoint).
 - Multi-service orchestration is handled at the deployment layer (multiple instances).
