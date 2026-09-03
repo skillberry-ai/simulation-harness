@@ -18,15 +18,21 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def _check_port_available(port: int) -> None:
-    """Verify the port is not already bound.
+DEFAULT_SIDECAR_HOST = "localhost"
+
+
+def _check_port_available(port: int, host: str = DEFAULT_SIDECAR_HOST) -> None:
+    """Verify the port is not already bound on the interface we intend to use.
+
+    ``host`` must match the address uvicorn will bind, or the probe stops being
+    a meaningful check.
 
     Raises:
         PortInUseError: If the port is already in use.
     """
     sock = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
     try:
-        sock.bind(("0.0.0.0", port))  # nosec B104 - transient probe socket to test port availability; closed immediately
+        sock.bind((host, port))
     except OSError:
         raise PortInUseError(f"Port {port} is already in use")
     finally:
@@ -41,10 +47,12 @@ class SidecarMCPServer:
         instance: "SimulationInstance",
         port: int,
         mcp_config: MCPConfig,
+        host: str = DEFAULT_SIDECAR_HOST,
     ) -> None:
         self._instance = instance
         self._port = port
         self._mcp_config = mcp_config
+        self._host = host
         self._uvicorn_server: uvicorn.Server | None = None
         self._server_task: asyncio.Task | None = None
 
@@ -54,12 +62,16 @@ class SidecarMCPServer:
         Raises:
             PortInUseError: If the port is already in use.
         """
-        _check_port_available(self._port)
+        _check_port_available(self._port, self._host)
 
         app = self._create_app()
         config = uvicorn.Config(
             app,
-            host="0.0.0.0",  # nosec B104 - sidecar MCP server must be reachable; runs behind network-level isolation per DESIGN.md
+            # Bind address comes from server.host in harness.yaml. Deployments
+            # that need the sidecar reachable off-box set 0.0.0.0 there and
+            # supply their own network-level isolation (see DESIGN.md); the
+            # default keeps it on loopback.
+            host=self._host,
             port=self._port,
             log_level="warning",
             log_config=None,
@@ -90,7 +102,7 @@ class SidecarMCPServer:
                 )
             await asyncio.sleep(0.05)
 
-        logger.info(f"Sidecar MCP server started on port {self._port}")
+        logger.info(f"Sidecar MCP server started on {self._host}:{self._port}")
 
     async def stop(self) -> None:
         """Stop the sidecar server."""

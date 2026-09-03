@@ -2,6 +2,7 @@
 
 import logging
 import os
+import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -50,7 +51,9 @@ try:
     config = load_config(config_path)
     config = apply_env_overrides(config)
 except (FileNotFoundError, ConfigValidationError, ValueError) as e:
-    print(f"ERROR: Failed to load configuration: {e}")
+    # Logging is configured from this very config below, so it is not available
+    # yet; write straight to stderr, which is where a startup error belongs.
+    sys.stderr.write(f"ERROR: Failed to load configuration: {e}\n")
     raise
 
 # Setup logging based on configuration
