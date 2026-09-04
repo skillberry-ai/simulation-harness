@@ -10,6 +10,7 @@ reads out of ``schema.json``.
 from __future__ import annotations
 
 import json
+from collections import Counter
 from typing import Any
 
 try:
@@ -58,7 +59,8 @@ def structural_entities(identity: IdentityModel) -> list[Entity]:
 def validate_enrichment(identity: IdentityModel, entities: list[Entity]) -> list[str]:
     """Re-assert the pinned contract over whatever the LLM returned."""
     pinned = {d.name: d for d in identity.entities}
-    got = {e.name for e in entities}
+    names = [e.name for e in entities]
+    got = set(names)
     errors: list[str] = []
     missing = sorted(set(pinned) - got)
     if missing:
@@ -66,6 +68,11 @@ def validate_enrichment(identity: IdentityModel, entities: list[Entity]) -> list
     invented = sorted(got - set(pinned))
     if invented:
         errors.append(f"entities not in the pinned list (remove them): {invented}")
+    duplicates = sorted(name for name, count in Counter(names).items() if count > 1)
+    if duplicates:
+        errors.append(
+            f"duplicate entities returned (return each exactly once): {duplicates}"
+        )
     for entity in entities:
         derived = pinned.get(entity.name)
         if derived is None:

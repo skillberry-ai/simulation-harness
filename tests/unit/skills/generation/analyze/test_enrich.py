@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from simulation_harness.skills.generation.ir import Entity, Field
 from simulation_harness.skills.generation.repair import GenerationStageError
 from simulation_harness.skills.generation.stages.analyze import enrich as E
 from simulation_harness.skills.generation.stages.analyze.identity import (
@@ -143,3 +144,27 @@ async def test_enrich_rejects_a_non_object_payload() -> None:
     with patch.object(E, "call_json", AsyncMock(return_value=["nope"])):
         with pytest.raises(GenerationStageError):
             await E.enrich_entities(IDENTITY, {}, object(), retries=0)
+
+
+def test_validate_enrichment_rejects_a_duplicated_pinned_name() -> None:
+    order = Entity(
+        name="Order",
+        collection="orders",
+        primary_key="order_id",
+        fields=[
+            Field(name="order_id", type="string", required=True),
+            Field(name="status", type="string", required=True),
+        ],
+    )
+    order_with_extra_field = Entity(
+        name="Order",
+        collection="orders",
+        primary_key="order_id",
+        fields=[
+            Field(name="order_id", type="string", required=True),
+            Field(name="status", type="string", required=True),
+            Field(name="fabricated", type="string", required=False),
+        ],
+    )
+    errors = E.validate_enrichment(IDENTITY, [order, order_with_extra_field])
+    assert any("Order" in e for e in errors)
