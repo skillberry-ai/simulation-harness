@@ -274,7 +274,7 @@ The resulting `<skills_folder>/<name>/` directory contains:
 | `db.json` | `generate_seed` (Stage 7) | Initial seed entities, schema-valid, loaded into the state store on first use. |
 | `scenarios.json` | `generate_scenarios` (Stage 5) | Representative user stories (`title`, `intent`, `operations`). **Only written when scenarios were generated** — omitted otherwise. |
 | `api.json` | input spec (`generator.py:111`) | Verbatim copy of the input OpenAPI spec, kept for reference, reuse checks, and so `POST /api/v1/simulation/start` can reconstruct the spec at run time without a fresh submission. |
-| `manifest.json` | `build_manifest` (`skills/manifest.py:94`) | Provenance for the bundle: harness version, model, canonical input-spec digest, generation timestamp, plus a sha256 digest and byte size per sibling artifact. Purely for reproducibility/debugging — **optional, never required for reuse**. |
+| `manifest.json` | `build_manifest` (`skills/manifest.py:94`) | Provenance for the bundle: harness version, model, canonical input-spec digest, generation timestamp, a sha256 digest and byte size per sibling artifact, and `identity.provenance` — a per-entity map of how each entity's contract was decided. Purely for reproducibility/debugging — **optional, never required for reuse**. |
 
 The reuse gate (§2) treats a skill as complete only when `SKILL.md`,
 `schema.json`, `db.json`, and `api.json` all exist; `scenarios.json` and
@@ -283,6 +283,18 @@ in `_REQUIRED_FILES`, so `is_complete()` is unaffected by its presence or
 absence. The ten skills that predate provenance support have no
 `manifest.json` and remain complete and reusable.
 
+`manifest.json`'s `identity.provenance` key tags every entity `"derived"` (its
+collection and primary key came from the deterministic rule) or `"llm"` (the
+rule couldn't decide and the LLM fallback modeled it instead) — e.g.
+`{"identity": {"provenance": {"Order": "derived", "Coupon": "llm"}}}`. This is
+the mitigation for the LLM fallback still being non-deterministic: which path
+an entity's contract took is visible in the artifact instead of having to be
+inferred. The map is **sparse by construction**: an entity the LLM fallback
+declined to model never entered the IR, so it gets no key at all — a missing
+key means *no such entity in this bundle*, not `"derived"`. Do not read an
+absent key as evidence of determinism; check it against the entity names
+actually present (e.g. in `schema.json`).
+
 ## 6. Failure behavior (summary)
 
 - Invalid/unparseable spec → **HTTP 422** before generation starts.
@@ -290,9 +302,18 @@ absence. The ten skills that predate provenance support have no
   exhausting its repair retries or timing out → `GenerationStageError`, which
   fails the creation; `SkillGenerator` wraps it in a `RuntimeError` and removes
   the temp dir.
-- Scenarios and behavior are the non-fatal stages: failures are logged via the
-  progress callback (`scenarios_skipped …` / `behavior_skipped …`) and
-  generation continues (behavior falls back to the static realism invariants).
+- Scenarios, behavior, and enrich (Stage 1a-2, inside Stage 1 analyze) are the
+  non-fatal stages: failures are logged via the progress callback
+  (`scenarios_skipped …` / `behavior_skipped …` / `enrich_skipped …`) and
+  generation continues. Scenarios and behavior fall back to no scenarios and
+  the static realism invariants, respectively. Enrich falls back to
+  `structural_entities` (`stages/analyze/__init__.py:130-156`): entities keep
+  their derived contract — entity set, collections, primary keys, all
+  unaffected — and lose only descriptions, enums, and relationships. This
+  degrade path covers a bad LLM payload, a stage timeout, and a transport
+  error alike (all subclasses of `Exception`); a cancellation
+  (`asyncio.CancelledError`, a `BaseException`) is deliberately *not* caught
+  here and propagates.
 
 ## Code reference index
 

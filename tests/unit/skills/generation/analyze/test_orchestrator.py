@@ -1,13 +1,36 @@
+import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from simulation_harness.openapi.parser import OpenAPISpec
-from simulation_harness.skills.generation.ir import Entity, StoreMetadata
+from simulation_harness.skills.generation.ir import Entity, Field, StoreMetadata
 from simulation_harness.skills.generation.repair import GenerationStageError
 from simulation_harness.skills.generation.stages import analyze as A
 from simulation_harness.skills.generation.stages.analyze.extract import DataModel
 from typing import Any
+
+# Enriched fields returned by a stubbed enrich_llm: same names/types/required
+# as the structural floor, plus descriptions the structural floor omits.
+_ENRICHED_USER_FIELDS = [
+    Field(name="name", type="string", required=False, description="Full name"),
+    Field(
+        name="user_id",
+        type="string",
+        required=True,
+        description="Unique user identifier",
+    ),
+]
+
+# Structural (undecidable-free) derivation of RPC_SPEC's single entity: name
+# "User", collection "users", primary key "user_id" — see
+# test_analyze_derives_entities_from_inline_bodies. The enrich tests below
+# reuse this shape so an enriched/degraded result can be compared against the
+# exact structural floor.
+_STRUCTURAL_USER_FIELDS = [
+    Field(name="name", type="string", required=False),
+    Field(name="user_id", type="string", required=True),
+]
 
 SPEC = {
     "openapi": "3.0.0",
@@ -183,6 +206,122 @@ async def test_analyze_derives_entities_from_inline_bodies() -> None:
     assert ir.store_metadata.pk_map == {"users": "user_id"}
     assert ir.identity_provenance == {"User": "derived"}
     assert ir.validate_consistency() == []
+
+
+async def test_analyze_enrich_success_adds_field_detail_without_moving_contract() -> (
+    None
+):
+    """A working enrich_llm reaches the IR — but never the contract.
+
+    Field descriptions from the enriched entity land on ir.entities, while
+    store_metadata (collections, pk_map) and identity_provenance stay exactly
+    what the deterministic rule derived. enrich has no authority over either.
+    """
+    records = [{"operation_id": "get_user", "kind": "read", "patterns": []}]
+    enriched = [
+        Entity(
+            name="User",
+            collection="users",
+            primary_key="user_id",
+            fields=_ENRICHED_USER_FIELDS,
+        )
+    ]
+    with (
+        patch.object(A, "extract_data_model", AsyncMock()) as fallback,
+        patch.object(A, "classify_batch", AsyncMock(return_value=records)),
+        patch.object(A, "enrich_entities", AsyncMock(return_value=enriched)),
+    ):
+        ir = await A.analyze(
+            RPC_SPEC,
+            "aha",
+            extract_llm=object(),
+            classify_llm=object(),
+            enrich_llm=object(),
+            retries=0,
+            batch_cap=40,
+            concurrency=5,
+        )
+    fallback.assert_not_awaited()
+    assert ir.entities == enriched
+    assert {f.description for f in ir.entities[0].fields} == {
+        "Full name",
+        "Unique user identifier",
+    }
+    assert ir.store_metadata.collections == ["users"]
+    assert ir.store_metadata.pk_map == {"users": "user_id"}
+    assert ir.identity_provenance == {"User": "derived"}
+    assert ir.validate_consistency() == []
+
+
+async def test_analyze_enrich_failure_degrades_to_structural_floor() -> None:
+    """A transport-level enrich failure must never discard a derived contract.
+
+    The entity set, store_metadata, and identity_provenance must come out
+    byte-identical to the no-enrich structural floor — only field detail
+    (descriptions/enums/relationships) is lost.
+    """
+    records = [{"operation_id": "get_user", "kind": "read", "patterns": []}]
+    with (
+        patch.object(A, "extract_data_model", AsyncMock()) as fallback,
+        patch.object(A, "classify_batch", AsyncMock(return_value=records)),
+        patch.object(
+            A,
+            "enrich_entities",
+            AsyncMock(side_effect=RuntimeError("connection reset")),
+        ),
+    ):
+        ir = await A.analyze(
+            RPC_SPEC,
+            "aha",
+            extract_llm=object(),
+            classify_llm=object(),
+            enrich_llm=object(),
+            retries=0,
+            batch_cap=40,
+            concurrency=5,
+        )
+    fallback.assert_not_awaited()
+    assert ir.entities == [
+        Entity(
+            name="User",
+            collection="users",
+            primary_key="user_id",
+            fields=_STRUCTURAL_USER_FIELDS,
+        )
+    ]
+    assert ir.store_metadata.collections == ["users"]
+    assert ir.store_metadata.pk_map == {"users": "user_id"}
+    assert ir.identity_provenance == {"User": "derived"}
+    assert ir.validate_consistency() == []
+
+
+async def test_analyze_enrich_cancellation_propagates() -> None:
+    """CancelledError from enrich_llm must not be swallowed as a degrade.
+
+    The handler around enrich_entities catches ``Exception``, not
+    ``BaseException``, specifically so a task cancellation during that call
+    keeps propagating instead of being treated as "the LLM failed, degrade
+    and carry on".
+    """
+    records = [{"operation_id": "get_user", "kind": "read", "patterns": []}]
+    with (
+        patch.object(A, "extract_data_model", AsyncMock()),
+        patch.object(A, "classify_batch", AsyncMock(return_value=records)),
+        patch.object(
+            A, "enrich_entities", AsyncMock(side_effect=asyncio.CancelledError)
+        ),
+        pytest.raises(asyncio.CancelledError),
+    ):
+        await A.analyze(
+            RPC_SPEC,
+            "aha",
+            extract_llm=object(),
+            classify_llm=object(),
+            enrich_llm=object(),
+            retries=0,
+            batch_cap=40,
+            concurrency=5,
+        )
 
 
 async def test_analyze_prefers_components_over_inline() -> None:
