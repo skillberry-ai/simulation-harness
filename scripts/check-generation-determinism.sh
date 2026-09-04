@@ -38,6 +38,21 @@
 #   POLL_INTERVAL_SECONDS     poll interval while waiting for a run (default 3)
 set -euo pipefail
 
+# Resolve the spec argument against the caller's cwd *before* the `cd
+# "$REPO_ROOT"` below -- otherwise a relative path (the natural way to invoke
+# this script, e.g. from a checkout of a spec repo) would silently resolve
+# against the repo root instead of where the caller actually is.
+SPEC_ARG="${1:-}"
+NAME="${2:-determinism-probe}"
+SPEC=""
+if [[ -n "$SPEC_ARG" ]]; then
+  if [[ "$SPEC_ARG" = /* ]]; then
+    SPEC="$SPEC_ARG"
+  else
+    SPEC="$PWD/$SPEC_ARG"
+  fi
+fi
+
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
@@ -46,8 +61,6 @@ SKILLS_DIR="${SKILLS_DIR:-./skills-store}"
 RUNS="${RUNS:-5}"
 GENERATE_TIMEOUT_SECONDS="${GENERATE_TIMEOUT_SECONDS:-300}"
 POLL_INTERVAL_SECONDS="${POLL_INTERVAL_SECONDS:-3}"
-SPEC="${1:-}"
-NAME="${2:-determinism-probe}"
 
 if [[ -z "$SPEC" || ! -f "$SPEC" ]]; then
   echo "usage: $0 <openapi-spec.json> [skill-name]" >&2
