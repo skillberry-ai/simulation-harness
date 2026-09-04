@@ -1,11 +1,20 @@
+from typing import Any
+
 from simulation_harness.skills.generation.ir import (
     Entity,
+    Field as IRField,
     OperationEvidence,
     StoreMetadata,
 )
 from simulation_harness.skills.generation.stages.analyze import merge as M
 from simulation_harness.skills.generation.stages.analyze.extract import DataModel
-from typing import Any
+from simulation_harness.skills.generation.stages.analyze.identity import (
+    DerivedEntity,
+    IdentityModel,
+)
+from simulation_harness.skills.generation.stages.analyze.merge import (
+    compose_data_model,
+)
 
 
 def _stub(oid: Any) -> dict[str, Any]:
@@ -84,3 +93,76 @@ def test_build_spec_model_defaults_evidence_to_empty() -> None:
     ir = M.build_spec_model("aha", stubs, _dm(), semantics)
 
     assert ir.evidence == {}
+
+
+# Tests for compose_data_model
+IDENTITY = IdentityModel(
+    entities=(
+        DerivedEntity(
+            name="Order",
+            collection="orders",
+            primary_key="order_id",
+            fields=(("order_id", "string"),),
+            sources=("get_order__response",),
+        ),
+    ),
+    undecidable=("Error",),
+)
+
+
+def _entity(name: str, collection: str, pk: str) -> Entity:
+    return Entity(
+        name=name,
+        collection=collection,
+        primary_key=pk,
+        fields=[IRField(name=pk, type="string", required=True)],
+    )
+
+
+def test_compose_uses_enriched_entities_and_derived_store_metadata() -> None:
+    enriched = [_entity("Order", "orders", "order_id")]
+    dm, provenance = compose_data_model("Shop", IDENTITY, enriched, None)
+    assert dm.api_name == "Shop"
+    assert [e.name for e in dm.entities] == ["Order"]
+    assert dm.store_metadata.collections == ["orders"]
+    assert dm.store_metadata.pk_map == {"orders": "order_id"}
+    assert provenance == {"Order": "derived"}
+
+
+def test_compose_appends_fallback_entities_and_marks_them_llm() -> None:
+    fallback = DataModel(
+        api_name="Shop",
+        entities=[_entity("Coupon", "coupons", "coupon_id")],
+        store_metadata=StoreMetadata(
+            collections=["coupons"], pk_map={"coupons": "coupon_id"}
+        ),
+        declined=["Error"],
+    )
+    dm, provenance = compose_data_model(
+        "Shop", IDENTITY, [_entity("Order", "orders", "order_id")], fallback
+    )
+    assert [e.name for e in dm.entities] == ["Coupon", "Order"]
+    assert dm.store_metadata.collections == ["coupons", "orders"]
+    assert dm.store_metadata.pk_map == {"coupons": "coupon_id", "orders": "order_id"}
+    assert provenance == {"Coupon": "llm", "Order": "derived"}
+    assert dm.declined == ["Error"]
+
+
+def test_compose_lets_the_derived_entity_win_a_collision() -> None:
+    fallback = DataModel(
+        api_name="Shop",
+        entities=[_entity("OrderRecord", "orders", "id")],
+        store_metadata=StoreMetadata(collections=["orders"], pk_map={"orders": "id"}),
+    )
+    dm, provenance = compose_data_model(
+        "Shop", IDENTITY, [_entity("Order", "orders", "order_id")], fallback
+    )
+    assert [e.name for e in dm.entities] == ["Order"]
+    assert dm.store_metadata.pk_map == {"orders": "order_id"}
+    assert provenance == {"Order": "derived"}
+
+
+def test_compose_falls_back_to_structural_entities_when_enrichment_is_empty() -> None:
+    dm, provenance = compose_data_model("Shop", IDENTITY, [], None)
+    assert [e.name for e in dm.entities] == ["Order"]
+    assert provenance == {"Order": "derived"}
