@@ -9,12 +9,6 @@ from simulation_harness.skills.generation.stages.analyze.sources import (
 )
 
 
-def _spec(paths: dict) -> OpenAPISpec:
-    return OpenAPISpec(
-        {"openapi": "3.0.0", "info": {"title": "T", "version": "1"}, "paths": paths}
-    )
-
-
 def test_dedup_by_value_drops_identical_shapes() -> None:
     shape = {"type": "object", "properties": {"order_id": {"type": "string"}}}
     out = dedup_by_value({"b__response": dict(shape), "a__response": dict(shape)})

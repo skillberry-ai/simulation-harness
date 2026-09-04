@@ -31,6 +31,18 @@ class SchemaSources:
     enrich: dict[str, dict]
 
 
+def _unwrap_returns(resp: dict) -> dict:
+    """Unwrap the tool-style ``{"returns": {...}}`` response envelope one level.
+
+    For tool-driven specs, success responses carry a {"properties": {"returns":
+    {...}}} wrapper; this extracts the inner schema.
+    """
+    props = resp.get("properties") if isinstance(resp, dict) else None
+    if isinstance(props, dict) and isinstance(props.get("returns"), dict):
+        return props["returns"]
+    return resp
+
+
 def dedup_by_value(schemas: dict[str, dict]) -> dict[str, dict]:
     """Drop keys whose schema is structurally identical to an earlier one.
 
@@ -64,9 +76,7 @@ def inline_schema_evidence(spec: OpenAPISpec) -> dict:
             evidence[f"{op.operation_id}__request"] = req
         resp = op.get_success_response_schema()
         if resp:
-            props = resp.get("properties") if isinstance(resp, dict) else None
-            if isinstance(props, dict) and isinstance(props.get("returns"), dict):
-                resp = props["returns"]
+            resp = _unwrap_returns(resp)
             evidence[f"{op.operation_id}__response"] = resp
     return evidence
 
@@ -78,10 +88,8 @@ def _identity_responses(spec: OpenAPISpec) -> dict[str, dict]:
         resp = op.get_success_response_schema()
         if not isinstance(resp, dict):
             continue
+        resp = _unwrap_returns(resp)
         props = resp.get("properties")
-        if isinstance(props, dict) and isinstance(props.get("returns"), dict):
-            resp = props["returns"]
-            props = resp.get("properties")
         if resp.get("type") == "object" and isinstance(props, dict) and props:
             out[op.operation_id] = resp
     return out
