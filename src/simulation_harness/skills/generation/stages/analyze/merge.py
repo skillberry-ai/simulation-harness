@@ -87,15 +87,47 @@ def compose_data_model(
     point of this work: the collection list and pk map are the runtime contract
     ``state/loader.py`` reads back, so they must be a function of the spec.
 
+    That guarantee is structural, not incidental: for every derived entity, its
+    ``name``/``collection``/``primary_key`` are pinned straight from ``identity``
+    regardless of what ``enriched`` supplies for that name. Only the soft
+    content — ``fields``, ``relationships``, ``fingerprint_fields``,
+    ``temporal_fields`` — is taken from the enriched entity (falling back to the
+    structural floor when there is no match). ``enrich_entities`` already
+    re-asserts this same contract via ``validate_enrichment`` before compose
+    ever runs; the pin here is defense-in-depth for a caller that bypasses that
+    check, not the primary enforcement point — a mismatch is logged, not
+    raised, since compose has no repair channel to feed a correction back into.
+
     A derived entity always wins a collection collision. Returns the model and
     the provenance map recording which path each entity came from.
     """
     by_name = {e.name: e for e in enriched}
+    entities: list[Entity] = []
     # An enrichment that degraded to nothing still has a contract to honour.
-    entities = [
-        by_name.get(d.name) or s
-        for d, s in zip(identity.entities, structural_entities(identity), strict=True)
-    ]
+    for d, s in zip(identity.entities, structural_entities(identity), strict=True):
+        e = by_name.get(d.name)
+        if e is None:
+            entities.append(s)
+            continue
+        if e.collection != d.collection or e.primary_key != d.primary_key:
+            logger.warning(
+                "enriched entity '%s' returned collection=%r primary_key=%r; "
+                "pinning to the derived contract collection=%r primary_key=%r",
+                d.name,
+                e.collection,
+                e.primary_key,
+                d.collection,
+                d.primary_key,
+            )
+        entities.append(
+            e.model_copy(
+                update={
+                    "name": d.name,
+                    "collection": d.collection,
+                    "primary_key": d.primary_key,
+                }
+            )
+        )
     provenance = {e.name: "derived" for e in entities}
     # Normalized (casefolded, stripped) so a case- or whitespace-variant
     # collection name is still caught as the same collision an exact match

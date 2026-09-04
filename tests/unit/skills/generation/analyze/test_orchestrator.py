@@ -324,6 +324,85 @@ async def test_analyze_enrich_cancellation_propagates() -> None:
         )
 
 
+async def test_analyze_enrich_pins_contract_end_to_end_through_real_enrich_entities() -> (
+    None
+):
+    """A tampered enrich payload must not move the contract, end to end.
+
+    Unlike the three tests above, this patches ``call_json`` (the LLM
+    boundary) rather than ``enrich_entities`` itself, so the real
+    ``enrich_entities`` -> ``validate_enrichment`` -> ``with_repair`` path
+    runs inside ``A.analyze(...)``, together with ``compose_data_model``'s
+    pin. The fake always returns the pinned entity name with a tampered
+    ``collection``/``primary_key``.
+
+    Observed outcome (not assumed): ``validate_enrichment`` rejects the
+    tampered payload on every attempt, so ``with_repair`` exhausts its
+    ``retries + 1`` attempts and raises ``GenerationStageError`` — which
+    ``analyze()``'s broad ``except Exception`` catches and degrades from,
+    same as the plain-failure test above. The call counter proves repair
+    actually re-prompted rather than giving up after one try. Because the
+    degrade path runs, ``compose_data_model`` never actually sees the
+    tampered entity here — its pin is exercised directly by
+    ``test_compose_pins_the_derived_contract_over_a_tampered_enriched_entity``
+    in ``test_merge.py`` instead. What this test proves is the outer
+    guarantee: a tampered enrich payload cannot move the contract, by
+    whichever path stops it.
+    """
+    records = [{"operation_id": "get_user", "kind": "read", "patterns": []}]
+    call_count = 0
+
+    async def fake_call_json(llm: Any, system: str, user: str) -> dict[str, Any]:
+        nonlocal call_count
+        call_count += 1
+        return {
+            "entities": [
+                {
+                    "name": "User",
+                    "collection": "ATTACKER_COLLECTION",
+                    "primary_key": "ATTACKER_PK",
+                    "fields": [
+                        {"name": "name", "type": "string"},
+                        {"name": "user_id", "type": "string", "required": True},
+                    ],
+                }
+            ]
+        }
+
+    with (
+        patch.object(A, "extract_data_model", AsyncMock()) as fallback,
+        patch.object(A, "classify_batch", AsyncMock(return_value=records)),
+        patch(
+            "simulation_harness.skills.generation.stages.analyze.enrich.call_json",
+            fake_call_json,
+        ),
+    ):
+        ir = await A.analyze(
+            RPC_SPEC,
+            "aha",
+            extract_llm=object(),
+            classify_llm=object(),
+            enrich_llm=object(),
+            retries=1,
+            batch_cap=40,
+            concurrency=5,
+        )
+    fallback.assert_not_awaited()
+    assert call_count == 2  # retries=1 -> 2 attempts, both rejected, then degrade
+    assert ir.entities == [
+        Entity(
+            name="User",
+            collection="users",
+            primary_key="user_id",
+            fields=_STRUCTURAL_USER_FIELDS,
+        )
+    ]
+    assert ir.store_metadata.collections == ["users"]
+    assert ir.store_metadata.pk_map == {"users": "user_id"}
+    assert ir.identity_provenance == {"User": "derived"}
+    assert ir.validate_consistency() == []
+
+
 async def test_analyze_prefers_components_over_inline() -> None:
     spec = {
         "openapi": "3.0.0",

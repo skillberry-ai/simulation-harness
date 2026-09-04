@@ -200,6 +200,41 @@ def test_compose_lets_the_derived_entity_win_a_name_collision() -> None:
     assert provenance == {"Order": "derived"}
 
 
+def test_compose_pins_the_derived_contract_over_a_tampered_enriched_entity() -> None:
+    """compose_data_model must not trust an enriched entity's contract fields.
+
+    ``enrich_entities`` re-asserts collection/primary_key via
+    ``validate_enrichment`` before compose ever runs; this is the
+    defense-in-depth pin for a caller that bypasses that check. The composed
+    entity's ``collection``/``primary_key`` must come from ``identity``
+    regardless of what the enriched entity claims, while its soft content
+    (fields) still comes through — the pin corrects the contract, it does not
+    discard the field detail enrich added.
+    """
+    tampered = Entity(
+        name="Order",
+        collection="ATTACKER_COLLECTION",
+        primary_key="ATTACKER_PK",
+        fields=[
+            IRField(
+                name="order_id",
+                type="string",
+                required=True,
+                description="Unique order id",
+            )
+        ],
+    )
+    dm, provenance = compose_data_model("Shop", IDENTITY, [tampered], None)
+    assert [e.name for e in dm.entities] == ["Order"]
+    order = dm.entities[0]
+    assert order.collection == "orders"
+    assert order.primary_key == "order_id"
+    assert order.fields[0].description == "Unique order id"
+    assert dm.store_metadata.collections == ["orders"]
+    assert dm.store_metadata.pk_map == {"orders": "order_id"}
+    assert provenance == {"Order": "derived"}
+
+
 def test_compose_falls_back_to_structural_entities_when_enrichment_is_empty() -> None:
     dm, provenance = compose_data_model("Shop", IDENTITY, [], None)
     assert [e.name for e in dm.entities] == ["Order"]
