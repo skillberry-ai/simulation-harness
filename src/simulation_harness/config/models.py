@@ -101,6 +101,7 @@ class GenerationConfig(BaseModel):
         120, gt=0, description="Per individual LLM call timeout"
     )
     extract: StageParams = Field(default_factory=lambda: StageParams(max_tokens=8000))
+    enrich: StageParams = Field(default_factory=lambda: StageParams(max_tokens=8000))
     classify: StageParams = Field(default_factory=lambda: StageParams(max_tokens=4000))
     schema_seed: StageParams = Field(
         default_factory=lambda: StageParams(max_tokens=12000)

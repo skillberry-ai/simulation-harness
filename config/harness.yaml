@@ -37,13 +37,17 @@ generation:
   stage_timeout_seconds: 420
 
   # Per-stage LLM tuning, in pipeline execution order. Stage 1 (extract →
-  # classify) runs first; stages 2-6 then run concurrently in a single gather,
-  # so the order among them is nominal. Stage 7 (seed) reuses schema_seed, and
-  # stage 8 (assemble) makes no LLM call.
+  # enrich → classify) runs first; stages 2-6 then run concurrently in a
+  # single gather, so the order among them is nominal. Stage 7 (seed) reuses
+  # schema_seed, and stage 8 (assemble) makes no LLM call.
 
   # Stage 1a — extract: spec → intermediate representation (entities, fields,
   # relationships) that every later stage reads.
   extract: { temperature: 0.0, max_tokens: 20000 }
+  # Stage 1a-2 — enrich: fill in field detail (descriptions, enums) for an
+  # entity list whose names, collections, and primary keys are already pinned
+  # in code, so prose can jitter between runs without moving the contract.
+  enrich: { temperature: 0.0, max_tokens: 8000 }
   # Stage 1b — classify: label each operation's CRUD verb and behavioral
   # patterns, fanned out in bins of classify_batch_size.
   classify: { temperature: 0.0, max_tokens: 10000 }
