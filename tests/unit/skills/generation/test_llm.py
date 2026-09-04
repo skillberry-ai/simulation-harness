@@ -43,6 +43,56 @@ def test_build_chat_text_mode_has_no_response_format() -> None:
         assert kwargs["base_url"] == "http://x"
 
 
+def test_build_chat_omits_extra_body_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("HARNESS_LLM_NO_CACHE", raising=False)
+    with patch.object(llmmod, "ChatOpenAI") as mock:
+        build_chat(
+            api_key=SecretStr("k"),
+            model="m",
+            temperature=0.0,
+            max_tokens=100,
+            base_url=None,
+            json_mode=False,
+        )
+        assert "extra_body" not in mock.call_args.kwargs
+
+
+@pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", " Yes "])
+def test_build_chat_sets_extra_body_when_no_cache_env_is_truthy(
+    monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    monkeypatch.setenv("HARNESS_LLM_NO_CACHE", value)
+    with patch.object(llmmod, "ChatOpenAI") as mock:
+        build_chat(
+            api_key=SecretStr("k"),
+            model="m",
+            temperature=0.0,
+            max_tokens=100,
+            base_url=None,
+            json_mode=False,
+        )
+        assert mock.call_args.kwargs["extra_body"] == {"cache": {"no-cache": True}}
+
+
+@pytest.mark.parametrize("value", ["", "0", "false", "no", "nope"])
+def test_build_chat_omits_extra_body_when_no_cache_env_is_falsy(
+    monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    monkeypatch.setenv("HARNESS_LLM_NO_CACHE", value)
+    with patch.object(llmmod, "ChatOpenAI") as mock:
+        build_chat(
+            api_key=SecretStr("k"),
+            model="m",
+            temperature=0.0,
+            max_tokens=100,
+            base_url=None,
+            json_mode=False,
+        )
+        assert "extra_body" not in mock.call_args.kwargs
+
+
 async def test_call_json_parses_object() -> None:
     fake = MagicMock()
     fake.ainvoke = AsyncMock(return_value=MagicMock(content='{"a": 1}'))

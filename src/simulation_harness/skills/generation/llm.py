@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -19,6 +20,20 @@ _TRUNCATED_MSG = (
     "LLM response was truncated before completion (output token limit reached); "
     "reduce scope or raise max_tokens for this stage"
 )
+
+# Set HARNESS_LLM_NO_CACHE to a truthy value ("1", "true", "yes") to bypass the
+# shared LiteLLM gateway's whole-response cache. Off by default: the cache is a
+# real cost/latency win for ordinary generation, and only a determinism
+# measurement (scripts/check-generation-determinism.sh) needs it disabled. The
+# harness reads this once per `build_chat` call, so it must be set in the
+# environment the harness process itself was started with — restart the
+# harness after exporting it, don't set it only in a client's shell.
+_NO_CACHE_ENV_VAR = "HARNESS_LLM_NO_CACHE"
+_TRUTHY = {"1", "true", "yes"}
+
+
+def _no_cache_requested() -> bool:
+    return os.environ.get(_NO_CACHE_ENV_VAR, "").strip().lower() in _TRUTHY
 
 
 def build_chat(
@@ -40,6 +55,8 @@ def build_chat(
         kwargs["model_kwargs"] = {"response_format": {"type": "json_object"}}
     if base_url:
         kwargs["base_url"] = base_url
+    if _no_cache_requested():
+        kwargs["extra_body"] = {"cache": {"no-cache": True}}
     return ChatOpenAI(**kwargs)
 
 

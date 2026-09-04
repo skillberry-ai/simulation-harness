@@ -315,6 +315,76 @@ actually present (e.g. in `schema.json`).
   (`asyncio.CancelledError`, a `BaseException`) is deliberately *not* caught
   here and propagates.
 
+## 7. Verifying generation determinism
+
+§5 describes `manifest.json`'s `identity.provenance` map: which entities got
+their collection/primary-key contract from the deterministic rule
+(`"derived"`) versus the LLM fallback (`"llm"`). `scripts/check-generation-determinism.sh`
+is the end-to-end check that this contract actually holds across repeated
+generations of the same spec — it exercises the real pipeline (enrich stage,
+scoped fallback, `enforce_contract`) rather than asserting anything about the
+rule in isolation.
+
+It generates one spec `RUNS` times (default 5) against a running harness, each
+time deleting any existing simulation record first (`DELETE
+/api/v1/simulation` — `POST` is not idempotent and a leftover record from the
+previous run would 409), creating with `regenerate: true` (skill reuse would
+otherwise make runs 2..N no-ops), and polling `GET /api/v1/simulation` until
+the record reaches `ready` or `failed`. Once ready, it copies out
+`schema.json` and `manifest.json` and compares, across all runs, a normalized
+projection of both: the collection set with each collection's `x-primary-key`,
+and `manifest.json`'s `identity.provenance`. Comparing prose (field
+descriptions, etc.) is deliberately out of scope — see the script's own header
+comment for the contract-stability-vs-byte-reproducibility distinction.
+
+**Run it:**
+
+```sh
+HARNESS_LLM_NO_CACHE=1 HARNESS_SERVER_PORT=8099 uv run python -m simulation_harness &   # use a free port; restart required
+BASE_URL=http://127.0.0.1:8099 HARNESS_LLM_NO_CACHE=1 RUNS=5 make check-determinism
+```
+
+Two things the invocation above is not optional about:
+
+- **The gateway response-cache bypass.** The shared LiteLLM gateway caches
+  whole responses, which makes repeated identical generations look
+  deterministic when they are not. `build_chat` (`skills/generation/llm.py`)
+  passes `extra_body={"cache": {"no-cache": True}}` to `ChatOpenAI` only when
+  `HARNESS_LLM_NO_CACHE` is a truthy value in its own process's environment —
+  off by default, since the cache is a real cost/latency win for ordinary
+  generation. Because that variable is read once per LLM call from the
+  *harness's* environment, it only takes effect if the harness process itself
+  was started (or restarted) with it set; exporting it only in the terminal
+  that runs the script does nothing to an already-running harness. The script
+  refuses to run unless this same variable is also truthy in its own shell —
+  a caller-honesty check, not proof, since the script cannot inspect another
+  process's environment.
+- **A free port.** Ports 8086-8090 are typically occupied by other people's
+  harness instances in this environment. Start the harness yourself on a free
+  port and point `BASE_URL` at it; the script never starts, stops, or signals
+  a harness process. Tear it down yourself afterward, by the PID you started
+  it with. **Never** `pkill -f simulation_harness` — that pattern matches
+  other users' containerized instances and has previously killed several of
+  them mid-session.
+
+**Why tau2-retail specifically.** `make check-determinism` targets
+`utils/test-client/examples/tau2_retail_openapi.json` and is not
+interchangeable with the other bundled examples. On tau2-retail the
+deterministic identity rule decides 6 of 12 collections and leaves 6
+undecidable to the LLM fallback — a real mix of both paths, which is what
+makes a contract-stability assertion meaningful. On `aha` (8 of 184 decided)
+or `booking-com` (48 of 340 decided) almost everything already routes to the
+LLM fallback, so running this check there would mostly be asserting the LLM
+itself is deterministic, which it is not and which this branch never claimed.
+
+**Reading a FAIL.** The diff names the drifting collections. Cross-reference
+`manifest.json`'s `identity.provenance` for the entity behind each one: a
+collection whose entity is tagged `"llm"` drifting is the accepted residual
+risk (the fallback models it, and the fallback is not deterministic), not a
+bug in this work. A collection whose entity is tagged `"derived"` drifting
+**is** a bug — the deterministic rule is supposed to make that path stable by
+construction.
+
 ## Code reference index
 
 | Concern | Location |
