@@ -6,6 +6,7 @@ import pytest
 
 from simulation_harness.skills.generation.stages.analyze.identity import (
     camel,
+    derive_identity,
     identity_key,
     noun_for,
     pluralize,
@@ -102,11 +103,20 @@ def test_noun_for_bare_id_falls_back_to_the_schema_name() -> None:
     assert noun_for("id", "Restaurant") == "restaurant"
 
 
-def test_derive_identity_clusters_by_key_across_schema_names() -> None:
-    from simulation_harness.skills.generation.stages.analyze.identity import (
-        derive_identity,
-    )
+def test_identity_key_matches_plural_property_name_to_singular_key() -> None:
+    """The new pluralize(noun) == own arm enables nested object promotion.
 
+    A nested object under property name "items" (plural) with "item_id" key
+    (singular) must be identifiable without requiring synthetic=True. This tests
+    the arm directly rather than indirectly through derive_identity.
+    """
+    schema: dict = {
+        "properties": {"item_id": {"type": "string"}, "qty": {"type": "integer"}}
+    }
+    assert identity_key("items", schema, synthetic=False) == "item_id"
+
+
+def test_derive_identity_clusters_by_key_across_schema_names() -> None:
     schemas = {
         "get_order__response": {
             "properties": {"order_id": {"type": "string"}, "status": {"type": "string"}}
@@ -126,10 +136,6 @@ def test_derive_identity_clusters_by_key_across_schema_names() -> None:
 
 
 def test_derive_identity_bare_id_does_not_cluster_across_names() -> None:
-    from simulation_harness.skills.generation.stages.analyze.identity import (
-        derive_identity,
-    )
-
     schemas = {
         "Reservation": {"properties": {"id": {"type": "string"}}},
         "Restaurant": {"properties": {"id": {"type": "string"}}},
@@ -140,10 +146,6 @@ def test_derive_identity_bare_id_does_not_cluster_across_names() -> None:
 
 
 def test_derive_identity_records_undecidable_schemas() -> None:
-    from simulation_harness.skills.generation.stages.analyze.identity import (
-        derive_identity,
-    )
-
     schemas = {
         "Error": {"properties": {"message": {"type": "string"}}},
         "User": {"properties": {"user_id": {"type": "string"}}},
@@ -154,10 +156,6 @@ def test_derive_identity_records_undecidable_schemas() -> None:
 
 
 def test_derive_identity_promotes_nested_object_with_its_own_key() -> None:
-    from simulation_harness.skills.generation.stages.analyze.identity import (
-        derive_identity,
-    )
-
     schemas = {
         "Order": {
             "properties": {
@@ -181,10 +179,6 @@ def test_derive_identity_promotes_nested_object_with_its_own_key() -> None:
 
 
 def test_derive_identity_promotes_through_additional_properties() -> None:
-    from simulation_harness.skills.generation.stages.analyze.identity import (
-        derive_identity,
-    )
-
     schemas = {
         "Catalog": {
             "properties": {
@@ -204,10 +198,6 @@ def test_derive_identity_promotes_through_additional_properties() -> None:
 
 
 def test_derive_identity_does_not_promote_nested_sharing_the_parent_key() -> None:
-    from simulation_harness.skills.generation.stages.analyze.identity import (
-        derive_identity,
-    )
-
     schemas = {
         "Order": {
             "properties": {
@@ -224,10 +214,6 @@ def test_derive_identity_does_not_promote_nested_sharing_the_parent_key() -> Non
 
 
 def test_derive_identity_captures_field_types() -> None:
-    from simulation_harness.skills.generation.stages.analyze.identity import (
-        derive_identity,
-    )
-
     schemas = {
         "User": {
             "properties": {
@@ -254,9 +240,6 @@ def test_named_schema_with_a_non_matching_sole_fk_stays_undecidable() -> None:
     no bare `id`, and 1.4 does not apply to a *named* schema — so `Address` must
     land in `undecidable`, not be absorbed into `User`.
     """
-    from simulation_harness.skills.generation.stages.analyze.identity import (
-        derive_identity,
-    )
 
     schemas = {
         "User": {"properties": {"user_id": {"type": "string"}}},
@@ -281,9 +264,6 @@ def test_named_schema_with_a_matching_fk_still_clusters() -> None:
     match picks `order_line_id`, so this named schema is decided in code even
     though it also holds a foreign key.
     """
-    from simulation_harness.skills.generation.stages.analyze.identity import (
-        derive_identity,
-    )
 
     schemas = {
         "Order": {"properties": {"order_id": {"type": "string"}}},
@@ -314,9 +294,6 @@ def test_synthetic_schema_with_a_sole_fk_resolves_to_that_entity() -> None:
     `orders` instead of creating an `order_detailses` collection or going to the
     LLM. Without the synthetic carve-out, tau2-retail's six collections collapse.
     """
-    from simulation_harness.skills.generation.stages.analyze.identity import (
-        derive_identity,
-    )
 
     schemas = {
         "get_order": {"properties": {"order_id": {"type": "string"}}},
@@ -345,9 +322,6 @@ def test_nested_absorption_is_unaffected_by_the_synthetic_split() -> None:
     `variants` collection appears. Confirms rule 1.4's named/synthetic split does
     not disturb nested resolution.
     """
-    from simulation_harness.skills.generation.stages.analyze.identity import (
-        derive_identity,
-    )
 
     schemas: dict[str, dict] = {
         "get_product": {

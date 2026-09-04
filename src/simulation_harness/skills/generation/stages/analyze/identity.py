@@ -102,7 +102,7 @@ class DerivedEntity:
     """One entity whose identity was decided in code.
 
     ``fields`` is a sorted tuple of ``(name, json_type)`` pairs — enough to
-    build a structurally correct :class:`~...ir.Entity` without an LLM, which is
+    build a structurally correct Entity without an LLM, which is
     what the enrich stage degrades to when it fails.
     """
 
@@ -172,7 +172,8 @@ def _absorb(
         cluster = clusters[noun] = _Cluster(primary_key=key)
     props = schema.get("properties")
     if isinstance(props, dict):
-        for prop_name, prop in props.items():
+        for prop_name in sorted(props):
+            prop = props[prop_name]
             if isinstance(prop_name, str):
                 cluster.fields.setdefault(
                     prop_name, _json_type(prop if isinstance(prop, dict) else {})
