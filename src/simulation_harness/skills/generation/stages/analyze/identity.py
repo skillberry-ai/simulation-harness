@@ -11,11 +11,13 @@ and not a prompt.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
+from dataclasses import dataclass, field
 
 _CAMEL_BOUNDARY = re.compile(r"(?<!^)(?=[A-Z])")
 
 # Nouns ending in these are singular despite the trailing "s", so they still
-# need pluralizing: address -> addresses, status -> statuses, axis -> axes.
+# need pluralizing: address -> addresses, status -> statuses, axis -> axises.
 _SINGULAR_S_ENDINGS = ("ss", "us", "is")
 
 
@@ -71,7 +73,7 @@ def identity_key(name: str, schema: dict, *, synthetic: bool) -> str | None:
     # so the outcome does not depend on property declaration order.
     for candidate in sorted(candidates, key=lambda c: (-len(c), c)):
         noun = candidate[:-3]
-        if noun and (own == noun or own.endswith(noun)):
+        if noun and (own == noun or own.endswith(noun) or pluralize(noun) == own):
             return candidate
     if "id" in props:
         return "id"
@@ -93,3 +95,140 @@ def noun_for(key: str, schema_name: str) -> str:
     if key == "id":
         return snake(schema_name)
     return snake(key)
+
+
+@dataclass(frozen=True)
+class DerivedEntity:
+    """One entity whose identity was decided in code.
+
+    ``fields`` is a sorted tuple of ``(name, json_type)`` pairs — enough to
+    build a structurally correct :class:`~...ir.Entity` without an LLM, which is
+    what the enrich stage degrades to when it fails.
+    """
+
+    name: str
+    collection: str
+    primary_key: str
+    fields: tuple[tuple[str, str], ...]
+    sources: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class IdentityModel:
+    entities: tuple[DerivedEntity, ...]
+    undecidable: tuple[str, ...]
+
+    @property
+    def collections(self) -> list[str]:
+        return [e.collection for e in self.entities]
+
+    @property
+    def pk_map(self) -> dict[str, str]:
+        return {e.collection: e.primary_key for e in self.entities}
+
+
+@dataclass
+class _Cluster:
+    primary_key: str
+    fields: dict[str, str] = field(default_factory=dict)
+    sources: list[str] = field(default_factory=list)
+
+
+def _json_type(prop: dict) -> str:
+    declared = prop.get("type")
+    if isinstance(declared, str):
+        return declared
+    if isinstance(prop.get("properties"), dict):
+        return "object"
+    return "string"
+
+
+def _nested_objects(prop: dict) -> Iterator[dict]:
+    """Yield object schemas reachable one level below ``prop``.
+
+    Covers the three shapes a child entity actually appears in: a direct
+    object, an ``array.items`` object, and a map modelled as
+    ``additionalProperties``.
+    """
+    inner = prop.get("items") if prop.get("type") == "array" else prop
+    if not isinstance(inner, dict):
+        return
+    extra = inner.get("additionalProperties")
+    if isinstance(extra, dict) and isinstance(extra.get("properties"), dict):
+        yield extra
+    elif isinstance(inner.get("properties"), dict):
+        yield inner
+
+
+def _absorb(
+    clusters: dict[str, _Cluster],
+    noun: str,
+    key: str,
+    schema: dict,
+    source: str,
+) -> None:
+    cluster = clusters.get(noun)
+    if cluster is None:
+        cluster = clusters[noun] = _Cluster(primary_key=key)
+    props = schema.get("properties")
+    if isinstance(props, dict):
+        for prop_name, prop in props.items():
+            if isinstance(prop_name, str):
+                cluster.fields.setdefault(
+                    prop_name, _json_type(prop if isinstance(prop, dict) else {})
+                )
+    cluster.sources.append(source)
+
+
+def derive_identity(schemas: dict[str, dict], *, synthetic: bool) -> IdentityModel:
+    """Cluster ``schemas`` into entities by identity key.
+
+    Schemas sharing an identity key are the same entity and their fields are
+    unioned. Schemas whose key is undecidable are reported in
+    :attr:`IdentityModel.undecidable` for the scoped LLM fallback; they never
+    contribute a collection here.
+
+    Iteration is over sorted names throughout so the result cannot depend on
+    the order the schema map happened to be built in.
+    """
+    clusters: dict[str, _Cluster] = {}
+    undecidable: list[str] = []
+    for name in sorted(schemas):
+        schema = schemas[name]
+        if not isinstance(schema, dict):
+            undecidable.append(name)
+            continue
+        key = identity_key(name, schema, synthetic=synthetic)
+        if key is None:
+            undecidable.append(name)
+            continue
+        _absorb(clusters, noun_for(key, name), key, schema, name)
+        props = schema.get("properties")
+        if not isinstance(props, dict):
+            continue
+        for prop_name in sorted(props):
+            prop = props[prop_name]
+            if not isinstance(prop, dict):
+                continue
+            for target in _nested_objects(prop):
+                nested = identity_key(prop_name, target, synthetic=synthetic)
+                if nested is None or nested == key:
+                    continue
+                _absorb(
+                    clusters,
+                    noun_for(nested, prop_name),
+                    nested,
+                    target,
+                    f"{name}.{prop_name}",
+                )
+    entities = tuple(
+        DerivedEntity(
+            name=camel(noun),
+            collection=pluralize(noun),
+            primary_key=clusters[noun].primary_key,
+            fields=tuple(sorted(clusters[noun].fields.items())),
+            sources=tuple(clusters[noun].sources),
+        )
+        for noun in sorted(clusters)
+    )
+    return IdentityModel(entities=entities, undecidable=tuple(sorted(undecidable)))
