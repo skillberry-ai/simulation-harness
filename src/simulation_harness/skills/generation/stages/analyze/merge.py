@@ -97,13 +97,17 @@ def compose_data_model(
         for d, s in zip(identity.entities, structural_entities(identity), strict=True)
     ]
     provenance = {e.name: "derived" for e in entities}
-    reserved = set(identity.collections)
+    # Normalized (casefolded, stripped) so a case- or whitespace-variant
+    # collection name is still caught as the same collision an exact match
+    # would be — aligned with validate_data_model's guard in extract.py, which
+    # must not be the weaker of the two.
+    reserved = {c.strip().casefold() for c in identity.collections}
     declined: list[str] = []
     extras: list[Entity] = []
     if fallback is not None:
         declined = list(fallback.declined)
         for entity in fallback.entities:
-            if entity.collection in reserved:
+            if entity.collection.strip().casefold() in reserved:
                 logger.warning(
                     "dropping fallback entity '%s': collection '%s' is already "
                     "modeled deterministically",
@@ -111,7 +115,7 @@ def compose_data_model(
                     entity.collection,
                 )
                 continue
-            reserved.add(entity.collection)
+            reserved.add(entity.collection.strip().casefold())
             extras.append(entity)
             provenance[entity.name] = "llm"
     merged = sorted(entities + extras, key=lambda e: e.name)

@@ -162,30 +162,27 @@ def test_inline_schema_evidence_skips_ops_without_bodies() -> None:
     assert A.inline_schema_evidence(OpenAPISpec(SPEC)) == {}
 
 
-async def test_analyze_falls_back_to_inline_when_no_components() -> None:
-    captured: dict = {}
-
-    async def fake_extract(source: Any, slug: Any, llm: Any, *, retries: Any) -> Any:
-        captured["source"] = source
-        return _dm()
-
+async def test_analyze_derives_entities_from_inline_bodies() -> None:
     records = [{"operation_id": "get_user", "kind": "read", "patterns": []}]
     with (
-        patch.object(A, "extract_data_model", AsyncMock(side_effect=fake_extract)),
+        patch.object(A, "extract_data_model", AsyncMock()) as fallback,
         patch.object(A, "classify_batch", AsyncMock(return_value=records)),
     ):
         ir = await A.analyze(
             RPC_SPEC,
-            "booker",
+            "aha",
             extract_llm=object(),
             classify_llm=object(),
             retries=0,
             batch_cap=40,
             concurrency=5,
         )
-    assert "get_user__request" in captured["source"]
-    assert "get_user__response" in captured["source"]
-    assert ir.operations[0].operation_id == "get_user"
+    # Inline response bodies are decided in code now; no LLM call is needed.
+    fallback.assert_not_awaited()
+    assert ir.store_metadata.collections == ["users"]
+    assert ir.store_metadata.pk_map == {"users": "user_id"}
+    assert ir.identity_provenance == {"User": "derived"}
+    assert ir.validate_consistency() == []
 
 
 async def test_analyze_prefers_components_over_inline() -> None:
@@ -207,7 +204,9 @@ async def test_analyze_prefers_components_over_inline() -> None:
     }
     captured: dict = {}
 
-    async def fake_extract(source: Any, slug: Any, llm: Any, *, retries: Any) -> Any:
+    async def fake_extract(
+        source: Any, slug: Any, llm: Any, *, retries: Any, derived: Any = None
+    ) -> Any:
         captured["source"] = source
         return _dm()
 
@@ -229,23 +228,43 @@ async def test_analyze_prefers_components_over_inline() -> None:
     assert captured["source"] == {"Feature": {"type": "object"}}
 
 
+NO_SCHEMA_SPEC: dict[str, Any] = {
+    "openapi": "3.0.0",
+    "info": {"title": "Bare", "version": "1.0"},
+    "paths": {
+        "/ping": {
+            "get": {
+                "operationId": "ping",
+                "responses": {
+                    "200": {
+                        "content": {"application/json": {"schema": {"type": "string"}}}
+                    }
+                },
+            }
+        }
+    },
+}
+
+
 async def test_analyze_raises_when_no_entities_extracted() -> None:
     empty_dm = DataModel(
-        api_name="x",
+        api_name="Bare",
         entities=[],
         store_metadata=StoreMetadata(collections=[], pk_map={}),
     )
-    with patch.object(A, "extract_data_model", AsyncMock(return_value=empty_dm)):
-        with pytest.raises(GenerationStageError) as exc:
-            await A.analyze(
-                RPC_SPEC,
-                "x",
-                extract_llm=object(),
-                classify_llm=object(),
-                retries=0,
-                batch_cap=40,
-                concurrency=5,
-            )
+    with (
+        patch.object(A, "extract_data_model", AsyncMock(return_value=empty_dm)),
+        pytest.raises(GenerationStageError) as exc,
+    ):
+        await A.analyze(
+            NO_SCHEMA_SPEC,
+            "x",
+            extract_llm=object(),
+            classify_llm=object(),
+            retries=0,
+            batch_cap=40,
+            concurrency=5,
+        )
     assert exc.value.stage == "extract"
 
 
@@ -462,3 +481,48 @@ async def test_analyze_populates_ir_evidence() -> None:
     )
     assert set(ir.evidence) == {"cancel_pending_order"}
     assert ir.validate_consistency() == []
+
+
+async def test_analyze_hands_only_undecidable_schemas_to_the_fallback() -> None:
+    spec: dict[str, Any] = {
+        "openapi": "3.0.0",
+        "info": {"title": "Mixed", "version": "1.0"},
+        "paths": {},
+        "components": {
+            "schemas": {
+                "Order": {"properties": {"order_id": {"type": "string"}}},
+                "Error": {"properties": {"message": {"type": "string"}}},
+            }
+        },
+    }
+    captured: dict[str, Any] = {}
+
+    async def fake_extract(
+        source: Any, slug: Any, llm: Any, *, retries: Any, derived: Any = None
+    ) -> Any:
+        captured["source"] = source
+        captured["derived"] = derived
+        return DataModel(
+            api_name="Mixed",
+            entities=[],
+            store_metadata=StoreMetadata(collections=[], pk_map={}),
+            declined=["Error"],
+        )
+
+    with (
+        patch.object(A, "extract_data_model", AsyncMock(side_effect=fake_extract)),
+        patch.object(A, "classify_batch", AsyncMock(return_value=[])),
+    ):
+        ir = await A.analyze(
+            spec,
+            "mixed",
+            extract_llm=object(),
+            classify_llm=object(),
+            retries=0,
+            batch_cap=40,
+            concurrency=1,
+        )
+    assert list(captured["source"]) == ["Error"]
+    assert captured["derived"].collections == ["orders"]
+    assert ir.store_metadata.collections == ["orders"]
+    assert ir.identity_provenance == {"Order": "derived"}

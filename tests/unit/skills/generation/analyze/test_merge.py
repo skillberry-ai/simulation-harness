@@ -162,6 +162,22 @@ def test_compose_lets_the_derived_entity_win_a_collision() -> None:
     assert provenance == {"Order": "derived"}
 
 
+def test_compose_drops_a_case_or_whitespace_variant_colliding_fallback() -> None:
+    fallback = DataModel(
+        api_name="Shop",
+        entities=[_entity("OrderRecord", " Orders ", "id")],
+        store_metadata=StoreMetadata(
+            collections=[" Orders "], pk_map={" Orders ": "id"}
+        ),
+    )
+    dm, provenance = compose_data_model(
+        "Shop", IDENTITY, [_entity("Order", "orders", "order_id")], fallback
+    )
+    assert [e.name for e in dm.entities] == ["Order"]
+    assert dm.store_metadata.pk_map == {"orders": "order_id"}
+    assert provenance == {"Order": "derived"}
+
+
 def test_compose_falls_back_to_structural_entities_when_enrichment_is_empty() -> None:
     dm, provenance = compose_data_model("Shop", IDENTITY, [], None)
     assert [e.name for e in dm.entities] == ["Order"]
