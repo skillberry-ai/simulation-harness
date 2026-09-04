@@ -22,9 +22,14 @@ from simulation_harness.skills.generation.stages.analyze.merge import (
     build_spec_model,
     validate_coverage,
 )
+from simulation_harness.skills.generation.stages.analyze.sources import (
+    collect_sources,
+    inline_schema_evidence,
+)
 
 __all__ = [
     "analyze",
+    "collect_sources",
     "extract_operation_evidence",
     "extract_operations",
     "inline_schema_evidence",
@@ -84,29 +89,6 @@ def extract_operation_evidence(spec: OpenAPISpec) -> dict[str, OperationEvidence
         if description is None:
             continue
         evidence[op.operation_id] = OperationEvidence(description=description)
-    return evidence
-
-
-def inline_schema_evidence(spec: OpenAPISpec) -> dict:
-    """Synthesize a `name -> JSON schema` map from operation request/response
-    bodies, for RPC/tool-style specs that declare no `components.schemas`.
-
-    The output mirrors the shape of `components.schemas` so it can be fed to
-    the extract stage unchanged. Keys are suffixed `__request`/`__response`.
-    The tool-style ``{"returns": {...}}`` response envelope is unwrapped one
-    level so the LLM sees the entity shape directly.
-    """
-    evidence: dict = {}
-    for op in spec.operations:
-        req = op.get_request_schema()
-        if req:
-            evidence[f"{op.operation_id}__request"] = req
-        resp = op.get_success_response_schema()
-        if resp:
-            props = resp.get("properties") if isinstance(resp, dict) else None
-            if isinstance(props, dict) and isinstance(props.get("returns"), dict):
-                resp = props["returns"]
-            evidence[f"{op.operation_id}__response"] = resp
     return evidence
 
 
