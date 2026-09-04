@@ -1,3 +1,5 @@
+import copy
+
 from simulation_harness.skills.generation.ir import (
     Entity,
     Field,
@@ -110,3 +112,13 @@ def test_render_preamble_omits_behavior_when_empty() -> None:
     out = A.render_preamble(_ir(), [])
     assert "### Derivation Rules" not in out
     assert "\n\n\n" not in out
+
+
+def test_validate_bundle_rejects_a_schema_that_drifted_from_the_ir() -> None:
+    ir = _ir()
+    md = A.assemble_skill(ir, A.render_preamble(ir, []), ["### /features/{id} GET\nok"])
+    schema: dict = copy.deepcopy(SCHEMA)
+    schema["properties"]["ghosts"] = {"type": "array", "items": {"$ref": "#/$defs/G"}}
+    schema["$defs"]["G"] = {"type": "object", "properties": {}}
+    errs = A.validate_bundle(ir, md, schema, {"features": [{"id": "f1"}]})
+    assert any("ghosts" in e for e in errs)
