@@ -5,6 +5,23 @@ import pytest
 from simulation_harness.skills.generation.ir import Entity, StoreMetadata
 from simulation_harness.skills.generation.repair import GenerationStageError
 from simulation_harness.skills.generation.stages.analyze import extract as E
+from simulation_harness.skills.generation.stages.analyze.identity import (
+    DerivedEntity,
+    IdentityModel,
+)
+
+DERIVED = IdentityModel(
+    entities=(
+        DerivedEntity(
+            name="Reservation",
+            collection="reservations",
+            primary_key="id",
+            fields=(("id", "string"),),
+            sources=("Reservation",),
+        ),
+    ),
+    undecidable=("Error", "Location"),
+)
 
 VALID = {
     "api_name": "Aha",
@@ -53,3 +70,71 @@ async def test_extract_exhausts_retries_raises() -> None:
         with pytest.raises(GenerationStageError) as exc:
             await E.extract_data_model({}, slug="aha", llm=object(), retries=1)
     assert exc.value.stage == "extract"
+
+
+async def test_fallback_may_decline_every_schema() -> None:
+    payload = {
+        "api_name": "Res",
+        "entities": [],
+        "store_metadata": {"collections": [], "pk_map": {}},
+        "declined": ["Error", "Location"],
+    }
+    with patch.object(E, "call_json", AsyncMock(return_value=payload)):
+        dm = await E.extract_data_model(
+            {"Error": {}, "Location": {}}, "res", object(), retries=0, derived=DERIVED
+        )
+    assert dm.entities == []
+    assert dm.declined == ["Error", "Location"]
+
+
+async def test_fallback_may_not_redefine_a_derived_collection() -> None:
+    payload = {
+        "api_name": "Res",
+        "entities": [
+            {
+                "name": "Location",
+                "collection": "reservations",
+                "primary_key": "loc_id",
+                "fields": [{"name": "loc_id", "type": "string", "required": True}],
+            }
+        ],
+        "store_metadata": {
+            "collections": ["reservations"],
+            "pk_map": {"reservations": "loc_id"},
+        },
+    }
+    with patch.object(E, "call_json", AsyncMock(return_value=payload)):
+        with pytest.raises(GenerationStageError) as exc:
+            await E.extract_data_model(
+                {"Location": {}}, "res", object(), retries=0, derived=DERIVED
+            )
+    assert exc.value.stage == "extract"
+    assert any("reservations" in e for e in exc.value.errors)
+
+
+async def test_fallback_declined_defaults_to_empty() -> None:
+    payload = {
+        "api_name": "Res",
+        "entities": [],
+        "store_metadata": {"collections": [], "pk_map": {}},
+    }
+    with patch.object(E, "call_json", AsyncMock(return_value=payload)):
+        dm = await E.extract_data_model({}, "res", object(), retries=0)
+    assert dm.declined == []
+
+
+async def test_fallback_prompt_carries_the_derived_entities_as_context() -> None:
+    payload = {
+        "api_name": "Res",
+        "entities": [],
+        "store_metadata": {"collections": [], "pk_map": {}},
+    }
+    call = AsyncMock(return_value=payload)
+    with patch.object(E, "call_json", call):
+        await E.extract_data_model(
+            {"Error": {}}, "res", object(), retries=0, derived=DERIVED
+        )
+    assert call.await_args is not None
+    user_message = call.await_args.args[2]
+    assert "reservations" in user_message
+    assert "Reservation" in user_message
