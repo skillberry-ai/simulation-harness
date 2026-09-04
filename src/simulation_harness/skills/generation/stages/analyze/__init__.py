@@ -7,10 +7,8 @@ from collections.abc import Callable
 
 from simulation_harness.openapi.parser import OpenAPISpec
 from simulation_harness.skills.generation.ir import Entity, OperationEvidence, SpecModel
-from simulation_harness.skills.generation.llm import StructuredCallError
 from simulation_harness.skills.generation.repair import (
     GenerationStageError,
-    StageTimeoutError,
     guard_timeout,
 )
 from simulation_harness.skills.generation.stages.analyze.classify import (
@@ -138,7 +136,14 @@ async def analyze(
                 stage="analyze:enrich",
                 timeout=timeout,
             )
-        except (GenerationStageError, StructuredCallError, StageTimeoutError) as e:
+        except Exception as e:
+            # Broad on purpose: enrich only adds field prose to an already-
+            # derived, contract-complete entity set, so no failure mode here
+            # — GenerationStageError/StructuredCallError/StageTimeoutError from
+            # a bad LLM payload, or a transport-level error such as a
+            # connection reset — is worth discarding that contract for. A
+            # code-level bug inside enrich_entities is caught by that module's
+            # own unit tests, not by this handler.
             logger.warning(
                 "enrich stage skipped (%s: %s) — entities keep their derived "
                 "contract but lose descriptions, enums and relationships",

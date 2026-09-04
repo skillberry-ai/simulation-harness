@@ -268,6 +268,81 @@ async def test_analyze_raises_when_no_entities_extracted() -> None:
     assert exc.value.stage == "extract"
 
 
+# Request body carries a shape; the success response does not (no content on
+# the 200). identity=_identity_responses only looks at responses, so it comes
+# out empty and nothing is derived — but enrich=dedup_by_value(inline_schema_
+# evidence(...)) still carries the request-body key. This distinguishes
+# `sources.enrich` from `sources.identity`: if the 0-derived branch in
+# analyze() ever handed over `sources.identity` instead of `sources.enrich`,
+# this request-body evidence would silently vanish from the fallback's input.
+REQUEST_ONLY_SPEC: dict[str, Any] = {
+    "openapi": "3.0.0",
+    "info": {"title": "ReqOnly", "version": "1.0"},
+    "paths": {
+        "/create_widget": {
+            "post": {
+                "operationId": "create_widget",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {"widget_name": {"type": "string"}},
+                            }
+                        }
+                    }
+                },
+                "responses": {"200": {"description": "ok"}},
+            }
+        }
+    },
+}
+
+
+async def test_analyze_hands_the_whole_enrich_map_when_nothing_is_derived() -> None:
+    captured: dict[str, Any] = {}
+
+    async def fake_extract(
+        source: Any, slug: Any, llm: Any, *, retries: Any, derived: Any = None
+    ) -> Any:
+        captured["source"] = source
+        captured["derived"] = derived
+        return DataModel(
+            api_name="ReqOnly",
+            entities=[
+                Entity(
+                    name="Widget",
+                    collection="widgets",
+                    primary_key="widget_id",
+                    fields=[],
+                )
+            ],
+            store_metadata=StoreMetadata(
+                collections=["widgets"], pk_map={"widgets": "widget_id"}
+            ),
+        )
+
+    records = [{"operation_id": "create_widget", "kind": "create", "patterns": []}]
+    with (
+        patch.object(A, "extract_data_model", AsyncMock(side_effect=fake_extract)),
+        patch.object(A, "classify_batch", AsyncMock(return_value=records)),
+    ):
+        await A.analyze(
+            REQUEST_ONLY_SPEC,
+            "req-only",
+            extract_llm=object(),
+            classify_llm=object(),
+            retries=0,
+            batch_cap=40,
+            concurrency=5,
+        )
+    # Nothing was derivable from the (schema-less) response, so the fallback
+    # must see the whole enrich map — request-body evidence included — not
+    # the (empty) identity map.
+    assert "create_widget__request" in captured["source"]
+    assert captured["derived"] is None
+
+
 async def test_analyze_raises_on_coverage_gap() -> None:
     with (
         patch.object(A, "extract_data_model", AsyncMock(return_value=_dm())),

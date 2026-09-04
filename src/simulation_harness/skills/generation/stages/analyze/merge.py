@@ -102,11 +102,26 @@ def compose_data_model(
     # would be — aligned with validate_data_model's guard in extract.py, which
     # must not be the weaker of the two.
     reserved = {c.strip().casefold() for c in identity.collections}
+    # Same normalization for entity *names*. Without this a fallback entity
+    # that reuses a derived entity's name overwrites its "derived" provenance
+    # record with "llm" and produces two same-named entities in the IR — the
+    # collection guard alone doesn't catch that, since the fallback entity can
+    # sit in a distinct collection. Dropping (not raising) mirrors the
+    # collection guard: a name clash is a correct reason to discard the extra
+    # entity, not to fail generation.
+    reserved_names = {e.name.strip().casefold() for e in entities}
     declined: list[str] = []
     extras: list[Entity] = []
     if fallback is not None:
         declined = list(fallback.declined)
         for entity in fallback.entities:
+            if entity.name.strip().casefold() in reserved_names:
+                logger.warning(
+                    "dropping fallback entity '%s': name is already modeled "
+                    "deterministically or by an earlier fallback entity",
+                    entity.name,
+                )
+                continue
             if entity.collection.strip().casefold() in reserved:
                 logger.warning(
                     "dropping fallback entity '%s': collection '%s' is already "
@@ -116,6 +131,7 @@ def compose_data_model(
                 )
                 continue
             reserved.add(entity.collection.strip().casefold())
+            reserved_names.add(entity.name.strip().casefold())
             extras.append(entity)
             provenance[entity.name] = "llm"
     merged = sorted(entities + extras, key=lambda e: e.name)
