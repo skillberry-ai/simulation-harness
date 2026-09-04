@@ -53,7 +53,20 @@ if [[ -n "$SPEC_ARG" ]]; then
   fi
 fi
 
-REPO_ROOT="$(git rev-parse --show-toplevel)"
+# Anchor on the script's own location, not `git rev-parse --show-toplevel` --
+# the latter depends on the *caller's* cwd, so invoking this script (with a
+# relative spec path) from inside a different git repo would cd into that
+# repo's root instead of this one, and from a non-git directory would die on
+# a raw `git` error. This script lives at scripts/<this file>, so its parent
+# directory is the repo root.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+if [[ ! -f "$REPO_ROOT/src/simulation_harness/skills/generation/llm.py" ]]; then
+  echo "FAIL: could not find simulation-harness's source tree above this script." >&2
+  echo "Expected $REPO_ROOT/src/simulation_harness/skills/generation/llm.py to exist." >&2
+  echo "Run this script from its own checkout (scripts/$(basename "$0")), not a copy." >&2
+  exit 1
+fi
 cd "$REPO_ROOT"
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:8099}"
