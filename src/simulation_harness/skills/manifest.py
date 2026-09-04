@@ -99,6 +99,7 @@ def build_manifest(
     model: str,
     harness_version: str,
     generated_at: datetime,
+    identity_provenance: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Build the provenance manifest for the artifacts in ``artifact_dir``.
 
@@ -125,6 +126,10 @@ def build_manifest(
             "model": model,
         },
         "source": {"openapi": _source_openapi(openapi_spec)},
+        # Which entities got their identity from the deterministic rule and
+        # which from the LLM fallback. The fallback is still non-deterministic,
+        # so a contract that depended on it must be visible in the artifact.
+        "identity": {"provenance": dict(sorted((identity_provenance or {}).items()))},
         "files": {
             name: _file_entry(artifact_dir / name)
             for name in _SUBJECTS
