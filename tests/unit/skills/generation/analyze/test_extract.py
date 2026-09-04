@@ -112,6 +112,58 @@ async def test_fallback_may_not_redefine_a_derived_collection() -> None:
     assert any("reservations" in e for e in exc.value.errors)
 
 
+async def test_fallback_may_not_redefine_a_derived_collection_case_variant() -> None:
+    payload = {
+        "api_name": "Res",
+        "entities": [
+            {
+                "name": "Location",
+                "collection": "Reservations",
+                "primary_key": "loc_id",
+                "fields": [{"name": "loc_id", "type": "string", "required": True}],
+            }
+        ],
+        "store_metadata": {
+            "collections": ["Reservations"],
+            "pk_map": {"Reservations": "loc_id"},
+        },
+    }
+    with patch.object(E, "call_json", AsyncMock(return_value=payload)):
+        with pytest.raises(GenerationStageError) as exc:
+            await E.extract_data_model(
+                {"Location": {}}, "res", object(), retries=0, derived=DERIVED
+            )
+    assert exc.value.stage == "extract"
+    assert any("reservations" in e for e in exc.value.errors)
+
+
+async def test_fallback_may_not_redefine_a_derived_collection_whitespace_variant() -> (
+    None
+):
+    payload = {
+        "api_name": "Res",
+        "entities": [
+            {
+                "name": "Location",
+                "collection": " reservations ",
+                "primary_key": "loc_id",
+                "fields": [{"name": "loc_id", "type": "string", "required": True}],
+            }
+        ],
+        "store_metadata": {
+            "collections": [" reservations "],
+            "pk_map": {" reservations ": "loc_id"},
+        },
+    }
+    with patch.object(E, "call_json", AsyncMock(return_value=payload)):
+        with pytest.raises(GenerationStageError) as exc:
+            await E.extract_data_model(
+                {"Location": {}}, "res", object(), retries=0, derived=DERIVED
+            )
+    assert exc.value.stage == "extract"
+    assert any("reservations" in e for e in exc.value.errors)
+
+
 async def test_fallback_declined_defaults_to_empty() -> None:
     payload = {
         "api_name": "Res",

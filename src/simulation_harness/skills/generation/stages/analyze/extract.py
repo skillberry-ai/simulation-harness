@@ -56,12 +56,19 @@ def validate_data_model(
                 f"pk_map collection '{coll}' is not in store_metadata.collections"
             )
     if derived is not None:
-        reserved = set(derived.collections)
+        # Normalized (casefolded, stripped) so a case- or whitespace-variant
+        # collection name (e.g. "Reservations", " reservations") is still
+        # caught as the same collision an exact match would be. Otherwise the
+        # variant slips through as a near-duplicate collection that appears on
+        # some runs and not others — the same class of run-to-run drift this
+        # branch exists to remove.
+        reserved = {c.strip().casefold(): c for c in derived.collections}
         for e in dm.entities:
-            if e.collection in reserved:
+            pinned = reserved.get(e.collection.strip().casefold())
+            if pinned is not None:
                 errors.append(
-                    f"entity '{e.name}' would redefine collection "
-                    f"'{e.collection}', which is already modeled — either give "
+                    f"entity '{e.name}' collection '{e.collection}' collides "
+                    f"with already-modeled collection '{pinned}' — either give "
                     f"it a distinct collection or decline the schema"
                 )
     return errors
