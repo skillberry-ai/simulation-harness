@@ -105,9 +105,7 @@ class GenerationConfig(BaseModel):
     schema_seed: StageParams = Field(
         default_factory=lambda: StageParams(max_tokens=12000)
     )
-    operation: StageParams = Field(
-        default_factory=lambda: StageParams(temperature=0.2, max_tokens=4000)
-    )
+    operation: StageParams = Field(default_factory=lambda: StageParams(max_tokens=4000))
     scenarios: StageParams = Field(
         default_factory=lambda: StageParams(temperature=0.4, max_tokens=3000)
     )
@@ -117,9 +115,7 @@ class GenerationConfig(BaseModel):
     scenarios_count: int = Field(
         5, gt=0, description="Number of example scenarios to generate"
     )
-    behavior: StageParams = Field(
-        default_factory=lambda: StageParams(temperature=0.3, max_tokens=3000)
-    )
+    behavior: StageParams = Field(default_factory=lambda: StageParams(max_tokens=3000))
     behavior_enabled: bool = Field(
         True,
         description="Generate a global behavior/realism section (numeric ranges, "
