@@ -38,7 +38,7 @@ generation:
   extract: { temperature: 0.0, max_tokens: 20000 }
   classify: { temperature: 0.0, max_tokens: 10000 }
   schema_seed: { temperature: 0.0, max_tokens: 20000 }
-  operation: { temperature: 0.2, max_tokens: 10000 }
+  operation: { temperature: 0.0, max_tokens: 10000 }
   # Example-scenario generation: after the schema is designed, an LLM enumerates
   # representative user scenarios and the seed stage populates db.json to support
   # them. Persisted to scenarios.json and an "Example Scenarios" section in SKILL.md.

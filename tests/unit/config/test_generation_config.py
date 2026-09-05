@@ -28,7 +28,7 @@ def test_generation_defaults() -> None:
     assert cfg.extract.max_tokens == 8000
     assert cfg.classify.temperature == 0.0
     assert cfg.classify.max_tokens == 4000
-    assert cfg.operation.temperature == 0.2
+    assert cfg.operation.temperature == 0.0
     assert cfg.operation.max_tokens == 4000
 
 

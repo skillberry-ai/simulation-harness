@@ -105,9 +105,7 @@ class GenerationConfig(BaseModel):
     schema_seed: StageParams = Field(
         default_factory=lambda: StageParams(max_tokens=12000)
     )
-    operation: StageParams = Field(
-        default_factory=lambda: StageParams(temperature=0.2, max_tokens=4000)
-    )
+    operation: StageParams = Field(default_factory=lambda: StageParams(max_tokens=4000))
     scenarios: StageParams = Field(
         default_factory=lambda: StageParams(temperature=0.4, max_tokens=3000)
     )
