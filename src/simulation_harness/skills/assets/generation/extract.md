@@ -15,6 +15,12 @@ parent (an address, a coordinate pair, a money amount) are **not** entities.
 A schema is an entity only if instances of it are independently stored,
 retrieved, and referred to by an identifier.
 
+A leftover may arrive as an array rather than a bare object — judge and model
+the *item* shape in that case, not the array wrapper itself. A leftover key may
+also be an operation id (e.g. `list_all_airports`) rather than a type name — if
+its item shape is entity-like, name the entity from its fields, not from the
+key it arrived under.
+
 **Declining is the expected answer, and declining every single one is a valid
 answer.** Do not invent an entity to fill space.
 
