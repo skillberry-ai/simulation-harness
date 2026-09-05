@@ -2,6 +2,7 @@
   "components": {
     "schemas": {
       "CreateSimulationRequest": {
+        "additionalProperties": false,
         "description": "Request model for creating a simulation.",
         "properties": {
           "mcp_port": {
@@ -297,6 +298,7 @@
         "type": "object"
       },
       "StartSimulationRequest": {
+        "additionalProperties": false,
         "description": "Request model for starting a simulation from baked artifacts.",
         "properties": {
           "mcp_port": {

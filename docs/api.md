@@ -272,6 +272,14 @@ Create the active simulation from an OpenAPI 3.x spec.
 | `regenerate_skill` | boolean | `false` | Force LLM regeneration of the skill even if `<skills_folder>/<name>/SKILL.md` already exists. |
 | `mcp_port` | integer (1–65535) | harness port | If set, the MCP server is started on this dedicated port instead of being mounted on the harness app. |
 
+**Unknown fields are rejected.** Any key outside the table above returns `422`
+naming that key, rather than being ignored. A misspelled flag is therefore a
+loud failure instead of a request that succeeds while doing something else — for
+instance `regenerate` (the field is `regenerate_skill`) used to be accepted and
+dropped, leaving the existing skill in place. This applies to the body's own
+keys only: `openapi_spec` is arbitrary nested JSON and vendor extensions inside
+it are untouched.
+
 **Body limit:** 10 MB. Larger bodies return `413`.
 
 **Responses**
@@ -279,7 +287,7 @@ Create the active simulation from an OpenAPI 3.x spec.
 - `202 Accepted` — `SimulationResponse` with `status: "pending"` (see [walkthrough §1](#1-create-the-simulation)). Creation continues in the background; poll `GET /api/v1/simulation` until `status` is `"ready"` or `"failed"`. The default creation budget is 120 seconds, configurable via `creation.max_duration_seconds` in `harness.yaml`.
 - `409 Conflict` — a simulation is already active, or the requested `mcp_port` is in use.
 - `413 Payload Too Large` — body exceeds 10 MB.
-- `422 Unprocessable Entity` — OpenAPI validation or parsing failed.
+- `422 Unprocessable Entity` — OpenAPI validation or parsing failed, or the body carried an unknown field.
 
 **Example**
 
@@ -311,7 +319,7 @@ session later with no LLM cost or cross-replica drift.
   simulation slot but runs no agent, so `session_state` and `mcp_url` stay `null`.
 - `409 Conflict` — a simulation record already exists (any status). `DELETE` it first.
 - `413 Payload Too Large` — body exceeds 10 MB.
-- `422 Unprocessable Entity` — OpenAPI validation or parsing failed.
+- `422 Unprocessable Entity` — OpenAPI validation or parsing failed, or the body carried an unknown field.
 
 ```bash
 curl -sS -X POST "$BASE/api/v1/simulation/setup" \
