@@ -1,3 +1,4 @@
+import logging
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -85,6 +86,46 @@ async def test_fallback_may_decline_every_schema() -> None:
         )
     assert dm.entities == []
     assert dm.declined == ["Error", "Location"]
+
+
+async def test_declined_schemas_are_logged_at_info(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The decline list needs a trace, and the log is the only one it gets.
+
+    It is deliberately not in ``manifest.json`` (see ``DataModel.declined``), so
+    without this line an over-eager decline shows up only as an entity missing at
+    simulation time, with nothing tying it back to this stage.
+    """
+    payload = {
+        "api_name": "Res",
+        "entities": [],
+        "store_metadata": {"collections": [], "pk_map": {}},
+        "declined": ["Location", "Error"],
+    }
+    with (
+        patch.object(E, "call_json", AsyncMock(return_value=payload)),
+        caplog.at_level(logging.INFO, logger=E.logger.name),
+    ):
+        await E.extract_data_model(
+            {"Error": {}, "Location": {}}, "res", object(), retries=0, derived=DERIVED
+        )
+
+    messages = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]
+    assert any("declined 2 of 2" in m for m in messages), messages
+    # Sorted, so the line does not jitter with LLM output order.
+    assert any("['Error', 'Location']" in m for m in messages), messages
+
+
+async def test_no_declines_logs_nothing(caplog: pytest.LogCaptureFixture) -> None:
+    """The common case is an empty list; it must not add a line per generation."""
+    with (
+        patch.object(E, "call_json", AsyncMock(return_value=VALID)),
+        caplog.at_level(logging.INFO, logger=E.logger.name),
+    ):
+        await E.extract_data_model({}, slug="aha", llm=object(), retries=0)
+
+    assert [r for r in caplog.records if "declined" in r.getMessage()] == []
 
 
 async def test_fallback_may_not_redefine_a_derived_collection() -> None:

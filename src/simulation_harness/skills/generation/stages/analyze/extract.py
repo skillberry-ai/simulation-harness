@@ -14,6 +14,9 @@ from simulation_harness.skills.generation.ir import Entity, StoreMetadata
 from simulation_harness.skills.generation.llm import call_json
 from simulation_harness.skills.generation.repair import with_repair
 from simulation_harness.skills.generation.stages.analyze.identity import IdentityModel
+from simulation_harness.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def _load_prompt() -> str:
@@ -27,8 +30,11 @@ class DataModel:
     entities: list[Entity]
     store_metadata: StoreMetadata
     # Schemas the fallback judged not to be persisted entities. Recorded rather
-    # than dropped so a spurious decline is visible in the manifest instead of
-    # silently costing a collection.
+    # than dropped so a spurious decline is visible — ``extract_data_model``
+    # logs the list at INFO — instead of silently costing a collection. It is
+    # deliberately *not* carried into ``manifest.json``: a decline is a fact
+    # about the generation run, not part of the generated skill's contract, and
+    # adding a field there would mean bumping MANIFEST_VERSION for a diagnostic.
     declined: list[str] = field(default_factory=list)
 
 
@@ -150,4 +156,17 @@ async def extract_data_model(
             return artifact.errors
         return validate_data_model(artifact, derived)
 
-    return await with_repair(produce, validate, stage="extract", retries=retries)
+    dm = await with_repair(produce, validate, stage="extract", retries=retries)
+    if dm.declined:
+        # A decline costs a collection the runtime will never have, and the
+        # decision is made by the LLM with no validator behind it — so it has to
+        # leave a trace somewhere. This log is that trace: without it, the only
+        # symptom of an over-eager decline is a missing entity at simulation
+        # time, with nothing in the record tying it back to this stage.
+        logger.info(
+            "extract declined %d of %d leftover schemas as non-entities: %s",
+            len(dm.declined),
+            len(components),
+            sorted(dm.declined),
+        )
+    return dm
