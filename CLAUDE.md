@@ -67,7 +67,7 @@ The harness is a FastAPI service that, given an OpenAPI spec, spins up an LLM-dr
 - Failed tool calls preserve thread state; only successful calls increment the counter.
 
 ### Skill reuse
-`POST /api/v1/simulation` reuses an existing skill if `<skills_folder>/<name>/SKILL.md` exists. Pass `regenerate: true` to force regeneration. The skills folder defaults to `./skills-store` (per `skills.folder` in `harness.yaml`).
+`POST /api/v1/simulation` reuses an existing skill if `<skills_folder>/<name>/SKILL.md` exists. Pass `regenerate_skill: true` to force regeneration. The skills folder defaults to `./skills-store` (per `skills.folder` in `harness.yaml`).
 
 ### Error handling
 Domain exceptions in `utils/errors.py` are mapped to HTTP status by handlers in `main.py`:

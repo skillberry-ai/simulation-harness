@@ -78,3 +78,29 @@ async def test_generate_seed_omits_scenarios_block_when_empty() -> None:
         await SD.generate_seed(_ir(), GOOD_SCHEMA, [], llm=object(), retries=2)
     user_prompt = mock_call.call_args.args[2]
     assert "# scenarios" not in user_prompt
+
+
+# --- Fix round 1, Fix 2 --------------------------------------------------
+# state/loader.py takes the runtime collection set from db.json's own keys,
+# not from the schema. enforce_contract (schema.py) now stamps the schema's
+# top-level 'required' to store_metadata.collections and 'additionalProperties'
+# to False, so the schema that reaches this stage's own validate_schema_and_db
+# call catches drift in *either* direction between the IR and db.json.
+
+ENFORCED_SCHEMA = {
+    **GOOD_SCHEMA,
+    "required": ["features"],
+    "additionalProperties": False,
+}
+
+
+def test_validate_schema_and_db_catches_a_collection_missing_from_db() -> None:
+    errs = SD.validate_schema_and_db(ENFORCED_SCHEMA, {})
+    assert errs
+
+
+def test_validate_schema_and_db_catches_an_off_contract_collection_in_db() -> None:
+    errs = SD.validate_schema_and_db(
+        ENFORCED_SCHEMA, {"features": [{"id": "f1"}], "ghosts": [{"id": "g1"}]}
+    )
+    assert errs

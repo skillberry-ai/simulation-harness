@@ -274,7 +274,7 @@ The resulting `<skills_folder>/<name>/` directory contains:
 | `db.json` | `generate_seed` (Stage 7) | Initial seed entities, schema-valid, loaded into the state store on first use. |
 | `scenarios.json` | `generate_scenarios` (Stage 5) | Representative user stories (`title`, `intent`, `operations`). **Only written when scenarios were generated** — omitted otherwise. |
 | `api.json` | input spec (`generator.py:111`) | Verbatim copy of the input OpenAPI spec, kept for reference, reuse checks, and so `POST /api/v1/simulation/start` can reconstruct the spec at run time without a fresh submission. |
-| `manifest.json` | `build_manifest` (`skills/manifest.py:94`) | Provenance for the bundle: harness version, model, canonical input-spec digest, generation timestamp, plus a sha256 digest and byte size per sibling artifact. Purely for reproducibility/debugging — **optional, never required for reuse**. |
+| `manifest.json` | `build_manifest` (`skills/manifest.py:94`) | Provenance for the bundle: harness version, model, canonical input-spec digest, generation timestamp, a sha256 digest and byte size per sibling artifact, and `identity.provenance` — a per-entity map of how each entity's contract was decided. Purely for reproducibility/debugging — **optional, never required for reuse**. |
 
 The reuse gate (§2) treats a skill as complete only when `SKILL.md`,
 `schema.json`, `db.json`, and `api.json` all exist; `scenarios.json` and
@@ -283,6 +283,18 @@ in `_REQUIRED_FILES`, so `is_complete()` is unaffected by its presence or
 absence. The ten skills that predate provenance support have no
 `manifest.json` and remain complete and reusable.
 
+`manifest.json`'s `identity.provenance` key tags every entity `"derived"` (its
+collection and primary key came from the deterministic rule) or `"llm"` (the
+rule couldn't decide and the LLM fallback modeled it instead) — e.g.
+`{"identity": {"provenance": {"Order": "derived", "Coupon": "llm"}}}`. This is
+the mitigation for the LLM fallback still being non-deterministic: which path
+an entity's contract took is visible in the artifact instead of having to be
+inferred. The map is **sparse by construction**: an entity the LLM fallback
+declined to model never entered the IR, so it gets no key at all — a missing
+key means *no such entity in this bundle*, not `"derived"`. Do not read an
+absent key as evidence of determinism; check it against the entity names
+actually present (e.g. in `schema.json`).
+
 ## 6. Failure behavior (summary)
 
 - Invalid/unparseable spec → **HTTP 422** before generation starts.
@@ -290,9 +302,90 @@ absence. The ten skills that predate provenance support have no
   exhausting its repair retries or timing out → `GenerationStageError`, which
   fails the creation; `SkillGenerator` wraps it in a `RuntimeError` and removes
   the temp dir.
-- Scenarios and behavior are the non-fatal stages: failures are logged via the
-  progress callback (`scenarios_skipped …` / `behavior_skipped …`) and
-  generation continues (behavior falls back to the static realism invariants).
+- Scenarios, behavior, and enrich (Stage 1a-2, inside Stage 1 analyze) are the
+  non-fatal stages: failures are logged via the progress callback
+  (`scenarios_skipped …` / `behavior_skipped …` / `enrich_skipped …`) and
+  generation continues. Scenarios and behavior fall back to no scenarios and
+  the static realism invariants, respectively. Enrich falls back to
+  `structural_entities` (`stages/analyze/__init__.py:130-156`): entities keep
+  their derived contract — entity set, collections, primary keys, all
+  unaffected — and lose only descriptions, enums, and relationships. This
+  degrade path covers a bad LLM payload, a stage timeout, and a transport
+  error alike (all subclasses of `Exception`); a cancellation
+  (`asyncio.CancelledError`, a `BaseException`) is deliberately *not* caught
+  here and propagates.
+
+## 7. Verifying generation determinism
+
+§5 describes `manifest.json`'s `identity.provenance` map: which entities got
+their collection/primary-key contract from the deterministic rule
+(`"derived"`) versus the LLM fallback (`"llm"`). `scripts/check-generation-determinism.sh`
+is the end-to-end check that this contract actually holds across repeated
+generations of the same spec — it exercises the real pipeline (enrich stage,
+scoped fallback, `enforce_contract`) rather than asserting anything about the
+rule in isolation.
+
+It generates one spec `RUNS` times (default 5) against a running harness, each
+time deleting any existing simulation record first (`DELETE
+/api/v1/simulation` — `POST` is not idempotent and a leftover record from the
+previous run would 409), creating with `regenerate_skill: true` (skill reuse
+would otherwise make runs 2..N no-ops; the request model ignores unknown keys,
+so a misspelled flag is silent and the script separately asserts that
+`schema.json`'s mtime advanced on every run), and polling `GET
+/api/v1/simulation` until the record reaches `ready` or `failed`. Once ready,
+it copies out `schema.json` and `manifest.json` and compares, across all runs,
+a normalized projection of both: the collection set with each collection's
+`x-primary-key`, and `manifest.json`'s `identity.provenance`. Comparing prose
+(field descriptions, etc.) is deliberately out of scope — see the script's own
+header comment for the contract-stability-vs-byte-reproducibility distinction.
+
+**Run it:**
+
+```sh
+HARNESS_LLM_NO_CACHE=1 HARNESS_SERVER_PORT=8099 uv run python -m simulation_harness &   # use a free port; restart required
+BASE_URL=http://127.0.0.1:8099 HARNESS_LLM_NO_CACHE=1 RUNS=5 make check-determinism
+```
+
+Two things the invocation above is not optional about:
+
+- **The gateway response-cache bypass.** The shared LiteLLM gateway caches
+  whole responses, which makes repeated identical generations look
+  deterministic when they are not. `build_chat` (`skills/generation/llm.py`)
+  passes `extra_body={"cache": {"no-cache": True}}` to `ChatOpenAI` only when
+  `HARNESS_LLM_NO_CACHE` is a truthy value in its own process's environment —
+  off by default, since the cache is a real cost/latency win for ordinary
+  generation. Because that variable is read once per LLM call from the
+  *harness's* environment, it only takes effect if the harness process itself
+  was started (or restarted) with it set; exporting it only in the terminal
+  that runs the script does nothing to an already-running harness. The script
+  refuses to run unless this same variable is also truthy in its own shell —
+  a caller-honesty check, not proof, since the script cannot inspect another
+  process's environment.
+- **A free port.** Ports 8086-8090 are typically occupied by other people's
+  harness instances in this environment. Start the harness yourself on a free
+  port and point `BASE_URL` at it; the script never starts, stops, or signals
+  a harness process. Tear it down yourself afterward, by the PID you started
+  it with. **Never** `pkill -f simulation_harness` — that pattern matches
+  other users' containerized instances and has previously killed several of
+  them mid-session.
+
+**Why tau2-retail specifically.** `make check-determinism` targets
+`utils/test-client/examples/tau2_retail_openapi.json` and is not
+interchangeable with the other bundled examples. On tau2-retail the
+deterministic identity rule decides 6 of 12 collections and leaves 6
+undecidable to the LLM fallback — a real mix of both paths, which is what
+makes a contract-stability assertion meaningful. On `aha` (8 of 184 decided)
+or `booking-com` (48 of 340 decided) almost everything already routes to the
+LLM fallback, so running this check there would mostly be asserting the LLM
+itself is deterministic, which it is not and which this branch never claimed.
+
+**Reading a FAIL.** The diff names the drifting collections. Cross-reference
+`manifest.json`'s `identity.provenance` for the entity behind each one: a
+collection whose entity is tagged `"llm"` drifting is the accepted residual
+risk (the fallback models it, and the fallback is not deterministic), not a
+bug in this work. A collection whose entity is tagged `"derived"` drifting
+**is** a bug — the deterministic rule is supposed to make that path stable by
+construction.
 
 ## Code reference index
 

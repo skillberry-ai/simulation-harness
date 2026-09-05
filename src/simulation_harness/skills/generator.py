@@ -127,6 +127,7 @@ class SkillGenerator:
                 model=self.model,
                 harness_version=__version__,
                 generated_at=datetime.now(timezone.utc),
+                identity_provenance=bundle.identity_provenance,
             )
             (temp_dir / MANIFEST_FILENAME).write_text(json.dumps(manifest, indent=2))
             try:

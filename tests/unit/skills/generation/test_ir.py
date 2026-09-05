@@ -118,3 +118,26 @@ def test_spec_model_round_trips_evidence() -> None:
     ir = _ir(evidence={"getFeature": OperationEvidence(description="Reads it.")})
     restored = SpecModel.model_validate(ir.model_dump())
     assert restored.evidence["getFeature"].description == "Reads it."
+
+
+def test_identity_provenance_defaults_to_empty() -> None:
+    ir = SpecModel(
+        api_name="A",
+        slug="a",
+        entities=[],
+        operations=[],
+        store_metadata=StoreMetadata(collections=[], pk_map={}),
+    )
+    assert ir.identity_provenance == {}
+
+
+def test_validate_consistency_rejects_unknown_provenance_entity() -> None:
+    ir = SpecModel(
+        api_name="A",
+        slug="a",
+        entities=[],
+        operations=[],
+        store_metadata=StoreMetadata(collections=[], pk_map={}),
+        identity_provenance={"Ghost": "derived"},
+    )
+    assert any("Ghost" in e for e in ir.validate_consistency())

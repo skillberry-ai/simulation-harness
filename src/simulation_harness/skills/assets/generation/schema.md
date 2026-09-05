@@ -4,7 +4,11 @@ ONLY a JSON object with one field:
 
 - `schema_json`: a valid JSON Schema (Draft 2020-12) object. Top-level
   `properties` keys are the store collection names, each an array of
-  `{"$ref": "#/$defs/<Entity>"}`. Every entity schema in `$defs` has
+  `{"$ref": "#/$defs/<Entity>"}`. Top-level `properties` must contain
+  *exactly* the collections named in `store_metadata.collections` — no more
+  and no fewer; an entity that is not itself a collection (e.g., a nested
+  object referenced only from another entity) belongs in `$defs` only, never
+  as a top-level property. Every entity schema in `$defs` has
   `"additionalProperties": false`, an `"x-primary-key"` annotation naming its
   string primary-key field (which must be `required`), and faithfully
   transcribes field types, formats, enums, and constraints.

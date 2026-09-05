@@ -42,6 +42,7 @@ class SkillBundle:
     schema: dict
     db: dict
     scenarios: list[dict] = field(default_factory=list)
+    identity_provenance: dict[str, str] = field(default_factory=dict)
 
 
 def _noop(_: str) -> None:
@@ -77,6 +78,7 @@ async def run_pipeline(
         slug,
         extract_llm=chat(gen_config.extract, True),
         classify_llm=chat(gen_config.classify, True),
+        enrich_llm=chat(gen_config.enrich, True),
         retries=gen_config.repair_retries,
         batch_cap=gen_config.classify_batch_size,
         concurrency=gen_config.concurrency,
@@ -203,5 +205,9 @@ async def run_pipeline(
     if errors:
         raise GenerationStageError("assemble", errors)
     return SkillBundle(
-        skill_md=skill_md, schema=schema, db=db, scenarios=scenario_dicts
+        skill_md=skill_md,
+        schema=schema,
+        db=db,
+        scenarios=scenario_dicts,
+        identity_provenance=dict(ir.identity_provenance),
     )

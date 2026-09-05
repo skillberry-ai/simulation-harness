@@ -1,4 +1,4 @@
-.PHONY: help install dev-install hooks start stop restart test test-unit test-integration test-cov test-scripts lint format type-check lint-imports check openapi clean \
+.PHONY: help install dev-install hooks start stop restart test test-unit test-integration test-cov test-scripts lint format type-check lint-imports check openapi clean check-determinism \
         docker-build docker-build-dev docker-clean docker-clean-dev release
 
 IMAGE_NAME ?= simulation-harness
@@ -24,6 +24,8 @@ help:
 	@echo "    test-integration Run integration tests only"
 	@echo "    test-cov         Run tests with coverage report"
 	@echo "    test-scripts     Run the shell script test suite"
+	@echo "    check-determinism  Verify repeated generation of tau2-retail yields the same contract"
+	@echo "                        (needs a running harness; see docs/simulation-generation.md)"
 	@echo ""
 	@echo "  Code Quality:"
 	@echo "    lint             Run ruff linter"
@@ -111,6 +113,16 @@ test-cov:
 
 test-scripts:
 	@for t in scripts/tests/test-*.sh; do echo "== $$t"; bash "$$t" || exit 1; done
+
+# Requires a harness already running (see docs/simulation-generation.md,
+# "Verifying generation determinism") on BASE_URL, started with
+# HARNESS_LLM_NO_CACHE set to a truthy value. Targets tau2-retail specifically
+# -- it is the only bundled example where the deterministic identity rule
+# decides most, but not all, of the contract.
+check-determinism:
+	@BASE_URL=$${BASE_URL:-http://127.0.0.1:8099} RUNS=$${RUNS:-5} \
+	  ./scripts/check-generation-determinism.sh \
+	  utils/test-client/examples/tau2_retail_openapi.json determinism-probe
 
 # Code quality targets
 lint:

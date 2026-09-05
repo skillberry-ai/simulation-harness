@@ -6,7 +6,7 @@ import asyncio
 from collections.abc import Callable
 
 from simulation_harness.openapi.parser import OpenAPISpec
-from simulation_harness.skills.generation.ir import OperationEvidence, SpecModel
+from simulation_harness.skills.generation.ir import Entity, OperationEvidence, SpecModel
 from simulation_harness.skills.generation.repair import (
     GenerationStageError,
     guard_timeout,
@@ -15,16 +15,30 @@ from simulation_harness.skills.generation.stages.analyze.classify import (
     classify_batch,
     plan_classify_batches,
 )
+from simulation_harness.skills.generation.stages.analyze.enrich import (
+    enrich_entities,
+    structural_entities,
+)
 from simulation_harness.skills.generation.stages.analyze.extract import (
     extract_data_model,
 )
+from simulation_harness.skills.generation.stages.analyze.identity import derive_identity
 from simulation_harness.skills.generation.stages.analyze.merge import (
     build_spec_model,
+    compose_data_model,
     validate_coverage,
 )
+from simulation_harness.skills.generation.stages.analyze.sources import (
+    collect_sources,
+    inline_schema_evidence,
+)
+from simulation_harness.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 __all__ = [
     "analyze",
+    "collect_sources",
     "extract_operation_evidence",
     "extract_operations",
     "inline_schema_evidence",
@@ -87,35 +101,13 @@ def extract_operation_evidence(spec: OpenAPISpec) -> dict[str, OperationEvidence
     return evidence
 
 
-def inline_schema_evidence(spec: OpenAPISpec) -> dict:
-    """Synthesize a `name -> JSON schema` map from operation request/response
-    bodies, for RPC/tool-style specs that declare no `components.schemas`.
-
-    The output mirrors the shape of `components.schemas` so it can be fed to
-    the extract stage unchanged. Keys are suffixed `__request`/`__response`.
-    The tool-style ``{"returns": {...}}`` response envelope is unwrapped one
-    level so the LLM sees the entity shape directly.
-    """
-    evidence: dict = {}
-    for op in spec.operations:
-        req = op.get_request_schema()
-        if req:
-            evidence[f"{op.operation_id}__request"] = req
-        resp = op.get_success_response_schema()
-        if resp:
-            props = resp.get("properties") if isinstance(resp, dict) else None
-            if isinstance(props, dict) and isinstance(props.get("returns"), dict):
-                resp = props["returns"]
-            evidence[f"{op.operation_id}__response"] = resp
-    return evidence
-
-
 async def analyze(
     spec_dict: dict,
     slug: str,
     *,
     extract_llm,
     classify_llm,
+    enrich_llm=None,
     retries: int,
     batch_cap: int,
     concurrency: int,
@@ -126,18 +118,78 @@ async def analyze(
     spec = OpenAPISpec(spec_dict)
     stubs = extract_operations(spec)
     evidence = extract_operation_evidence(spec)
-    components = spec_dict.get("components", {}).get("schemas", {})
-    # RPC/tool-style specs declare no components.schemas; fall back to the
-    # schemas carried inline in operation request/response bodies.
-    schema_source = components or inline_schema_evidence(spec)
+    sources = collect_sources(spec, spec_dict)
 
-    # Stage 1a — extract data model
-    cb("extracting_model")
-    dm = await guard_timeout(
-        extract_data_model(schema_source, slug, extract_llm, retries=retries),
-        stage="analyze:extract",
-        timeout=timeout,
+    # Stage 1a-1 — derive the contract in code. This is the part that must not
+    # vary between two generations of the same spec.
+    cb("deriving_identity")
+    identity = derive_identity(
+        sources.identity, synthetic=sources.synthetic, deferred=sources.deferred
     )
+
+    # Stage 1a-2 — enrich the derived entities with field detail. Degrades to
+    # the structural floor: duller fields, identical contract.
+    enriched: list[Entity] = []
+    if identity.entities and enrich_llm is not None:
+        cb("enriching_model")
+        try:
+            enriched = await guard_timeout(
+                enrich_entities(identity, sources.enrich, enrich_llm, retries=retries),
+                stage="analyze:enrich",
+                timeout=timeout,
+            )
+        except Exception as e:
+            # Broad on purpose: enrich only adds field prose to an already-
+            # derived, contract-complete entity set, so no failure mode here
+            # — GenerationStageError/StructuredCallError/StageTimeoutError from
+            # a bad LLM payload, or a transport-level error such as a
+            # connection reset — is worth discarding that contract for. A
+            # code-level bug inside enrich_entities is caught by that module's
+            # own unit tests, not by this handler.
+            logger.warning(
+                "enrich stage skipped (%s: %s) — entities keep their derived "
+                "contract but lose descriptions, enums and relationships",
+                type(e).__name__,
+                e,
+            )
+            cb(f"enrich_skipped {type(e).__name__}")
+            enriched = structural_entities(identity)
+    elif identity.entities:
+        enriched = structural_entities(identity)
+
+    # Stage 1a-3 — LLM fallback. Scoped to the undecidable schemas when the
+    # deterministic rule found anything; given the whole map when it found
+    # nothing, so a spec with no usable response schemas still generates.
+    fallback = None
+    if identity.entities:
+        # Scoped: only what the rule could not decide. An empty leftovers map
+        # means the rule decided everything, so there is nothing to ask about.
+        leftovers = {name: sources.identity[name] for name in identity.undecidable}
+        call_fallback = bool(leftovers)
+    else:
+        # Nothing was decidable in code. Hand over everything we have and call
+        # unconditionally — even with an empty map. That is exactly what the
+        # extract stage receives today for a spec whose operations carry prose
+        # but no schemas, and skipping the call would turn those specs from
+        # "generates" into "hard fails".
+        leftovers = dict(sources.enrich)
+        call_fallback = True
+    if call_fallback:
+        cb("extracting_model")
+        fallback = await guard_timeout(
+            extract_data_model(
+                leftovers,
+                slug,
+                extract_llm,
+                retries=retries,
+                derived=identity if identity.entities else None,
+            ),
+            stage="analyze:extract",
+            timeout=timeout,
+        )
+
+    api_name = spec_dict.get("info", {}).get("title") or slug
+    dm, provenance = compose_data_model(api_name, identity, enriched, fallback)
     if not dm.entities:
         raise GenerationStageError(
             "extract",
@@ -176,6 +228,7 @@ async def analyze(
     if coverage:
         raise GenerationStageError("classify", coverage)
     ir = build_spec_model(slug, stubs, dm, semantics, evidence=evidence)
+    ir.identity_provenance = provenance
     consistency = ir.validate_consistency()
     if consistency:
         raise GenerationStageError("analyze", consistency)

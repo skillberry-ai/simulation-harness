@@ -1,11 +1,20 @@
+from typing import Any
+
 from simulation_harness.skills.generation.ir import (
     Entity,
+    Field as IRField,
     OperationEvidence,
     StoreMetadata,
 )
 from simulation_harness.skills.generation.stages.analyze import merge as M
 from simulation_harness.skills.generation.stages.analyze.extract import DataModel
-from typing import Any
+from simulation_harness.skills.generation.stages.analyze.identity import (
+    DerivedEntity,
+    IdentityModel,
+)
+from simulation_harness.skills.generation.stages.analyze.merge import (
+    compose_data_model,
+)
 
 
 def _stub(oid: Any) -> dict[str, Any]:
@@ -84,3 +93,312 @@ def test_build_spec_model_defaults_evidence_to_empty() -> None:
     ir = M.build_spec_model("aha", stubs, _dm(), semantics)
 
     assert ir.evidence == {}
+
+
+# Tests for compose_data_model
+IDENTITY = IdentityModel(
+    entities=(
+        DerivedEntity(
+            name="Order",
+            collection="orders",
+            primary_key="order_id",
+            fields=(("order_id", "string"),),
+            sources=("get_order__response",),
+        ),
+    ),
+    undecidable=("Error",),
+)
+
+
+def _entity(name: str, collection: str, pk: str) -> Entity:
+    return Entity(
+        name=name,
+        collection=collection,
+        primary_key=pk,
+        fields=[IRField(name=pk, type="string", required=True)],
+    )
+
+
+def test_compose_uses_enriched_entities_and_derived_store_metadata() -> None:
+    enriched = [_entity("Order", "orders", "order_id")]
+    dm, provenance = compose_data_model("Shop", IDENTITY, enriched, None)
+    assert dm.api_name == "Shop"
+    assert [e.name for e in dm.entities] == ["Order"]
+    assert dm.store_metadata.collections == ["orders"]
+    assert dm.store_metadata.pk_map == {"orders": "order_id"}
+    assert provenance == {"Order": "derived"}
+
+
+def test_compose_appends_fallback_entities_and_marks_them_llm() -> None:
+    fallback = DataModel(
+        api_name="Shop",
+        entities=[_entity("Coupon", "coupons", "coupon_id")],
+        store_metadata=StoreMetadata(
+            collections=["coupons"], pk_map={"coupons": "coupon_id"}
+        ),
+        declined=["Error"],
+    )
+    dm, provenance = compose_data_model(
+        "Shop", IDENTITY, [_entity("Order", "orders", "order_id")], fallback
+    )
+    assert [e.name for e in dm.entities] == ["Coupon", "Order"]
+    assert dm.store_metadata.collections == ["coupons", "orders"]
+    assert dm.store_metadata.pk_map == {"coupons": "coupon_id", "orders": "order_id"}
+    assert provenance == {"Coupon": "llm", "Order": "derived"}
+    assert dm.declined == ["Error"]
+
+
+def test_compose_lets_the_derived_entity_win_a_collision() -> None:
+    fallback = DataModel(
+        api_name="Shop",
+        entities=[_entity("OrderRecord", "orders", "id")],
+        store_metadata=StoreMetadata(collections=["orders"], pk_map={"orders": "id"}),
+    )
+    dm, provenance = compose_data_model(
+        "Shop", IDENTITY, [_entity("Order", "orders", "order_id")], fallback
+    )
+    assert [e.name for e in dm.entities] == ["Order"]
+    assert dm.store_metadata.pk_map == {"orders": "order_id"}
+    assert provenance == {"Order": "derived"}
+
+
+def test_compose_drops_a_case_or_whitespace_variant_colliding_fallback() -> None:
+    fallback = DataModel(
+        api_name="Shop",
+        entities=[_entity("OrderRecord", " Orders ", "id")],
+        store_metadata=StoreMetadata(
+            collections=[" Orders "], pk_map={" Orders ": "id"}
+        ),
+    )
+    dm, provenance = compose_data_model(
+        "Shop", IDENTITY, [_entity("Order", "orders", "order_id")], fallback
+    )
+    assert [e.name for e in dm.entities] == ["Order"]
+    assert dm.store_metadata.pk_map == {"orders": "order_id"}
+    assert provenance == {"Order": "derived"}
+
+
+def test_compose_lets_the_derived_entity_win_a_name_collision() -> None:
+    """A fallback entity can pass validate_data_model (distinct collection)
+    while still reusing a derived entity's *name*. Without a name guard this
+    silently overwrites the derived entity's "derived" provenance record
+    with "llm" and produces two same-named entities in the IR."""
+    fallback = DataModel(
+        api_name="Shop",
+        entities=[_entity("Order", "order_archive", "aid")],
+        store_metadata=StoreMetadata(
+            collections=["order_archive"], pk_map={"order_archive": "aid"}
+        ),
+    )
+    dm, provenance = compose_data_model(
+        "Shop", IDENTITY, [_entity("Order", "orders", "order_id")], fallback
+    )
+    names = [e.name for e in dm.entities]
+    assert names == ["Order"]
+    assert names.count("Order") == 1
+    assert dm.store_metadata.pk_map == {"orders": "order_id"}
+    assert provenance == {"Order": "derived"}
+
+
+def test_compose_drops_both_fallback_entities_claiming_one_collection() -> None:
+    """Neither LLM claim outranks the other, so neither survives.
+
+    First-wins would make the collection's primary key a function of LLM output
+    order — `item_id` on one run and `sku` on the next — which is exactly the
+    run-to-run contract drift this work removes. Auto-suffixing is not an option
+    either: it would invent a collection the spec never described.
+    """
+    fallback = DataModel(
+        api_name="Shop",
+        entities=[
+            _entity("ItemA", "items", "item_id"),
+            _entity("ItemB", "items", "sku"),
+        ],
+        store_metadata=StoreMetadata(
+            collections=["items"], pk_map={"items": "item_id"}
+        ),
+    )
+    dm, provenance = compose_data_model(
+        "Shop", IDENTITY, [_entity("Order", "orders", "order_id")], fallback
+    )
+    assert [e.name for e in dm.entities] == ["Order"]
+    assert dm.store_metadata.collections == ["orders"]
+    assert provenance == {"Order": "derived"}
+
+
+def test_compose_drops_colliding_fallback_entities_regardless_of_list_order() -> None:
+    """The reversed list must produce the identical result, not the other winner."""
+    pair = [_entity("ItemA", "items", "item_id"), _entity("ItemB", "items", "sku")]
+    metadata = StoreMetadata(collections=["items"], pk_map={"items": "item_id"})
+    enriched = [_entity("Order", "orders", "order_id")]
+
+    forward, forward_prov = compose_data_model(
+        "Shop",
+        IDENTITY,
+        enriched,
+        DataModel(api_name="Shop", entities=list(pair), store_metadata=metadata),
+    )
+    backward, backward_prov = compose_data_model(
+        "Shop",
+        IDENTITY,
+        enriched,
+        DataModel(
+            api_name="Shop", entities=list(reversed(pair)), store_metadata=metadata
+        ),
+    )
+    assert [e.name for e in forward.entities] == [e.name for e in backward.entities]
+    assert forward.store_metadata.pk_map == backward.store_metadata.pk_map
+    assert forward_prov == backward_prov
+
+
+def test_compose_drops_both_fallback_entities_sharing_a_name() -> None:
+    """Two same-named entities would share one provenance key, recording one.
+
+    A case variant collides too — otherwise the near-duplicate survives on some
+    runs and not others.
+    """
+    fallback = DataModel(
+        api_name="Shop",
+        entities=[
+            _entity("Coupon", "coupons", "coupon_id"),
+            _entity(" coupon ", "vouchers", "voucher_id"),
+        ],
+        store_metadata=StoreMetadata(
+            collections=["coupons", "vouchers"],
+            pk_map={"coupons": "coupon_id", "vouchers": "voucher_id"},
+        ),
+    )
+    dm, provenance = compose_data_model(
+        "Shop", IDENTITY, [_entity("Order", "orders", "order_id")], fallback
+    )
+    assert [e.name for e in dm.entities] == ["Order"]
+    assert provenance == {"Order": "derived"}
+
+
+def test_compose_does_not_cascade_a_name_collision_onto_an_already_dropped_entity() -> (
+    None
+):
+    """A third entity must not lose its collection for colliding, on name only,
+    with an entity already dropped for an unrelated collection collision.
+
+    ``ItemA``/``items`` and ``Widget``/``items`` collide on collection and are
+    both dropped. ``ItemA``/``gadgets`` collides on *name* only, and only with
+    the already-dropped ``ItemA``/``items`` — once that one is gone, the name
+    ``ItemA`` is unique among what remains, so ``gadgets`` has no collision left
+    to lose to.
+    """
+    fallback = DataModel(
+        api_name="Shop",
+        entities=[
+            _entity("ItemA", "items", "item_id"),
+            _entity("Widget", "items", "sku"),
+            _entity("ItemA", "gadgets", "gadget_id"),
+        ],
+        store_metadata=StoreMetadata(
+            collections=["items", "gadgets"],
+            pk_map={"items": "item_id", "gadgets": "gadget_id"},
+        ),
+    )
+    dm, provenance = compose_data_model(
+        "Shop", IDENTITY, [_entity("Order", "orders", "order_id")], fallback
+    )
+    assert [e.name for e in dm.entities] == ["ItemA", "Order"]
+    assert dm.store_metadata.collections == ["gadgets", "orders"]
+    assert dm.store_metadata.pk_map == {"gadgets": "gadget_id", "orders": "order_id"}
+    assert provenance == {"ItemA": "llm", "Order": "derived"}
+
+
+def test_compose_cascade_fix_is_order_independent() -> None:
+    """The reversed list must survive the identical entity, not a different one."""
+    triple = [
+        _entity("ItemA", "items", "item_id"),
+        _entity("Widget", "items", "sku"),
+        _entity("ItemA", "gadgets", "gadget_id"),
+    ]
+    metadata = StoreMetadata(
+        collections=["items", "gadgets"],
+        pk_map={"items": "item_id", "gadgets": "gadget_id"},
+    )
+    enriched = [_entity("Order", "orders", "order_id")]
+
+    forward, forward_prov = compose_data_model(
+        "Shop",
+        IDENTITY,
+        enriched,
+        DataModel(api_name="Shop", entities=list(triple), store_metadata=metadata),
+    )
+    backward, backward_prov = compose_data_model(
+        "Shop",
+        IDENTITY,
+        enriched,
+        DataModel(
+            api_name="Shop", entities=list(reversed(triple)), store_metadata=metadata
+        ),
+    )
+    assert [e.name for e in forward.entities] == [e.name for e in backward.entities]
+    assert forward.store_metadata.pk_map == backward.store_metadata.pk_map
+    assert forward_prov == backward_prov
+    assert "gadgets" in forward.store_metadata.collections
+
+
+def test_compose_keeps_non_colliding_fallback_entities_beside_a_dropped_group() -> None:
+    """Dropping a colliding group must not take innocent bystanders with it."""
+    fallback = DataModel(
+        api_name="Shop",
+        entities=[
+            _entity("ItemA", "items", "item_id"),
+            _entity("Coupon", "coupons", "coupon_id"),
+            _entity("ItemB", "items", "sku"),
+        ],
+        store_metadata=StoreMetadata(
+            collections=["items", "coupons"],
+            pk_map={"items": "item_id", "coupons": "coupon_id"},
+        ),
+    )
+    dm, provenance = compose_data_model(
+        "Shop", IDENTITY, [_entity("Order", "orders", "order_id")], fallback
+    )
+    assert [e.name for e in dm.entities] == ["Coupon", "Order"]
+    assert dm.store_metadata.pk_map == {"coupons": "coupon_id", "orders": "order_id"}
+    assert provenance == {"Coupon": "llm", "Order": "derived"}
+
+
+def test_compose_pins_the_derived_contract_over_a_tampered_enriched_entity() -> None:
+    """compose_data_model must not trust an enriched entity's contract fields.
+
+    ``enrich_entities`` re-asserts collection/primary_key via
+    ``validate_enrichment`` before compose ever runs; this is the
+    defense-in-depth pin for a caller that bypasses that check. The composed
+    entity's ``collection``/``primary_key`` must come from ``identity``
+    regardless of what the enriched entity claims, while its soft content
+    (fields) still comes through — the pin corrects the contract, it does not
+    discard the field detail enrich added.
+    """
+    tampered = Entity(
+        name="Order",
+        collection="ATTACKER_COLLECTION",
+        primary_key="ATTACKER_PK",
+        fields=[
+            IRField(
+                name="order_id",
+                type="string",
+                required=True,
+                description="Unique order id",
+            )
+        ],
+    )
+    dm, provenance = compose_data_model("Shop", IDENTITY, [tampered], None)
+    assert [e.name for e in dm.entities] == ["Order"]
+    order = dm.entities[0]
+    assert order.collection == "orders"
+    assert order.primary_key == "order_id"
+    assert order.fields[0].description == "Unique order id"
+    assert dm.store_metadata.collections == ["orders"]
+    assert dm.store_metadata.pk_map == {"orders": "order_id"}
+    assert provenance == {"Order": "derived"}
+
+
+def test_compose_falls_back_to_structural_entities_when_enrichment_is_empty() -> None:
+    dm, provenance = compose_data_model("Shop", IDENTITY, [], None)
+    assert [e.name for e in dm.entities] == ["Order"]
+    assert provenance == {"Order": "derived"}

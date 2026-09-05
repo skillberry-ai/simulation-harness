@@ -103,6 +103,10 @@ class SpecModel(BaseModel):
     # get a key. validate_consistency() enforces that every key is a known
     # operation_id, since a sibling map can drift from `operations`.
     evidence: dict[str, OperationEvidence] = {}
+    # Which path decided each entity's identity: "derived" (deterministic rule)
+    # or "llm" (scoped fallback). Recorded so a contract that came from a
+    # non-deterministic path is visible in the manifest rather than implicit.
+    identity_provenance: dict[str, str] = {}
 
     def validate_consistency(self) -> list[str]:
         """Return human-readable cross-reference errors; empty list = consistent."""
@@ -131,4 +135,7 @@ class SpecModel(BaseModel):
                     f"entity '{e.name}' collection '{e.collection}' missing from "
                     f"store_metadata.collections"
                 )
+        for name in self.identity_provenance:
+            if name not in entity_names:
+                errors.append(f"identity_provenance key '{name}' is not a known entity")
         return errors

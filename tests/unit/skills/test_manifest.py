@@ -18,11 +18,11 @@ from simulation_harness.skills.manifest import (
 # Hardcoded (not recomputed in the test) so the test proves we hash file
 # *content* rather than, say, the path or an in-memory re-serialization.
 DIGESTS = {
-    "SKILL.md": "31ca6c61ca3fcc54029a62bd082448b88718b913d24e195794969dd2d123b990",
-    "schema.json": "ff419ebbeba438f66900abe77818ce940702bdfe70fa173cb94beecee8d3f112",
-    "db.json": "eeb85c2675888473ec64b7580aa0c76c6fd6b2bd51828870286ef202ad89dae2",
-    "api.json": "12c381d0f43620051c2a3f658264d20ff1459a0e2a8de1035ce2d02e8a0f78ac",
-    "scenarios.json": "7a064075afc833b88eacf77efdc2c32cc3e4d83a5b65f0b40c39d36c6a5e8ccd",
+    "SKILL.md": "31ca6c61ca3fcc54029a62bd082448b88718b913d24e195794969dd2d123b990",  # pragma: allowlist secret
+    "schema.json": "ff419ebbeba438f66900abe77818ce940702bdfe70fa173cb94beecee8d3f112",  # pragma: allowlist secret
+    "db.json": "eeb85c2675888473ec64b7580aa0c76c6fd6b2bd51828870286ef202ad89dae2",  # pragma: allowlist secret
+    "api.json": "12c381d0f43620051c2a3f658264d20ff1459a0e2a8de1035ce2d02e8a0f78ac",  # pragma: allowlist secret
+    "scenarios.json": "7a064075afc833b88eacf77efdc2c32cc3e4d83a5b65f0b40c39d36c6a5e8ccd",  # pragma: allowlist secret
 }
 SIZES = {
     "SKILL.md": 7,
@@ -43,7 +43,7 @@ SPEC: dict[str, Any] = {
     "openapi": "3.0.0",
     "info": {"title": "Demo API", "version": "1.2.0"},
 }
-SPEC_DIGEST = "4e8184257775aedde02ba1d8ce5a3be4960725bd557b845d7c418f2cf70e3221"
+SPEC_DIGEST = "4e8184257775aedde02ba1d8ce5a3be4960725bd557b845d7c418f2cf70e3221"  # pragma: allowlist secret
 
 AT = datetime(2026, 7, 30, 14, 22, 31, tzinfo=timezone.utc)
 
@@ -186,3 +186,30 @@ def test_non_dict_info_is_tolerated(artifacts: Path) -> None:
 
 def test_manifest_is_json_serialisable(artifacts: Path) -> None:
     assert json.loads(json.dumps(_build(artifacts))) == _build(artifacts)
+
+
+def test_manifest_records_identity_provenance(tmp_path: Path) -> None:
+    (tmp_path / "SKILL.md").write_text("x")
+    manifest = build_manifest(
+        tmp_path,
+        skill_name="shop",
+        openapi_spec={"openapi": "3.0.0", "info": {"title": "S", "version": "1"}},
+        model="gpt-5.4",
+        harness_version="0.1.2",
+        generated_at=datetime(2026, 9, 4, tzinfo=timezone.utc),
+        identity_provenance={"Order": "derived", "Coupon": "llm"},
+    )
+    assert manifest["identity"] == {"provenance": {"Coupon": "llm", "Order": "derived"}}
+
+
+def test_manifest_identity_provenance_defaults_to_empty(tmp_path: Path) -> None:
+    (tmp_path / "SKILL.md").write_text("x")
+    manifest = build_manifest(
+        tmp_path,
+        skill_name="shop",
+        openapi_spec={"openapi": "3.0.0", "info": {"title": "S", "version": "1"}},
+        model="gpt-5.4",
+        harness_version="0.1.2",
+        generated_at=datetime(2026, 9, 4, tzinfo=timezone.utc),
+    )
+    assert manifest["identity"] == {"provenance": {}}

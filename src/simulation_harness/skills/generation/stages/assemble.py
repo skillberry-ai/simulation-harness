@@ -12,6 +12,7 @@ from jinja2 import Template
 from simulation_harness.skills.generation.ir import SpecModel
 from simulation_harness.skills.generation.naming import _force_skill_name
 from simulation_harness.skills.generation.stages.operations import section_header
+from simulation_harness.skills.generation.stages.schema import validate_schema
 from simulation_harness.skills.generation.stages.seed import (
     validate_schema_and_db,
 )
@@ -50,4 +51,5 @@ def validate_bundle(ir: SpecModel, skill_md: str, schema: dict, db: dict) -> lis
     if f"name: {ir.slug}" not in skill_md:
         errors.append(f"frontmatter name must be '{ir.slug}'")
     errors.extend(validate_schema_and_db(schema, db))
+    errors.extend(validate_schema(schema, ir))
     return errors

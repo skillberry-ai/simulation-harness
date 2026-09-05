@@ -26,12 +26,138 @@ def entity_summary(ir: SpecModel) -> str:
     return json.dumps([e.model_dump() for e in ir.entities], indent=2)
 
 
-def validate_schema(schema: dict) -> list[str]:
+def _resolve_def(schema: dict, collection: str) -> tuple[str | None, dict | None]:
+    """Follow ``properties[collection].items.$ref`` into ``$defs``.
+
+    Mirrors the resolution ``state/loader.py`` performs at runtime, so a schema
+    this module accepts is one the loader can read. Every level is
+    isinstance-guarded rather than assumed to be a dict: this runs on schemas
+    an LLM produced, before (or without) ``validate_schema`` having accepted
+    their shape, so ``properties`` or ``$defs`` being a string or a list (not
+    just missing) has to fail closed instead of raising.
+    """
+    if not isinstance(schema, dict):
+        return None, None
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        return None, None
+    prop = properties.get(collection)
+    if not isinstance(prop, dict):
+        return None, None
+    items = prop.get("items")
+    ref = items.get("$ref") if isinstance(items, dict) else None
+    if not isinstance(ref, str) or not ref.startswith("#/$defs/"):
+        return None, None
+    def_name = ref.split("/")[-1]
+    defs = schema.get("$defs")
+    entity_def = defs.get(def_name) if isinstance(defs, dict) else None
+    return def_name, entity_def if isinstance(entity_def, dict) else None
+
+
+def validate_schema(schema: dict, ir: SpecModel | None = None) -> list[str]:
+    """Check JSON Schema validity and, when ``ir`` is given, the runtime contract.
+
+    Without ``ir`` this is the original validity-only check, so existing callers
+    are unaffected.
+    """
     try:
         Draft202012Validator.check_schema(schema)
     except jsonschema.SchemaError as e:
         return [f"schema.json is not a valid JSON Schema: {e.message}"]
-    return []
+    if ir is None:
+        return []
+    # `True`/`False` are valid Draft 2020-12 schemas (check_schema above passed
+    # them), but there is nothing further to compare against the IR.
+    if not isinstance(schema, dict):
+        return ["schema.json must be a JSON object to check against store_metadata"]
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        return [
+            "schema.json's top-level 'properties' must be an object mapping "
+            "collection names to their array schemas"
+        ]
+    errors: list[str] = []
+    expected = set(ir.store_metadata.collections)
+    present = set(properties)
+    for missing in sorted(expected - present):
+        errors.append(f"schema.json is missing a property for collection '{missing}'")
+    for extra in sorted(present - expected):
+        errors.append(
+            f"schema.json declares collection '{extra}', which is not in "
+            f"store_metadata.collections"
+        )
+    # Collections sharing a $def with different derived primary keys: only one
+    # of the pk_map entries can win when enforce_contract stamps the $def, so
+    # this has to be rejected rather than forced. Same pk is harmless — don't
+    # reject that, or with_repair asks the LLM to fix something it can't.
+    def_collections: dict[str, list[str]] = {}
+    for collection in sorted(expected & present):
+        def_name, entity_def = _resolve_def(schema, collection)
+        if def_name is None:
+            errors.append(
+                f"collection '{collection}' must be an array whose items are a "
+                f"'$ref' into '#/$defs/' — the runtime reads the primary key "
+                f"from the referenced $def"
+            )
+            continue
+        if entity_def is None:
+            errors.append(
+                f"collection '{collection}' references '#/$defs/{def_name}', "
+                f"which is not defined"
+            )
+            continue
+        pk = ir.store_metadata.pk_map.get(collection)
+        if pk and pk not in (entity_def.get("properties") or {}):
+            errors.append(
+                f"$defs/{def_name} must declare the primary-key property "
+                f"'{pk}' for collection '{collection}'"
+            )
+        def_collections.setdefault(def_name, []).append(collection)
+    for def_name, collections in def_collections.items():
+        pks = {ir.store_metadata.pk_map.get(c) for c in collections}
+        if len(pks) > 1:
+            errors.append(
+                f"$defs/{def_name} is shared by collections {sorted(collections)} "
+                f"whose derived primary keys differ ({sorted(p for p in pks if p)}); "
+                f"each needs its own $def, or the primary keys must match"
+            )
+    return errors
+
+
+def enforce_contract(schema: dict, ir: SpecModel) -> dict:
+    """Stamp the derived contract onto the schema.
+
+    Forced rather than validated because the correct values are known: the
+    collection set and pk map were derived from the spec in code, not
+    invented by the LLM that wrote ``schema``. Safe to call on a schema that
+    hasn't passed :func:`validate_schema` yet — every lookup is
+    isinstance-guarded via :func:`_resolve_def`, so a collection or ``$def``
+    this can't resolve is left alone rather than raising, and the malformed
+    shape falls through to ``validate_schema`` as repair feedback instead of
+    an exception escaping the repair loop.
+
+    Stamps two things:
+    - Top level: ``required`` is set to exactly ``store_metadata.collections``
+      and ``additionalProperties`` to ``False``, so ``db.json``'s collection
+      set is checked against the IR too (via ``validate_schema_and_db``, in
+      the seed stage's own repair loop) — closing the drift `state/loader.py`
+      would otherwise take from ``db.json``'s keys rather than the schema.
+    - Per collection: the primary key is written onto the ``$def`` the
+      collection's items ``$ref`` resolves to (where the runtime reads it
+      from), and added to that ``$def``'s ``required`` list.
+    """
+    if isinstance(schema, dict):
+        schema["required"] = list(ir.store_metadata.collections)
+        schema["additionalProperties"] = False
+    for collection, pk in ir.store_metadata.pk_map.items():
+        _, entity_def = _resolve_def(schema, collection)
+        if entity_def is None:
+            continue
+        entity_def["x-primary-key"] = pk
+        required = entity_def.setdefault("required", [])
+        if isinstance(required, list) and pk not in required:
+            required.append(pk)
+    return schema
 
 
 async def generate_schema(ir: SpecModel, llm, *, retries: int) -> dict:
@@ -57,7 +183,11 @@ async def generate_schema(ir: SpecModel, llm, *, retries: int) -> dict:
             return ["payload must contain 'schema_json'"]
         if not isinstance(payload["schema_json"], dict):
             return ["'schema_json' must be an object"]
-        return validate_schema(payload["schema_json"])
+        # Force what's known (the primary key) before rejecting what isn't (a
+        # wrong collection set or a missing $ref) — no point re-prompting the
+        # LLM about something we can simply fix.
+        enforce_contract(payload["schema_json"], ir)
+        return validate_schema(payload["schema_json"], ir)
 
     payload = await with_repair(produce, validate, stage="schema", retries=retries)
     return payload["schema_json"]

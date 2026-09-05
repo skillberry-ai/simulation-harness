@@ -311,3 +311,17 @@ async def test_run_pipeline_scenarios_failure_logs_warning(
         "scenarios stage skipped" in message and "GenerationStageError" in message
         for message in caplog.messages
     )
+
+
+def test_skill_bundle_carries_identity_provenance() -> None:
+    bundle = P.SkillBundle(
+        skill_md="x",
+        schema={},
+        db={},
+        identity_provenance={"Order": "derived"},
+    )
+    assert bundle.identity_provenance == {"Order": "derived"}
+
+
+def test_skill_bundle_identity_provenance_defaults_to_empty() -> None:
+    assert P.SkillBundle(skill_md="x", schema={}, db={}).identity_provenance == {}
