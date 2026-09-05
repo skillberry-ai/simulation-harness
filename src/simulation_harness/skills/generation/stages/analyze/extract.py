@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from dataclasses import dataclass, field
 
 try:
@@ -66,6 +67,27 @@ def validate_data_model(
             errors.append(
                 f"entity '{e.name}' fields must include its primary key "
                 f"'{e.primary_key}'"
+            )
+    # The same duplicate check ``validate_enrichment`` makes (enrich.py), for
+    # both collection and name. Without it, a fallback payload with two
+    # entities on one collection (or sharing a name) validates clean, reaches
+    # ``compose_data_model``, and has every member of the colliding group
+    # dropped with only a ``logger.warning`` — silently, since compose has no
+    # repair channel to feed a correction back into. Sorted so the error list
+    # itself does not jitter with LLM output order.
+    collection_counts = Counter(e.collection for e in dm.entities)
+    for coll_name, n in sorted(collection_counts.items()):
+        if n > 1:
+            errors.append(
+                f"collection '{coll_name}' is claimed by {n} entities "
+                f"(merge them or decline one)"
+            )
+    name_counts = Counter(e.name for e in dm.entities)
+    for entity_name, n in sorted(name_counts.items()):
+        if n > 1:
+            errors.append(
+                f"name '{entity_name}' is claimed by {n} entities "
+                f"(merge them or decline one)"
             )
     for coll in dm.store_metadata.pk_map:
         if coll not in declared:

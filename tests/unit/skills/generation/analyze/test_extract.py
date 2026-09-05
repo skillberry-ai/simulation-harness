@@ -257,6 +257,102 @@ def test_validate_data_model_flags_a_primary_key_missing_from_fields() -> None:
     assert any("coupon_id" in e and "Coupon" in e for e in errors)
 
 
+def test_validate_data_model_flags_a_duplicate_collection() -> None:
+    """Mirrors ``validate_enrichment``'s ``Counter`` check (enrich.py).
+
+    Without this, a fallback payload with two entities on one collection
+    validates clean, reaches ``compose_data_model``, and has both members
+    dropped with only a ``logger.warning`` — the LLM is never told and never
+    gets a chance to repair it.
+    """
+    dm = E.DataModel(
+        api_name="x",
+        entities=[
+            Entity(
+                name="ItemA",
+                collection="items",
+                primary_key="item_id",
+                fields=[Field(name="item_id", type="string", required=True)],
+            ),
+            Entity(
+                name="ItemB",
+                collection="items",
+                primary_key="sku",
+                fields=[Field(name="sku", type="string", required=True)],
+            ),
+        ],
+        store_metadata=StoreMetadata(
+            collections=["items"], pk_map={"items": "item_id"}
+        ),
+    )
+    errors = E.validate_data_model(dm)
+    assert any("items" in e and "2 entities" in e for e in errors)
+
+
+def test_validate_data_model_flags_a_duplicate_name() -> None:
+    dm = E.DataModel(
+        api_name="x",
+        entities=[
+            Entity(
+                name="Coupon",
+                collection="coupons",
+                primary_key="coupon_id",
+                fields=[Field(name="coupon_id", type="string", required=True)],
+            ),
+            Entity(
+                name="Coupon",
+                collection="vouchers",
+                primary_key="voucher_id",
+                fields=[Field(name="voucher_id", type="string", required=True)],
+            ),
+        ],
+        store_metadata=StoreMetadata(
+            collections=["coupons", "vouchers"],
+            pk_map={"coupons": "coupon_id", "vouchers": "voucher_id"},
+        ),
+    )
+    errors = E.validate_data_model(dm)
+    assert any("Coupon" in e and "2 entities" in e for e in errors)
+
+
+async def test_extract_data_model_repairs_a_duplicate_collection() -> None:
+    """The duplicate-collection error must actually reach the repair loop.
+
+    Not just returned by the validator in isolation — end to end, so the LLM
+    sees it as feedback on the next attempt.
+    """
+    duplicate_collection = {
+        "api_name": "Res",
+        "entities": [
+            {
+                "name": "ItemA",
+                "collection": "items",
+                "primary_key": "item_id",
+                "fields": [{"name": "item_id", "type": "string", "required": True}],
+            },
+            {
+                "name": "ItemB",
+                "collection": "items",
+                "primary_key": "sku",
+                "fields": [{"name": "sku", "type": "string", "required": True}],
+            },
+        ],
+        "store_metadata": {"collections": ["items"], "pk_map": {"items": "item_id"}},
+    }
+    seq = iter([duplicate_collection, VALID])
+    calls: list[str] = []
+
+    async def fake_call_json(llm, system, user):
+        calls.append(user)
+        return next(seq)
+
+    with patch.object(E, "call_json", AsyncMock(side_effect=fake_call_json)):
+        dm = await E.extract_data_model({}, slug="aha", llm=object(), retries=1)
+    assert dm.entities[0].name == "Feature"
+    assert len(calls) == 2
+    assert "claimed by 2 entities" in calls[1]
+
+
 def test_validate_data_model_accepts_a_primary_key_present_in_fields() -> None:
     dm = E.DataModel(
         api_name="x",
