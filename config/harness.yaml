@@ -49,7 +49,7 @@ generation:
   classify: { temperature: 0.0, max_tokens: 10000 }
   # Stages 2 & 3 — operation: write the per-operation SKILL.md sections, one
   # call per chunk (chunked by tag once the op count passes chunk_threshold).
-  operation: { temperature: 0.2, max_tokens: 10000 }
+  operation: { temperature: 0.0, max_tokens: 10000 }
   # Stages 4 & 7 — schema_seed: design schema.json from the IR, then populate
   # db.json from that schema plus the scenarios. Both calls share these params.
   schema_seed: { temperature: 0.0, max_tokens: 20000 }
