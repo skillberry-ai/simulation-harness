@@ -96,10 +96,16 @@ def _entity_shaped(resp: dict) -> bool:
     array of them.
 
     Deliberately looser than the strict gate below — it admits an object that
-    never declared ``"type": "object"`` and an ``array``/``items`` wrapper. Those
-    are the two shapes that used to be dropped on the floor. A scalar or an empty
-    object is still excluded outright: it has no fields, so there is nothing for
-    the fallback to model and listing it would be noise.
+    never declared ``"type": "object"`` and an ``array``/``items`` wrapper; those
+    are two of the shapes that used to be dropped on the floor. It is still not
+    the complete gate: an array whose items are a ``prefixItems`` tuple rather
+    than a single ``items`` schema, and a response modelled via
+    ``additionalProperties`` as a map, are both still excluded here even though
+    ``identity.py``'s ``_nested_objects`` recognizes both. No entity is lost to
+    this on the current corpus; widening this gate to match is deliberately out
+    of scope for this branch. A scalar or an empty object is still excluded
+    outright either way: it has no fields, so there is nothing for the fallback
+    to model and listing it would be noise.
     """
     inner = resp.get("items") if resp.get("type") == "array" else resp
     return isinstance(inner, dict) and bool(inner.get("properties"))
