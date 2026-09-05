@@ -124,16 +124,26 @@ def _derive_in_child(spec_path: Path, hash_seed: str) -> dict[str, Any]:
 
 @pytest.mark.parametrize(
     "filename",
-    ["tau2_retail_openapi.json", "slack_web_openapi_v2_openapi3.json"],
+    [
+        "tau2_retail_openapi.json",
+        "slack_web_openapi_v2_openapi3.json",
+        # The only spec with a non-empty `deferred` set — the guard above
+        # otherwise never exercises the `deferred`-routing code path this
+        # branch added.
+        "tau2_airline_openapi.json",
+    ],
 )
 def test_derivation_is_identical_across_python_hash_seeds(filename: str) -> None:
     """The contract is identical in two interpreters with different hash seeds.
 
-    This is the only test in the suite that can fail on a ``set`` introduced
-    into an output-ordering path in ``identity.py``. It codifies a property that
-    was verified by hand before the test was written (one hash across seeds 0,
-    12345 and 999983 on all four real specs), so a failure here means a
-    regression, not a discovery.
+    Several ``test_identity_golden.py`` tests also pin ordered lists and so can
+    also fail if a ``set`` leaks into an output-ordering path in
+    ``identity.py`` — but only when hash order happens to differ from sorted
+    order in that one process. This test is the one that catches that mutation
+    *deterministically*, regardless of which way hash order happens to fall. It
+    codifies a property that was verified by hand before the test was written
+    (one hash across seeds 0, 12345 and 999983 on all four real specs), so a
+    failure here means a regression, not a discovery.
     """
     spec_path = EXAMPLES / filename
     low = _derive_in_child(spec_path, "0")
