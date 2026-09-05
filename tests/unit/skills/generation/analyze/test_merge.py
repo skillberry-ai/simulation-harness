@@ -200,6 +200,103 @@ def test_compose_lets_the_derived_entity_win_a_name_collision() -> None:
     assert provenance == {"Order": "derived"}
 
 
+def test_compose_drops_both_fallback_entities_claiming_one_collection() -> None:
+    """Neither LLM claim outranks the other, so neither survives.
+
+    First-wins would make the collection's primary key a function of LLM output
+    order — `item_id` on one run and `sku` on the next — which is exactly the
+    run-to-run contract drift this work removes. Auto-suffixing is not an option
+    either: it would invent a collection the spec never described.
+    """
+    fallback = DataModel(
+        api_name="Shop",
+        entities=[
+            _entity("ItemA", "items", "item_id"),
+            _entity("ItemB", "items", "sku"),
+        ],
+        store_metadata=StoreMetadata(
+            collections=["items"], pk_map={"items": "item_id"}
+        ),
+    )
+    dm, provenance = compose_data_model(
+        "Shop", IDENTITY, [_entity("Order", "orders", "order_id")], fallback
+    )
+    assert [e.name for e in dm.entities] == ["Order"]
+    assert dm.store_metadata.collections == ["orders"]
+    assert provenance == {"Order": "derived"}
+
+
+def test_compose_drops_colliding_fallback_entities_regardless_of_list_order() -> None:
+    """The reversed list must produce the identical result, not the other winner."""
+    pair = [_entity("ItemA", "items", "item_id"), _entity("ItemB", "items", "sku")]
+    metadata = StoreMetadata(collections=["items"], pk_map={"items": "item_id"})
+    enriched = [_entity("Order", "orders", "order_id")]
+
+    forward, forward_prov = compose_data_model(
+        "Shop",
+        IDENTITY,
+        enriched,
+        DataModel(api_name="Shop", entities=list(pair), store_metadata=metadata),
+    )
+    backward, backward_prov = compose_data_model(
+        "Shop",
+        IDENTITY,
+        enriched,
+        DataModel(
+            api_name="Shop", entities=list(reversed(pair)), store_metadata=metadata
+        ),
+    )
+    assert [e.name for e in forward.entities] == [e.name for e in backward.entities]
+    assert forward.store_metadata.pk_map == backward.store_metadata.pk_map
+    assert forward_prov == backward_prov
+
+
+def test_compose_drops_both_fallback_entities_sharing_a_name() -> None:
+    """Two same-named entities would share one provenance key, recording one.
+
+    A case variant collides too — otherwise the near-duplicate survives on some
+    runs and not others.
+    """
+    fallback = DataModel(
+        api_name="Shop",
+        entities=[
+            _entity("Coupon", "coupons", "coupon_id"),
+            _entity(" coupon ", "vouchers", "voucher_id"),
+        ],
+        store_metadata=StoreMetadata(
+            collections=["coupons", "vouchers"],
+            pk_map={"coupons": "coupon_id", "vouchers": "voucher_id"},
+        ),
+    )
+    dm, provenance = compose_data_model(
+        "Shop", IDENTITY, [_entity("Order", "orders", "order_id")], fallback
+    )
+    assert [e.name for e in dm.entities] == ["Order"]
+    assert provenance == {"Order": "derived"}
+
+
+def test_compose_keeps_non_colliding_fallback_entities_beside_a_dropped_group() -> None:
+    """Dropping a colliding group must not take innocent bystanders with it."""
+    fallback = DataModel(
+        api_name="Shop",
+        entities=[
+            _entity("ItemA", "items", "item_id"),
+            _entity("Coupon", "coupons", "coupon_id"),
+            _entity("ItemB", "items", "sku"),
+        ],
+        store_metadata=StoreMetadata(
+            collections=["items", "coupons"],
+            pk_map={"items": "item_id", "coupons": "coupon_id"},
+        ),
+    )
+    dm, provenance = compose_data_model(
+        "Shop", IDENTITY, [_entity("Order", "orders", "order_id")], fallback
+    )
+    assert [e.name for e in dm.entities] == ["Coupon", "Order"]
+    assert dm.store_metadata.pk_map == {"coupons": "coupon_id", "orders": "order_id"}
+    assert provenance == {"Coupon": "llm", "Order": "derived"}
+
+
 def test_compose_pins_the_derived_contract_over_a_tampered_enriched_entity() -> None:
     """compose_data_model must not trust an enriched entity's contract fields.
 
