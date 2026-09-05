@@ -50,6 +50,17 @@ def validate_data_model(
                 f"entity '{e.name}' collection '{e.collection}' missing from "
                 f"store_metadata.collections"
             )
+        # The same check ``validate_enrichment`` makes (enrich.py). Without it
+        # here, a fallback entity whose pk is absent from its own fields sails
+        # through compose and is only caught by ``validate_schema`` two stages
+        # later — turning a one-line repair prompt the LLM can act on into
+        # three wasted schema-repair attempts and a hard failure attributed to
+        # stage "schema" instead of "extract".
+        if not any(f.name == e.primary_key for f in e.fields):
+            errors.append(
+                f"entity '{e.name}' fields must include its primary key "
+                f"'{e.primary_key}'"
+            )
     for coll in dm.store_metadata.pk_map:
         if coll not in declared:
             errors.append(

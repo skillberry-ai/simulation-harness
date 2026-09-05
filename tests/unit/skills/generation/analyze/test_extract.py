@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from simulation_harness.skills.generation.ir import Entity, StoreMetadata
+from simulation_harness.skills.generation.ir import Entity, Field, StoreMetadata
 from simulation_harness.skills.generation.repair import GenerationStageError
 from simulation_harness.skills.generation.stages.analyze import extract as E
 from simulation_harness.skills.generation.stages.analyze.identity import (
@@ -190,3 +190,48 @@ async def test_fallback_prompt_carries_the_derived_entities_as_context() -> None
     user_message = call.await_args.args[2]
     assert "reservations" in user_message
     assert "Reservation" in user_message
+
+
+def test_validate_data_model_flags_a_primary_key_missing_from_fields() -> None:
+    """The check ``validate_enrichment`` already makes, now made here too.
+
+    Without it this entity reaches ``validate_schema`` two stages later, where
+    no repair prompt can act on it and the failure is attributed to "schema".
+    """
+    dm = E.DataModel(
+        api_name="x",
+        entities=[
+            Entity(
+                name="Coupon",
+                collection="coupons",
+                primary_key="coupon_id",
+                fields=[Field(name="code", type="string", required=False)],
+            )
+        ],
+        store_metadata=StoreMetadata(
+            collections=["coupons"], pk_map={"coupons": "coupon_id"}
+        ),
+    )
+    errors = E.validate_data_model(dm)
+    assert any("coupon_id" in e and "Coupon" in e for e in errors)
+
+
+def test_validate_data_model_accepts_a_primary_key_present_in_fields() -> None:
+    dm = E.DataModel(
+        api_name="x",
+        entities=[
+            Entity(
+                name="Coupon",
+                collection="coupons",
+                primary_key="coupon_id",
+                fields=[
+                    Field(name="coupon_id", type="string", required=True),
+                    Field(name="code", type="string", required=False),
+                ],
+            )
+        ],
+        store_metadata=StoreMetadata(
+            collections=["coupons"], pk_map={"coupons": "coupon_id"}
+        ),
+    )
+    assert E.validate_data_model(dm) == []
