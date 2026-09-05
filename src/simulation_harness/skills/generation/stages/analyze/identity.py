@@ -14,6 +14,8 @@ import re
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 
+from simulation_harness.skills.generation.repair import GenerationStageError
+
 _CAMEL_BOUNDARY = re.compile(r"(?<!^)(?=[A-Z])")
 
 # Nouns ending in these are singular despite the trailing "s", so they still
@@ -181,6 +183,39 @@ def _absorb(
     cluster.sources.append(source)
 
 
+def _reject_colliding_collections(clusters: dict[str, _Cluster]) -> None:
+    """Fail immediately when two nouns pluralize onto one collection name.
+
+    :func:`pluralize` is not injective: ``address``/``addresses``,
+    ``status``/``statuses`` and ``box``/``boxes`` each collapse to a single
+    string, and a spec carrying both members of such a pair is ordinary (an
+    ``Address`` entity beside an ``Addresses`` wrapper). Two clusters then claim
+    one collection, and because ``pk_map`` is keyed by collection one primary key
+    is silently lost — which ``SpecModel.validate_consistency`` does not notice.
+
+    Raised here rather than left to a later stage because the failure downstream
+    is both misattributed and unrepairable: ``enforce_contract`` emits a
+    top-level ``required`` list with a duplicate entry, jsonschema rejects it as
+    non-unique, and the run burns all three LLM repair attempts on a defect no
+    LLM authored before hard-failing under stage "schema". The run dies either
+    way; this way the message names the cause.
+    """
+    by_collection: dict[str, list[str]] = {}
+    for noun in sorted(clusters):
+        by_collection.setdefault(pluralize(noun), []).append(noun)
+    errors = [
+        f"collection '{collection}' is claimed by {len(nouns)} derived entities "
+        f"(nouns {nouns}, from schemas "
+        f"{sorted({s for n in nouns for s in clusters[n].sources})}): these nouns "
+        f"pluralize to the same collection, so all but one primary key would be "
+        f"lost from the runtime contract"
+        for collection, nouns in sorted(by_collection.items())
+        if len(nouns) > 1
+    ]
+    if errors:
+        raise GenerationStageError("identity", errors)
+
+
 def derive_identity(schemas: dict[str, dict], *, synthetic: bool) -> IdentityModel:
     """Cluster ``schemas`` into entities by identity key.
 
@@ -191,6 +226,10 @@ def derive_identity(schemas: dict[str, dict], *, synthetic: bool) -> IdentityMod
 
     Iteration is over sorted names throughout so the result cannot depend on
     the order the schema map happened to be built in.
+
+    Raises:
+        GenerationStageError: stage ``"identity"``, when two nouns pluralize onto
+            the same collection name. See :func:`_reject_colliding_collections`.
     """
     clusters: dict[str, _Cluster] = {}
     undecidable: list[str] = []
@@ -222,6 +261,7 @@ def derive_identity(schemas: dict[str, dict], *, synthetic: bool) -> IdentityMod
                     target,
                     f"{name}.{prop_name}",
                 )
+    _reject_colliding_collections(clusters)
     entities = tuple(
         DerivedEntity(
             name=camel(noun),

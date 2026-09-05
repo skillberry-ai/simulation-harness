@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from simulation_harness.skills.generation.repair import GenerationStageError
 from simulation_harness.skills.generation.stages.analyze.identity import (
     camel,
     derive_identity,
@@ -349,3 +350,43 @@ def test_nested_absorption_is_unaffected_by_the_synthetic_split() -> None:
     model = derive_identity(schemas, synthetic=True)
     assert model.collections == ["items", "products"]
     assert "variants" not in model.collections
+
+
+@pytest.mark.parametrize(
+    ("singular", "plural"),
+    [("Address", "Addresses"), ("Status", "Statuses"), ("Box", "Boxes")],
+)
+def test_two_nouns_pluralizing_alike_fail_as_an_identity_error(
+    singular: str, plural: str
+) -> None:
+    """``pluralize`` is not injective, and the collision must fail here.
+
+    An ``Address`` entity beside an ``Addresses`` wrapper is an ordinary spec
+    shape. Both nouns pluralize to ``addresses``, so the two clusters claim one
+    collection and ``pk_map`` — keyed by collection — loses a primary key.
+    Downstream that surfaces as a duplicate entry in the schema's top-level
+    ``required``, which jsonschema rejects, wasting every repair attempt before
+    hard-failing under stage "schema".
+    """
+    schemas = {
+        singular: {"properties": {"id": {"type": "string"}}},
+        plural: {"properties": {"id": {"type": "string"}}},
+    }
+    with pytest.raises(GenerationStageError) as exc:
+        derive_identity(schemas, synthetic=False)
+    assert exc.value.stage == "identity"
+    message = "; ".join(exc.value.errors)
+    assert snake(singular) in message
+    assert snake(plural) in message
+
+
+def test_a_lone_already_plural_noun_is_not_a_collision() -> None:
+    """The guard must not fire on the ordinary single-schema case.
+
+    ``Addresses`` on its own pluralizes to itself, which is fine — only a *pair*
+    of nouns landing on one collection is the defect.
+    """
+    model = derive_identity(
+        {"Addresses": {"properties": {"id": {"type": "string"}}}}, synthetic=False
+    )
+    assert model.collections == ["addresses"]
