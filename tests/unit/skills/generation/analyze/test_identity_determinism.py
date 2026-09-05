@@ -7,6 +7,15 @@ dict insertion order, which is the one way a pure function can still drift.
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+
+import pytest
+
 from simulation_harness.skills.generation.stages.analyze.identity import (
     derive_identity,
 )
@@ -47,3 +56,93 @@ def test_derivation_is_repeatable() -> None:
     assert derive_identity(SCHEMAS, synthetic=True) == derive_identity(
         SCHEMAS, synthetic=True
     )
+
+
+# --- cross-interpreter guard -------------------------------------------------
+#
+# The three tests above all run inside one interpreter, and Python fixes string
+# hash randomization per process: `set` iteration order is therefore *stable*
+# within a single run, so reversing the input cannot make a `set` on an output
+# path misbehave. Only two interpreters started with different PYTHONHASHSEED
+# values can catch that, which is what the rest of this module does.
+
+_CHILD_PROGRAM = """
+import json
+import sys
+from pathlib import Path
+
+from simulation_harness.openapi.parser import OpenAPISpec
+from simulation_harness.skills.generation.stages.analyze.identity import (
+    derive_identity,
+)
+from simulation_harness.skills.generation.stages.analyze.sources import (
+    collect_sources,
+)
+
+spec_dict = json.loads(Path(sys.argv[1]).read_text())
+sources = collect_sources(OpenAPISpec(spec_dict), spec_dict)
+model = derive_identity(sources.identity, synthetic=sources.synthetic)
+# Ordering is reported exactly as produced and must never be re-sorted here: a
+# set leaking into an output path shows up as a *reordering* of the same values,
+# so sorting on the way out would hide the one thing this probe exists to see.
+json.dump(
+    {
+        # Proves the two children really did get different randomization. A
+        # child that silently ignored PYTHONHASHSEED would make the comparison
+        # in the parent vacuous.
+        "hash_probe": hash("simulation-harness"),
+        "collections": model.collections,
+        "pk_map": list(model.pk_map.items()),
+        "undecidable": list(model.undecidable),
+    },
+    sys.stdout,
+)
+"""
+
+EXAMPLES = Path(__file__).resolve().parents[5] / "utils" / "test-client" / "examples"
+
+
+def _derive_in_child(spec_path: Path, hash_seed: str) -> dict[str, Any]:
+    completed = subprocess.run(
+        [sys.executable, "-c", _CHILD_PROGRAM, str(spec_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={**os.environ, "PYTHONHASHSEED": hash_seed},
+    )
+    # Kept on its own line: the inline form is formatted differently by the
+    # project's ruff and by the older ruff pinned in .pre-commit-config.yaml,
+    # so the two gates would fight over it.
+    failure = f"child with PYTHONHASHSEED={hash_seed} failed:\n{completed.stderr}"
+    assert completed.returncode == 0, failure
+    payload = json.loads(completed.stdout)
+    assert isinstance(payload, dict)
+    return payload
+
+
+@pytest.mark.parametrize(
+    "filename",
+    ["tau2_retail_openapi.json", "slack_web_openapi_v2_openapi3.json"],
+)
+def test_derivation_is_identical_across_python_hash_seeds(filename: str) -> None:
+    """The contract is identical in two interpreters with different hash seeds.
+
+    This is the only test in the suite that can fail on a ``set`` introduced
+    into an output-ordering path in ``identity.py``. It codifies a property that
+    was verified by hand before the test was written (one hash across seeds 0,
+    12345 and 999983 on all four real specs), so a failure here means a
+    regression, not a discovery.
+    """
+    spec_path = EXAMPLES / filename
+    low = _derive_in_child(spec_path, "0")
+    high = _derive_in_child(spec_path, "999983")
+
+    # Were these equal, the children ignored PYTHONHASHSEED and everything
+    # below would prove nothing.
+    assert low["hash_probe"] != high["hash_probe"]
+
+    assert low["collections"] == high["collections"]
+    assert low["pk_map"] == high["pk_map"]
+    assert low["undecidable"] == high["undecidable"]
+    # No vacuous pass on an empty derivation.
+    assert low["collections"]
