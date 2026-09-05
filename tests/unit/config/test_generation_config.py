@@ -63,17 +63,23 @@ def test_harness_config_defaults_generation(
     assert cfg.generation.classify_batch_size == 40
 
 
-def test_shipped_harness_yaml_behavior_stage() -> None:
-    """The shipped YAML overrides the model defaults, so pin the behavior entry.
+def test_shipped_harness_yaml_stage_temperatures() -> None:
+    """The shipped YAML overrides the model defaults, so pin its stage params.
 
-    The behavior section is structured guidance, so it is generated
-    deterministically. max_tokens is spelled out because a stage entry that
-    omits it falls back to the StageParams field default (8000), not to the
-    per-stage default_factory value.
+    Every stage that produces a structured artifact runs deterministically;
+    only scenario prose samples above 0. behavior's max_tokens is asserted
+    because a stage entry that omits max_tokens falls back to the StageParams
+    field default (8000), not to the per-stage default_factory value (3000).
     """
     repo_root = Path(__file__).resolve().parents[3]
     data = yaml.safe_load((repo_root / "config" / "harness.yaml").read_text())
-    cfg = HarnessConfig(**data)
-    assert cfg.generation.behavior_enabled is True
-    assert cfg.generation.behavior.temperature == 0.0
-    assert cfg.generation.behavior.max_tokens == 3000
+    gen = HarnessConfig(**data).generation
+    assert gen.extract.temperature == 0.0
+    assert gen.classify.temperature == 0.0
+    assert gen.operation.temperature == 0.0
+    assert gen.schema_seed.temperature == 0.0
+    assert gen.behavior.temperature == 0.0
+    assert gen.behavior.max_tokens == 3000
+    assert gen.scenarios.temperature == 0.4
+    # behavior_enabled is not spelled out in the YAML; it must stay on by default
+    assert gen.behavior_enabled is True
