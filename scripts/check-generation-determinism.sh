@@ -121,6 +121,12 @@ export HARNESS_LLM_NO_CACHE
 workdir="$(mktemp -d)"
 trap 'rm -rf "$workdir"' EXIT
 
+# Seconds-resolution mtime, GNU coreutils then BSD/macOS. Second granularity is
+# ample: a real generation takes tens of seconds, a reuse takes about one.
+_mtime() {
+  stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0
+}
+
 # Runs are strictly sequential: the shared gateway stalls mid-stream at 5+
 # concurrent long generations.
 for run in $(seq 1 "$RUNS"); do
@@ -138,14 +144,29 @@ for run in $(seq 1 "$RUNS"); do
     exit 1
   fi
 
+  # A reused skill is never rewritten, so an unchanged mtime is the signal that
+  # this run generated nothing. Captured before the POST; asserted after ready.
+  schema="$SKILLS_DIR/$NAME/schema.json"
+  mtime_before=0
+  if [[ -f "$schema" ]]; then
+    mtime_before="$(_mtime "$schema")"
+  fi
+
   # Written to a file and sent with --data-binary @file rather than as an
   # inline -d argument: a real spec's body can run into the hundreds of KB
   # (e.g. booking-com), and some shells/exec paths choke on an argument that
   # large well before the kernel's actual ARG_MAX.
+  #
+  # The flag is `regenerate_skill`, matching CreateSimulationRequest. Getting
+  # this name wrong is silent: the request model declares no `model_config`, so
+  # pydantic's default extra="ignore" drops an unknown key and leaves
+  # regenerate_skill=False -- runs 2..N then reuse run 1's artifacts and this
+  # check passes without ever generating a second time. The mtime guard below
+  # exists to make that failure loud if the name ever drifts again.
   jq -n \
     --arg name "$NAME" \
     --slurpfile spec "$SPEC" \
-    '{name: $name, openapi_spec: $spec[0], regenerate: true}' \
+    '{name: $name, openapi_spec: $spec[0], regenerate_skill: true}' \
     >"$workdir/payload-$run.json"
   curl -fsS -X POST "$BASE_URL/api/v1/simulation" \
     -H 'Content-Type: application/json' \
@@ -183,10 +204,21 @@ for run in $(seq 1 "$RUNS"); do
     exit 1
   fi
 
-  schema="$SKILLS_DIR/$NAME/schema.json"
   manifest="$SKILLS_DIR/$NAME/manifest.json"
   if [[ ! -f "$schema" ]]; then
     echo "FAIL: $schema not written on run $run" >&2
+    exit 1
+  fi
+  # Reuse guard. Deliberately not a duration threshold: those need a
+  # per-spec/per-model constant and go stale. If the artifact was not rewritten,
+  # the harness served a cached skill and there is nothing to compare.
+  mtime_after="$(_mtime "$schema")"
+  if [[ "$mtime_before" != "0" && "$mtime_after" == "$mtime_before" ]]; then
+    echo "FAIL: run $run did not rewrite $schema (mtime unchanged) -- the" >&2
+    echo "harness reused the existing skill instead of regenerating, so this" >&2
+    echo "check would compare run 1's artifacts against themselves. Verify the" >&2
+    echo "create payload's regenerate flag still matches the field name on" >&2
+    echo "CreateSimulationRequest (src/simulation_harness/models/requests.py)." >&2
     exit 1
   fi
   if [[ ! -f "$manifest" ]]; then

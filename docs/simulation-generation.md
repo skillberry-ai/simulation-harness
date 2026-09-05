@@ -328,14 +328,16 @@ rule in isolation.
 It generates one spec `RUNS` times (default 5) against a running harness, each
 time deleting any existing simulation record first (`DELETE
 /api/v1/simulation` — `POST` is not idempotent and a leftover record from the
-previous run would 409), creating with `regenerate: true` (skill reuse would
-otherwise make runs 2..N no-ops), and polling `GET /api/v1/simulation` until
-the record reaches `ready` or `failed`. Once ready, it copies out
-`schema.json` and `manifest.json` and compares, across all runs, a normalized
-projection of both: the collection set with each collection's `x-primary-key`,
-and `manifest.json`'s `identity.provenance`. Comparing prose (field
-descriptions, etc.) is deliberately out of scope — see the script's own header
-comment for the contract-stability-vs-byte-reproducibility distinction.
+previous run would 409), creating with `regenerate_skill: true` (skill reuse
+would otherwise make runs 2..N no-ops; the request model ignores unknown keys,
+so a misspelled flag is silent and the script separately asserts that
+`schema.json`'s mtime advanced on every run), and polling `GET
+/api/v1/simulation` until the record reaches `ready` or `failed`. Once ready,
+it copies out `schema.json` and `manifest.json` and compares, across all runs,
+a normalized projection of both: the collection set with each collection's
+`x-primary-key`, and `manifest.json`'s `identity.provenance`. Comparing prose
+(field descriptions, etc.) is deliberately out of scope — see the script's own
+header comment for the contract-stability-vs-byte-reproducibility distinction.
 
 **Run it:**
 

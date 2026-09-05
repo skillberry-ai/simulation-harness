@@ -19,4 +19,4 @@ Reference: stages in `src/simulation_harness/skills/generation/stages/` (e.g. `o
 ## Gotchas
 
 - New stage modules currently sit under the mypy `ignore_errors` backlog (`pyproject.toml`). Prefer adding full type annotations and leaving the new module off that list.
-- Skill reuse: generation is skipped if `<skills_folder>/<name>/SKILL.md` exists unless `regenerate: true`.
+- Skill reuse: generation is skipped if `<skills_folder>/<name>/SKILL.md` exists unless the request sets `regenerate_skill: true` (the internal `ensure_skill` kwarg is `regenerate`; the wire field is not).
