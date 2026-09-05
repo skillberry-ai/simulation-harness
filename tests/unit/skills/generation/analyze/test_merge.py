@@ -275,6 +275,72 @@ def test_compose_drops_both_fallback_entities_sharing_a_name() -> None:
     assert provenance == {"Order": "derived"}
 
 
+def test_compose_does_not_cascade_a_name_collision_onto_an_already_dropped_entity() -> (
+    None
+):
+    """A third entity must not lose its collection for colliding, on name only,
+    with an entity already dropped for an unrelated collection collision.
+
+    ``ItemA``/``items`` and ``Widget``/``items`` collide on collection and are
+    both dropped. ``ItemA``/``gadgets`` collides on *name* only, and only with
+    the already-dropped ``ItemA``/``items`` — once that one is gone, the name
+    ``ItemA`` is unique among what remains, so ``gadgets`` has no collision left
+    to lose to.
+    """
+    fallback = DataModel(
+        api_name="Shop",
+        entities=[
+            _entity("ItemA", "items", "item_id"),
+            _entity("Widget", "items", "sku"),
+            _entity("ItemA", "gadgets", "gadget_id"),
+        ],
+        store_metadata=StoreMetadata(
+            collections=["items", "gadgets"],
+            pk_map={"items": "item_id", "gadgets": "gadget_id"},
+        ),
+    )
+    dm, provenance = compose_data_model(
+        "Shop", IDENTITY, [_entity("Order", "orders", "order_id")], fallback
+    )
+    assert [e.name for e in dm.entities] == ["ItemA", "Order"]
+    assert dm.store_metadata.collections == ["gadgets", "orders"]
+    assert dm.store_metadata.pk_map == {"gadgets": "gadget_id", "orders": "order_id"}
+    assert provenance == {"ItemA": "llm", "Order": "derived"}
+
+
+def test_compose_cascade_fix_is_order_independent() -> None:
+    """The reversed list must survive the identical entity, not a different one."""
+    triple = [
+        _entity("ItemA", "items", "item_id"),
+        _entity("Widget", "items", "sku"),
+        _entity("ItemA", "gadgets", "gadget_id"),
+    ]
+    metadata = StoreMetadata(
+        collections=["items", "gadgets"],
+        pk_map={"items": "item_id", "gadgets": "gadget_id"},
+    )
+    enriched = [_entity("Order", "orders", "order_id")]
+
+    forward, forward_prov = compose_data_model(
+        "Shop",
+        IDENTITY,
+        enriched,
+        DataModel(api_name="Shop", entities=list(triple), store_metadata=metadata),
+    )
+    backward, backward_prov = compose_data_model(
+        "Shop",
+        IDENTITY,
+        enriched,
+        DataModel(
+            api_name="Shop", entities=list(reversed(triple)), store_metadata=metadata
+        ),
+    )
+    assert [e.name for e in forward.entities] == [e.name for e in backward.entities]
+    assert forward.store_metadata.pk_map == backward.store_metadata.pk_map
+    assert forward_prov == backward_prov
+    assert "gadgets" in forward.store_metadata.collections
+
+
 def test_compose_keeps_non_colliding_fallback_entities_beside_a_dropped_group() -> None:
     """Dropping a colliding group must not take innocent bystanders with it."""
     fallback = DataModel(

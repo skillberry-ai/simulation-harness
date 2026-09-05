@@ -105,6 +105,14 @@ def _surviving_fallback_entities(
       collection; keeping one silently installs a coin-flip in the runtime
       contract.
 
+      The design doc (line 420) frames this rule as dropping colliding fallback
+      entities "with disagreeing primary keys"; this drops the whole group
+      regardless of whether the primary keys agree. That widening is deliberate,
+      not an oversight: even when the pks agree, the surviving entity's *name*
+      and field set would still be a function of LLM output order, and "entity
+      set identical across runs" — not just "primary keys identical" — is part
+      of the acceptance criterion this branch is held to.
+
     Names collide as well as collections: two same-named entities in the IR share
     one provenance key, so the map would record only one of them.
     """
@@ -125,9 +133,19 @@ def _surviving_fallback_entities(
             )
         else:
             contested.append(entity)
+    # Two passes, not two counters over the same set: collection collisions are
+    # removed first, and only *then* are names recounted over what remains. A
+    # single pass over both counters at once cascades — an entity that collides
+    # on name only with something already dropped for its collection would be
+    # dropped too, for a reason the rule above does not actually claim (measured:
+    # ``Item/items``, ``Widget/items``, ``Item/gadgets`` — the third collides on
+    # name only with the first, which the collection rule already removed; after
+    # that removal its name is unique, so it has no remaining collision to lose
+    # to). Counter aggregation and the two fixed passes are both order-
+    # independent, so this stays a function of the *set* of contested entities,
+    # never of the list order they arrived in.
     collection_counts = collections.Counter(_key(e.collection) for e in contested)
-    name_counts = collections.Counter(_key(e.name) for e in contested)
-    survivors: list[Entity] = []
+    after_collection_pass: list[Entity] = []
     for entity in contested:
         if collection_counts[_key(entity.collection)] > 1:
             logger.warning(
@@ -138,6 +156,10 @@ def _surviving_fallback_entities(
                 entity.collection,
             )
             continue
+        after_collection_pass.append(entity)
+    name_counts = collections.Counter(_key(e.name) for e in after_collection_pass)
+    survivors: list[Entity] = []
+    for entity in after_collection_pass:
         if name_counts[_key(entity.name)] > 1:
             logger.warning(
                 "dropping fallback entity '%s': the name is claimed by more "
