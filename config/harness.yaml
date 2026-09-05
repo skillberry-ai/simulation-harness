@@ -46,6 +46,12 @@ generation:
   scenarios_count: 5        # Number of scenarios to generate (best-effort)
   scenarios: { temperature: 0.4, max_tokens: 3000 }
 
+  # Behavior/realism section: a global set of numeric ranges and derivation rules
+  # injected into the SKILL.md preamble. Structured guidance, so it is generated
+  # deterministically at temperature 0.
+  behavior_enabled: true    # Set false to skip the behavior section entirely
+  behavior: { temperature: 0.0, max_tokens: 3000 }
+
 mcp:
   transport: sse  # or streamable_http
 

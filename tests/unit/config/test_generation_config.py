@@ -1,4 +1,7 @@
+from pathlib import Path
+
 import pytest
+import yaml
 
 from simulation_harness.config.models import GenerationConfig, HarnessConfig
 from typing import Any
@@ -48,7 +51,7 @@ def test_generation_overrides_and_extra_forbidden() -> None:
 def test_generation_behavior_defaults() -> None:
     cfg = GenerationConfig()
     assert cfg.behavior_enabled is True
-    assert cfg.behavior.temperature == 0.3
+    assert cfg.behavior.temperature == 0.0
     assert cfg.behavior.max_tokens == 3000
 
 
@@ -58,3 +61,19 @@ def test_harness_config_defaults_generation(
     cfg = HarnessConfig(**minimal_harness_dict)
     assert isinstance(cfg.generation, GenerationConfig)
     assert cfg.generation.classify_batch_size == 40
+
+
+def test_shipped_harness_yaml_behavior_stage() -> None:
+    """The shipped YAML overrides the model defaults, so pin the behavior entry.
+
+    The behavior section is structured guidance, so it is generated
+    deterministically. max_tokens is spelled out because a stage entry that
+    omits it falls back to the StageParams field default (8000), not to the
+    per-stage default_factory value.
+    """
+    repo_root = Path(__file__).resolve().parents[3]
+    data = yaml.safe_load((repo_root / "config" / "harness.yaml").read_text())
+    cfg = HarnessConfig(**data)
+    assert cfg.generation.behavior_enabled is True
+    assert cfg.generation.behavior.temperature == 0.0
+    assert cfg.generation.behavior.max_tokens == 3000
