@@ -2,11 +2,20 @@
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class CreateSimulationRequest(BaseModel):
     """Request model for creating a simulation."""
+
+    # Unknown fields are rejected rather than ignored. pydantic's default is
+    # extra="ignore", which silently drops a misspelled key and leaves its field
+    # at the default -- the request still succeeds, having done something other
+    # than what the caller asked. That cost real debugging time: the determinism
+    # check posted `regenerate: true` instead of `regenerate_skill: true` and
+    # reused a cached skill on every run while reporting success. A 422 naming
+    # the offending field is the cheaper failure.
+    model_config = ConfigDict(extra="forbid")
 
     openapi_spec: dict[str, Any] = Field(
         ..., description="OpenAPI specification as a dictionary"
@@ -28,6 +37,10 @@ class CreateSimulationRequest(BaseModel):
 
 class StartSimulationRequest(BaseModel):
     """Request model for starting a simulation from baked artifacts."""
+
+    # Unknown fields are rejected, for the reason given on
+    # CreateSimulationRequest above.
+    model_config = ConfigDict(extra="forbid")
 
     name: str = Field(..., description="Name of the skill whose artifacts to start")
     mcp_port: int | None = Field(

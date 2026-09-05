@@ -120,3 +120,22 @@ jobs:
           name: coverage-xml
           path: coverage.xml
           if-no-files-found: ignore
+
+  script-tests:
+    name: Shell script tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # scripts/tests/ builds throwaway git repos as fixtures and sets identity
+      # per fixture, so no global git config is needed. test-release.sh generates
+      # its own ed25519 key for signing, so no secret is needed either. uv is
+      # required because the release script refreshes uv.lock.
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Run shell script tests
+        run: make test-scripts

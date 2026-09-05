@@ -3,7 +3,10 @@
 import pytest
 from pydantic import ValidationError
 
-from simulation_harness.models.requests import CreateSimulationRequest
+from simulation_harness.models.requests import (
+    CreateSimulationRequest,
+    StartSimulationRequest,
+)
 
 
 class TestCreateSimulationRequest:
@@ -154,6 +157,78 @@ class TestCreateSimulationRequest:
                 },
                 mcp_port=65536,
             )
+
+
+class TestUnknownFieldsAreRejected:
+    """Both request models forbid extra fields.
+
+    pydantic's default is extra="ignore", which drops an unknown key and leaves
+    the corresponding field at its default -- so a misspelled flag produces a
+    successful request that quietly did something else. The regression this
+    guards is real: `regenerate: true` (the field is `regenerate_skill`) made a
+    determinism check reuse a cached skill on every run and still report success.
+    """
+
+    MINIMAL_SPEC = {"openapi": "3.0.0", "info": {"title": "T", "version": "1"}}
+
+    def test_create_rejects_unknown_field(self) -> None:
+        with pytest.raises(ValidationError) as exc_info:
+            CreateSimulationRequest(
+                openapi_spec=self.MINIMAL_SPEC,
+                regenerate=True,  # type: ignore[call-arg]
+            )
+
+        assert "regenerate" in str(exc_info.value)
+
+    def test_create_names_the_offending_field(self) -> None:
+        """The error must identify the key, so the fix is obvious."""
+        with pytest.raises(ValidationError) as exc_info:
+            CreateSimulationRequest(
+                openapi_spec=self.MINIMAL_SPEC,
+                totally_made_up=1,  # type: ignore[call-arg]
+            )
+
+        errors = exc_info.value.errors()
+        assert any(
+            e["type"] == "extra_forbidden" and e["loc"] == ("totally_made_up",)
+            for e in errors
+        ), errors
+
+    def test_start_rejects_unknown_field(self) -> None:
+        with pytest.raises(ValidationError) as exc_info:
+            StartSimulationRequest(
+                name="some-skill",
+                regenerate_skill=True,  # type: ignore[call-arg]
+            )
+
+        assert "regenerate_skill" in str(exc_info.value)
+
+    def test_known_fields_still_accepted(self) -> None:
+        """Strictness must not narrow the real surface."""
+        request = CreateSimulationRequest(
+            openapi_spec=self.MINIMAL_SPEC,
+            name="sim",
+            regenerate_skill=True,
+            mcp_port=9100,
+        )
+
+        assert request.name == "sim"
+        assert request.regenerate_skill is True
+        assert request.mcp_port == 9100
+
+    def test_arbitrary_keys_inside_openapi_spec_still_allowed(self) -> None:
+        """forbid applies to the request body, not to the spec it carries.
+
+        An OpenAPI document is an arbitrary nested dict, vendor extensions
+        included; rejecting unknown keys there would break every real spec.
+        """
+        spec = dict(self.MINIMAL_SPEC)
+        spec["x-vendor-extension"] = {"anything": ["at", "all"]}
+        spec["paths"] = {"/t": {"get": {"responses": {"200": {"description": "ok"}}}}}
+
+        request = CreateSimulationRequest(openapi_spec=spec)
+
+        assert request.openapi_spec["x-vendor-extension"] == {"anything": ["at", "all"]}
 
 
 # Made with Bob

@@ -226,6 +226,50 @@ class TestCreateSimulation:
         detail = response.json()["detail"].lower()
         assert "openapi" in detail or "validation" in detail or "info" in detail
 
+    async def test_create_simulation_unknown_field_returns_422(
+        self,
+        client: TestClient,
+        valid_openapi_spec: dict[str, Any],
+        mock_simulation_host: MagicMock,
+        mock_skill_registry: MagicMock,
+    ) -> None:
+        """An unknown body field is rejected, not silently dropped.
+
+        `regenerate` is the historical misspelling of `regenerate_skill`; while
+        the model allowed extra fields it was accepted and ignored, so callers
+        got a 2xx and a reused skill instead of a regenerated one.
+        """
+        response = client.post(
+            "/api/v1/simulation",
+            json={"openapi_spec": valid_openapi_spec, "regenerate": True},
+        )
+
+        assert response.status_code == 422
+        assert "regenerate" in str(response.json()).lower()
+        # rejected before any work was scheduled
+        mock_simulation_host.declare_simulation.assert_not_called()
+
+    async def test_create_simulation_vendor_extensions_in_spec_still_accepted(
+        self,
+        client: TestClient,
+        valid_openapi_spec: dict[str, Any],
+        mock_simulation_host: MagicMock,
+        mock_skill_registry: MagicMock,
+    ) -> None:
+        """Strictness applies to the body's own keys, not to the spec inside it.
+
+        An OpenAPI document is arbitrary nested JSON, vendor extensions included;
+        forbidding unknown keys there would reject most real-world specs.
+        """
+        record = SimulationRecord.declare(name="test-api")
+        mock_simulation_host.declare_simulation = AsyncMock(return_value=record)
+        spec = dict(valid_openapi_spec)
+        spec["x-vendor-extension"] = {"arbitrary": True}
+
+        response = client.post("/api/v1/simulation", json={"openapi_spec": spec})
+
+        assert response.status_code == 202
+
     async def test_create_simulation_name_derived_from_spec_title(
         self,
         client: TestClient,
