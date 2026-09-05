@@ -28,7 +28,9 @@ EXAMPLES = Path(__file__).resolve().parents[5] / "utils" / "test-client" / "exam
 def _derive(filename: str) -> tuple[list[str], dict[str, str], list[str]]:
     spec_dict = json.loads((EXAMPLES / filename).read_text())
     sources = collect_sources(OpenAPISpec(spec_dict), spec_dict)
-    model = derive_identity(sources.identity, synthetic=sources.synthetic)
+    model = derive_identity(
+        sources.identity, synthetic=sources.synthetic, deferred=sources.deferred
+    )
     return model.collections, model.pk_map, list(model.undecidable)
 
 
@@ -68,8 +70,23 @@ def test_tau2_airline_contract() -> None:
         "reservations": "reservation_id",
         "users": "user_id",
     }
+    # Two reasons live in this one list, and they are not interchangeable.
+    #
+    # The four `update_reservation_*` entries are ordinary rule declines: the
+    # rule ran on them and found no identity key it would stand behind.
+    #
+    # `list_all_airports` and `search_direct_flight` are here via `deferred`
+    # instead — array-of-object success responses (an AirportCode list and a
+    # flight list), so there is no top-level `properties` for the rule to read.
+    # Before the routing fix they were excluded from `sources.identity`
+    # altogether, which made them neither derived nor undecidable: the fallback
+    # never saw them, and the generated airline sim has no flights and no
+    # airports in its store as a result. Growing this list is the fix working.
+    # `collections` and `pk_map` above are unchanged by it.
     assert undecidable == [
         "get_reservation_details",
+        "list_all_airports",
+        "search_direct_flight",
         "update_reservation_baggages",
         "update_reservation_flights",
         "update_reservation_passengers",

@@ -222,13 +222,28 @@ def _reject_colliding_collections(clusters: dict[str, _Cluster]) -> None:
         raise GenerationStageError("identity", errors)
 
 
-def derive_identity(schemas: dict[str, dict], *, synthetic: bool) -> IdentityModel:
+def derive_identity(
+    schemas: dict[str, dict],
+    *,
+    synthetic: bool,
+    deferred: frozenset[str] = frozenset(),
+) -> IdentityModel:
     """Cluster ``schemas`` into entities by identity key.
 
     Schemas sharing an identity key are the same entity and their fields are
     unioned. Schemas whose key is undecidable are reported in
     :attr:`IdentityModel.undecidable` for the scoped LLM fallback; they never
     contribute a collection here.
+
+    ``deferred`` names schemas the caller has already judged out of the rule's
+    reach (see :func:`~...sources._identity_responses`). They are reported
+    undecidable **without the rule being run on them**, and that skip is
+    load-bearing rather than a shortcut: an array-of-objects would decline on its
+    own, but an object that merely omitted ``"type": "object"`` while carrying a
+    sole ``*_id`` would satisfy rule 1.4 and be *derived* into a brand-new
+    collection tagged ``"derived"`` — a contract entry invented by making the
+    schema visible. Routing instead of widening exists precisely to prevent that,
+    so deleting this branch silently reintroduces it.
 
     Iteration is over sorted names throughout so the result cannot depend on
     the order the schema map happened to be built in.
@@ -240,6 +255,9 @@ def derive_identity(schemas: dict[str, dict], *, synthetic: bool) -> IdentityMod
     clusters: dict[str, _Cluster] = {}
     undecidable: list[str] = []
     for name in sorted(schemas):
+        if name in deferred:
+            undecidable.append(name)
+            continue
         schema = schemas[name]
         if not isinstance(schema, dict):
             undecidable.append(name)

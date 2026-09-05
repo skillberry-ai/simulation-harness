@@ -123,7 +123,9 @@ async def analyze(
     # Stage 1a-1 — derive the contract in code. This is the part that must not
     # vary between two generations of the same spec.
     cb("deriving_identity")
-    identity = derive_identity(sources.identity, synthetic=sources.synthetic)
+    identity = derive_identity(
+        sources.identity, synthetic=sources.synthetic, deferred=sources.deferred
+    )
 
     # Stage 1a-2 — enrich the derived entities with field detail. Degrades to
     # the structural floor: duller fields, identical contract.

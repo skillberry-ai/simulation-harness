@@ -81,7 +81,9 @@ from simulation_harness.skills.generation.stages.analyze.sources import (
 
 spec_dict = json.loads(Path(sys.argv[1]).read_text())
 sources = collect_sources(OpenAPISpec(spec_dict), spec_dict)
-model = derive_identity(sources.identity, synthetic=sources.synthetic)
+model = derive_identity(
+    sources.identity, synthetic=sources.synthetic, deferred=sources.deferred
+)
 # Ordering is reported exactly as produced and must never be re-sorted here: a
 # set leaking into an output path shows up as a *reordering* of the same values,
 # so sorting on the way out would hide the one thing this probe exists to see.
