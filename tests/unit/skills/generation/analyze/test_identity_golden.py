@@ -125,6 +125,84 @@ def test_slack_v2_has_no_derivable_entities() -> None:
     assert undecidable == []
 
 
+def _rpc_spec() -> dict:
+    """An RPC-shaped spec whose every operation returns a bare ``{id, name}``.
+
+    Not a checked-in example because none of the four has this shape — which is
+    exactly why the rule's behaviour on it went unnoticed — but an ordinary one:
+    plenty of hand-written tool-style specs declare no ``components.schemas`` and
+    return an unqualified ``id``.
+    """
+    thing = {
+        "type": "object",
+        "properties": {"id": {"type": "string"}, "name": {"type": "string"}},
+    }
+    body = {"content": {"application/json": {"schema": thing}}}
+    return {
+        "openapi": "3.0.0",
+        "info": {"title": "Thing RPC", "version": "1.0.0"},
+        "paths": {
+            "/things": {
+                "get": {"operationId": "list_things", "responses": {"200": body}},
+                "post": {"operationId": "create_thing", "responses": {"201": body}},
+            },
+            "/things/{id}": {
+                "get": {
+                    "operationId": "get_thing_details",
+                    "responses": {"200": body},
+                },
+            },
+        },
+    }
+
+
+def test_rpc_bare_id_responses_derive_nothing_and_go_to_the_fallback() -> None:
+    """A bare ``id`` on the synthetic path must not coin operation-id collections.
+
+    ``noun_for("id", name)`` falls back to the schema name, and on this path the
+    name is a generated operation id. Deriving here would produce the collections
+    ``create_things``/``get_thing_details``/``list_things`` — three fragments of
+    one entity, each tagged ``"derived"`` as though the rule had decided it, and
+    each an operation id leaking into the runtime contract. The rule must decline
+    instead and let the scoped fallback, which sees every operation at once, name
+    the entity under an honest ``"llm"`` provenance tag.
+    """
+    spec_dict = _rpc_spec()
+    sources = collect_sources(OpenAPISpec(spec_dict), spec_dict)
+    assert sources.synthetic is True
+    assert sorted(sources.identity) == [
+        "create_thing",
+        "get_thing_details",
+        "list_things",
+    ]
+
+    model = derive_identity(sources.identity, synthetic=True)
+    assert model.collections == []
+    assert model.pk_map == {}
+    # In sources.identity, so the orchestrator's leftovers lookup resolves them.
+    assert model.undecidable == (
+        "create_thing",
+        "get_thing_details",
+        "list_things",
+    )
+
+
+def test_rpc_named_path_still_keys_a_bare_id_by_the_schema_name() -> None:
+    """The named path is untouched: there the name is a spec-declared type.
+
+    Same three schemas, reached through ``components.schemas`` instead of through
+    operation responses, must still derive.
+    """
+    thing = {
+        "type": "object",
+        "properties": {"id": {"type": "string"}, "name": {"type": "string"}},
+    }
+    model = derive_identity({"Thing": thing}, synthetic=False)
+    assert model.collections == ["things"]
+    assert model.pk_map == {"things": "id"}
+    assert model.undecidable == ()
+
+
 @pytest.mark.parametrize(
     "filename",
     [

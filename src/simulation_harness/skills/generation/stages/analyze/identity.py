@@ -62,6 +62,12 @@ def identity_key(name: str, schema: dict, *, synthetic: bool) -> str | None:
     Only those get rule 4 (sole ``<noun>_id``): a synthetic key can never
     name-match, so its single ``*_id`` is the only signal available, whereas a
     *named* schema carrying one foreign-looking id is genuinely ambiguous.
+
+    Note that a bare ``id`` is returned here on both paths — it is a correct
+    *key* either way. What a synthetic name cannot supply is a usable **noun**
+    for it, so :func:`derive_identity` treats a bare ``id`` on a top-level
+    synthetic schema as undecidable. That decision belongs there, next to
+    :func:`noun_for`, not here.
     """
     declared = schema.get("x-primary-key")
     if isinstance(declared, str) and declared:
@@ -239,7 +245,17 @@ def derive_identity(schemas: dict[str, dict], *, synthetic: bool) -> IdentityMod
             undecidable.append(name)
             continue
         key = identity_key(name, schema, synthetic=synthetic)
-        if key is None:
+        if key is None or (synthetic and key == "id"):
+            # A bare `id` is undecidable on the synthetic path. The key itself is
+            # fine; the *noun* is not — `noun_for("id", name)` falls back to the
+            # schema name, which on this path is a generated operation id, so
+            # three operations returning `{id, name}` would coin the collections
+            # `create_things`, `get_thing_details` and `list_things` and tag each
+            # one "derived", leaking operation ids into the runtime contract. The
+            # scoped fallback sees the whole operation set and can name the
+            # entity once; provenance then honestly records "llm". On the named
+            # path the schema name is a spec-declared type, so keying a bare `id`
+            # by it stays exactly as it was.
             undecidable.append(name)
             continue
         _absorb(clusters, noun_for(key, name), key, schema, name)
@@ -251,6 +267,9 @@ def derive_identity(schemas: dict[str, dict], *, synthetic: bool) -> IdentityMod
             if not isinstance(prop, dict):
                 continue
             for target in _nested_objects(prop):
+                # A bare `id` *is* decidable here even on the synthetic path:
+                # the name in hand is a property name, which is a real noun,
+                # not the enclosing operation id.
                 nested = identity_key(prop_name, target, synthetic=synthetic)
                 if nested is None or nested == key:
                     continue
