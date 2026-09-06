@@ -68,6 +68,11 @@ class ElementShape(BaseModel):
     target_collection: str | None = None
     target_key: str | None = None
     link_fields: tuple[ElementField, ...] = ()
+    # Collections carrying element fields the target does not: a response that
+    # denormalizes a grandparent's attribute onto the element needs a second read
+    # to assemble it. Recorded where the hop is detected so no consumer has to
+    # re-derive it. See ``_resolves_one_hop_out``.
+    hop_collections: tuple[str, ...] = ()
 
 
 class Field(BaseModel):

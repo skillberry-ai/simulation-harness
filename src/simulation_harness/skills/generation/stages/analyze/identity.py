@@ -232,7 +232,7 @@ def _resolves_one_hop_out(
     target: _Cluster,
     field_name: str,
     own_sources: set[str],
-) -> bool:
+) -> str | None:
     """True when ``field_name`` belongs to an entity the target hangs off.
 
     A response often denormalizes a grandparent's attribute down onto a nested
@@ -245,6 +245,9 @@ def _resolves_one_hop_out(
     Requiring the target to be *nested inside* the holder is what keeps this from
     matching on a coincidence: ``User`` also carries a ``name``, and without the
     nesting test that alone would excuse the leftover.
+
+    Returns the holder's collection name, so the extra read the response needs can
+    be recorded rather than merely permitted.
     """
     for noun, holder in clusters.items():
         if holder is target:
@@ -257,8 +260,8 @@ def _resolves_one_hop_out(
             for source in target.sources
             if "." in source
         ):
-            return True
-    return False
+            return pluralize(noun)
+    return None
 
 
 def _element_shape(
@@ -315,12 +318,16 @@ def _element_shape(
     # One absorb path per parent source schema, so exclude them all — a cluster
     # built from several response schemas absorbed this element once per schema.
     own_sources = {f"{s}.{prop_name}" for s in parent.sources}
-    leftovers = [
-        f
-        for f in fields
-        if not (target.field_sources.get(f.name, set()) - own_sources)
-        and not _resolves_one_hop_out(clusters, target, f.name, own_sources)
-    ]
+    leftovers: list[ElementField] = []
+    hops: list[str] = []
+    for f in fields:
+        if target.field_sources.get(f.name, set()) - own_sources:
+            continue  # the target carries it independently
+        hop = _resolves_one_hop_out(clusters, target, f.name, own_sources)
+        if hop is None:
+            leftovers.append(f)
+        elif hop not in hops:
+            hops.append(hop)
     link_fields: tuple[ElementField, ...] = ()
     if leftovers:
         key_field = tuple(f for f in fields if f.name == nested)
@@ -330,6 +337,7 @@ def _element_shape(
         target_collection=pluralize(noun),
         target_key=target.primary_key,
         link_fields=link_fields,
+        hop_collections=tuple(sorted(hops)),
     )
 
 

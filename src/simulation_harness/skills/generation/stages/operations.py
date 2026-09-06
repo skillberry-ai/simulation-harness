@@ -11,7 +11,7 @@ except ImportError:  # pragma: no cover
     from importlib_resources import files  # type: ignore[import-not-found]
 
 from simulation_harness.openapi.parser import OpenAPISpec
-from simulation_harness.skills.generation.ir import Operation, SpecModel
+from simulation_harness.skills.generation.ir import Entity, Operation, SpecModel
 from simulation_harness.skills.generation.llm import call_text
 from simulation_harness.skills.generation.repair import with_repair
 
@@ -74,6 +74,42 @@ def _resolve_refs(
     return result
 
 
+def _linked_entities(ir: SpecModel, entity: Entity | None) -> list[dict]:
+    """The entities this operation's own entity points at through its arrays.
+
+    A ``reference`` element shape says the parent stores identifiers, so both the
+    read side and the write side need the target: projecting the response means
+    reading it, and creating one of these elements means inserting into it. The
+    entity alone is not enough — without this the stage can see that
+    ``orders[].items`` holds ``items`` identifiers but not what an ``Item``
+    carries, so it cannot say which fields the projection yields.
+
+    ``hop_collections`` is included for the same reason one level further out: a
+    response that denormalizes a grandparent attribute onto the element (retail's
+    order line carries ``Product.name``) needs that collection too, and naming it
+    here is what stops the stage from inventing a field or giving up on the value.
+
+    Scoped to what this operation's entity actually references rather than the
+    whole model, to keep a chunk's prompt from carrying the entire data model.
+    """
+    if entity is None:
+        return []
+    wanted: list[str] = []
+    for field in entity.fields:
+        shape = field.element
+        if shape is None or shape.kind != "reference":
+            continue
+        for collection in (shape.target_collection, *shape.hop_collections):
+            if collection and collection not in wanted:
+                wanted.append(collection)
+    by_collection = {e.collection: e for e in ir.entities}
+    return [
+        by_collection[c].model_dump()
+        for c in wanted
+        if c in by_collection and by_collection[c] is not entity
+    ]
+
+
 def _op_context(spec: OpenAPISpec, ir: SpecModel, op: Operation) -> dict:
     parsed = spec.get_operation_by_id(op.operation_id)
     entity = next((e for e in ir.entities if e.name == op.entity), None)
@@ -94,6 +130,9 @@ def _op_context(spec: OpenAPISpec, ir: SpecModel, op: Operation) -> dict:
         "kind": op.kind.value,
         "patterns": op.patterns,
         "entity": entity.model_dump() if entity else None,
+        # Targets of this entity's reference arrays: needed to project a joined
+        # response and to insert on the write side. See _linked_entities.
+        "linked_entities": _linked_entities(ir, entity),
         "request_schema": _resolve_refs(spec, request_schema)
         if request_schema
         else None,

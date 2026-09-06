@@ -219,3 +219,68 @@ def test_element_shape_is_hashable_so_derived_entity_stays_hashable() -> None:
     }
     ident = derive_identity(schemas, synthetic=True)
     assert hash(ident.entities[0])
+
+
+def test_second_hop_collection_is_recorded_not_just_excused() -> None:
+    """The grandparent case again, from the other side: knowing the order stores a
+    bare id is not enough — the response still needs `name`, so the collection
+    that holds it is recorded where the hop is detected rather than left for a
+    consumer to rediscover."""
+    variant: dict = {
+        "properties": {"item_id": {"type": "string"}, "price": {"type": "number"}}
+    }
+    schemas: dict[str, dict] = {
+        "Item": {
+            "properties": {"item_id": {"type": "string"}, "price": {"type": "number"}}
+        },
+        "Product": {
+            "properties": {
+                "product_id": {"type": "string"},
+                "name": {"type": "string"},
+                "variants": {"type": "array", "items": variant},
+            }
+        },
+        "Order": {
+            "properties": {
+                "order_id": {"type": "string"},
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "properties": {
+                            "item_id": {"type": "string"},
+                            "price": {"type": "number"},
+                            "name": {"type": "string"},
+                        }
+                    },
+                },
+            }
+        },
+    }
+    ident = derive_identity(schemas, synthetic=True)
+    shape = _shapes(ident.entities, "Order")["items"]
+    assert shape.link_fields == ()
+    assert shape.hop_collections == ("products",)
+
+
+def test_no_hop_is_recorded_for_a_pure_projection() -> None:
+    schemas: dict[str, dict] = {
+        "Item": {
+            "properties": {"item_id": {"type": "string"}, "price": {"type": "number"}}
+        },
+        "Order": {
+            "properties": {
+                "order_id": {"type": "string"},
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "properties": {
+                            "item_id": {"type": "string"},
+                            "price": {"type": "number"},
+                        }
+                    },
+                },
+            }
+        },
+    }
+    ident = derive_identity(schemas, synthetic=True)
+    assert _shapes(ident.entities, "Order")["items"].hop_collections == ()
