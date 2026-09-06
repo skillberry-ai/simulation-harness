@@ -113,6 +113,14 @@ These override the values in the mounted `harness.yaml`:
 | `HARNESS_SESSIONS_IDLE_TIMEOUT_SECONDS`        | `sessions.idle_timeout_seconds`             |
 | `HARNESS_SESSIONS_MAX_CONCURRENT_QUEUE_DEPTH`  | `sessions.max_concurrent_queue_depth`       |
 
+Each variable resolves in this order: **process environment** (a Kubernetes
+`env:` block, or an exported shell var), then a **`.env` file** in the working
+directory, then the **YAML** value. `.env` is read without mutating the process
+environment, so nothing leaks to other readers. At startup the harness logs the
+overrides it applied and where each came from, and warns about any `HARNESS_*`
+key in `.env` that is not in the table above — a misspelling would otherwise be
+indistinguishable from not setting it at all.
+
 Secrets (`LLM_API_KEY`, optional `LLM_API_BASE`) come from `harness-secrets` Secret.
 
 ## LLM model & provider config
@@ -126,8 +134,8 @@ The four LLM settings a consumer typically tunes split across **two** channels:
 | `skill_generation_model` | `harness-config` **ConfigMap** (`harness.yaml`) | edit the `llm:` block, or set `HARNESS_LLM_SKILL_GENERATION_MODEL` |
 | `simulation_model`       | `harness-config` **ConfigMap** (`harness.yaml`) | edit the `llm:` block, or set `HARNESS_LLM_SIMULATION_MODEL` |
 
-The API key/base are read only from the process environment (never from YAML),
-so they belong in the Secret. The model names have two channels: the `llm:` block
+The API key/base are read only from the environment (never from YAML), so they
+belong in the Secret. The model names have two channels: the `llm:` block
 in the ConfigMap, and the `HARNESS_LLM_*` env vars in the override table above
 (env wins). Prefer the ConfigMap when you own the manifests; the env vars exist
 for orchestrators that deploy this image **without** mounting a `harness.yaml`,

@@ -47,6 +47,7 @@ mypy (with the `pydantic.mypy` plugin) type-checks **both `src/` and `tests/`**.
 
 - Runtime config: `config/harness.yaml` (read once at startup; restart to apply changes). Path is overridable via `HARNESS_CONFIG_PATH`.
 - Secrets: `LLM_API_KEY` (and optional `LLM_API_BASE`) come from `.env` or env vars — **not** from the YAML. See `.env.example`.
+- `HARNESS_*` overrides resolve through `config/env_source.py`: process env, then `.env`, then the YAML. That module is the only place that reads `.env` for non-secret config, and it never mutates `os.environ`. Startup logs which overrides were applied and warns about unrecognized `HARNESS_*` keys in `.env`. Add a new override to the `_OVERRIDES` table in `config/env_overrides.py` and to the table in `deploy/README.md`.
 - Default server port is **8086** (`server.port` in `config/harness.yaml`).
 
 ## Architecture (big picture)
