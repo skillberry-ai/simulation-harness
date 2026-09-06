@@ -152,12 +152,21 @@ def _element_items(shape: ElementShape) -> dict | None:
     return None
 
 
-def _stamp_element_shapes(entity_def: dict, entity: Entity) -> None:
-    """Write each derived element shape onto its array property's ``items``.
+# Where a container's element subschema belongs, and the declared `type` that has
+# to be there for the stamp to apply.
+_CONTAINER_KEYWORD = {
+    "array": ("items", "array"),
+    "map": ("additionalProperties", "object"),
+}
 
-    Skips a property the schema does not declare as an array: getting that wrong
-    is a pre-existing shape problem for ``validate_schema`` to report, and
-    stamping ``items`` onto a non-array would bury it.
+
+def _stamp_element_shapes(entity_def: dict, entity: Entity) -> None:
+    """Write each derived element shape onto its container property.
+
+    ``items`` for an array, ``additionalProperties`` for a map. Skips a property
+    whose declared type does not match the container the shape was derived from:
+    getting that wrong is a pre-existing shape problem for ``validate_schema`` to
+    report, and stamping over it would bury the real problem.
     """
     props = entity_def.get("properties")
     if not isinstance(props, dict):
@@ -165,13 +174,17 @@ def _stamp_element_shapes(entity_def: dict, entity: Entity) -> None:
     for field in entity.fields:
         if field.element is None:
             continue
+        keyword_type = _CONTAINER_KEYWORD.get(field.element.container)
+        if keyword_type is None:
+            continue
+        keyword, declared = keyword_type
         prop = props.get(field.name)
-        if not isinstance(prop, dict) or prop.get("type") != "array":
+        if not isinstance(prop, dict) or prop.get("type") != declared:
             continue
         items = _element_items(field.element)
         if items is None:
             continue
-        prop["items"] = items
+        prop[keyword] = items
         if field.element.kind == "reference":
             # Recorded so the runtime and the operation stage can see which
             # collection an identifier points at; validators ignore `x-` keywords.

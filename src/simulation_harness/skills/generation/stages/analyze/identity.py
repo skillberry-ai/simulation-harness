@@ -147,10 +147,11 @@ class _Cluster:
     primary_key: str
     fields: dict[str, str] = field(default_factory=dict)
     sources: list[str] = field(default_factory=list)
-    # Raw ``items`` schema per array property, kept so element shapes can be
-    # decided in a second pass — the reference/embedded call needs the final
-    # cluster set, which does not exist while clustering is still running.
-    array_items: dict[str, dict] = field(default_factory=dict)
+    # Raw element schema per container property, as ``(container, schema)`` —
+    # ``items`` for an array, ``additionalProperties`` for a map. Kept so element
+    # shapes can be decided in a second pass: the reference/embedded call needs the
+    # final cluster set, which does not exist while clustering is still running.
+    element_schemas: dict[str, tuple[str, dict]] = field(default_factory=dict)
     # Which source schemas contributed each field. Needed because promoting a
     # nested element absorbs that element's own fields into the target cluster:
     # without provenance, "is this element a subset of its target?" is circular
@@ -184,6 +185,23 @@ def _nested_objects(prop: dict) -> Iterator[dict]:
         yield inner
 
 
+def _container_element(prop: dict) -> tuple[str, dict] | None:
+    """``(container, element schema)`` for an array or map property, else ``None``.
+
+    A map is an object whose ``additionalProperties`` is itself a schema — the
+    shape ``_nested_objects`` already walks for promotion. A plain nested object
+    with declared ``properties`` is neither: it is one value, not a collection of
+    them, so it is left out of scope here.
+    """
+    if prop.get("type") == "array":
+        items = prop.get("items")
+        return ("array", items) if isinstance(items, dict) and items else None
+    extra = prop.get("additionalProperties")
+    if prop.get("type") == "object" and isinstance(extra, dict) and extra:
+        return ("map", extra)
+    return None
+
+
 def _absorb(
     clusters: dict[str, _Cluster],
     noun: str,
@@ -203,13 +221,13 @@ def _absorb(
                     prop_name, _json_type(prop if isinstance(prop, dict) else {})
                 )
                 cluster.field_sources.setdefault(prop_name, set()).add(source)
-                if isinstance(prop, dict) and prop.get("type") == "array":
-                    items = prop.get("items")
+                if isinstance(prop, dict):
                     # setdefault, and iteration over sorted names, so a property
                     # described by two source schemas resolves the same way every
                     # run rather than by whichever was absorbed last.
-                    if isinstance(items, dict) and items:
-                        cluster.array_items.setdefault(prop_name, items)
+                    captured = _container_element(prop)
+                    if captured is not None:
+                        cluster.element_schemas.setdefault(prop_name, captured)
     cluster.sources.append(source)
 
 
@@ -268,11 +286,12 @@ def _element_shape(
     clusters: dict[str, _Cluster],
     parent: _Cluster,
     prop_name: str,
-    items: dict,
+    container: str,
+    element_schema: dict,
     *,
     synthetic: bool,
 ) -> ElementShape | None:
-    """Decide how one array property's elements are stored, or ``None``.
+    """Decide how one container property's elements are stored, or ``None``.
 
     Mirrors the promotion test in :func:`derive_identity` rather than inventing a
     second rule: an element is a ``reference`` exactly when that pass would have
@@ -280,33 +299,47 @@ def _element_shape(
     point — the normalization decision is already made there, and today it is
     made and then discarded.
 
-    ``None`` means the spec declared no element shape (``"items": {}``), so
-    nothing downstream should constrain it.
+    A map never comes back ``reference``. Its keys already are the referenced
+    identifiers, so the values stay an inline projection; the promotion is recorded
+    as a cross-reference annotation instead. Pinning the value shape is still worth
+    doing — tau2-retail seeded ``products[].variants`` as a third, flattened shape
+    matching neither the spec's variant nor the ``items`` row it duplicates.
+
+    ``None`` means the spec declared no element shape, so nothing downstream should
+    constrain it.
     """
-    if not items:
+    if not element_schema:
         return None
-    element = next(_nested_objects({"type": "array", "items": items}), None)
+    element = next(_nested_objects({"type": "array", "items": element_schema}), None)
     if element is None:
-        declared = items.get("type")
+        declared = element_schema.get("type")
         # A typed primitive is worth pinning (this is the field where the schema
         # stage flip-flopped between `{}` and `{"type": "string"}` run to run);
         # an untyped or non-string type annotation is not decidable here.
         return (
-            ElementShape(kind="scalar", type=declared)
+            ElementShape(kind="scalar", container=container, type=declared)
             if isinstance(declared, str)
             else None
         )
 
     fields = _element_fields(element)
+    embedded = ElementShape(kind="embedded", container=container, fields=fields)
     nested = identity_key(prop_name, element, synthetic=synthetic)
     if nested is None or nested == parent.primary_key:
-        return ElementShape(kind="embedded", fields=fields)
+        return embedded
     noun = noun_for(nested, prop_name)
     target = clusters.get(noun)
     if target is None:
         # The nested schema names an identity but never became an entity, so
         # there is no collection to reference. Stored inline.
-        return ElementShape(kind="embedded", fields=fields)
+        return embedded
+    if container == "map":
+        return embedded.model_copy(
+            update={
+                "target_collection": pluralize(noun),
+                "target_key": target.primary_key,
+            }
+        )
 
     # Fork 1: a pure projection of the target keeps nothing of its own, so the
     # parent stores the bare identifier. Anything the target does not carry is
@@ -334,6 +367,7 @@ def _element_shape(
         link_fields = key_field + tuple(f for f in leftovers if f.name != nested)
     return ElementShape(
         kind="reference",
+        container=container,
         target_collection=pluralize(noun),
         target_key=target.primary_key,
         link_fields=link_fields,
@@ -349,12 +383,14 @@ def _derive_element_shapes(
     for noun in sorted(clusters):
         cluster = clusters[noun]
         shapes: dict[str, ElementShape] = {}
-        for prop_name in sorted(cluster.array_items):
+        for prop_name in sorted(cluster.element_schemas):
+            container, element_schema = cluster.element_schemas[prop_name]
             shape = _element_shape(
                 clusters,
                 cluster,
                 prop_name,
-                cluster.array_items[prop_name],
+                container,
+                element_schema,
                 synthetic=synthetic,
             )
             if shape is not None:

@@ -56,13 +56,22 @@ class ElementShape(BaseModel):
       and otherwise carries the parent-scoped leftovers that a link object must
       keep alongside the key.
 
-    ``None`` on a field means undecidable — the array's element shape was not
-    declared in the spec — and leaves the schema stage's ``"items"`` untouched
-    rather than guessing.
+    ``container`` says where the elements live, and the two differ in one way that
+    matters. An ``array`` of a promoted element stores *references*, so the
+    reference kind means bare identifiers (or a link object). A ``map`` is keyed by
+    the referenced identifier already, so its keys carry the reference and its
+    values stay an inline projection — a map is therefore never ``reference``; it
+    records ``target_collection``/``target_key`` as a cross-reference annotation
+    while staying ``embedded``.
+
+    ``None`` on a field means undecidable — the element shape was not declared in
+    the spec — and leaves the schema stage's ``items`` / ``additionalProperties``
+    untouched rather than guessing.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
     kind: Literal["scalar", "embedded", "reference"]
+    container: Literal["array", "map"] = "array"
     type: str | None = None
     fields: tuple[ElementField, ...] = ()
     target_collection: str | None = None

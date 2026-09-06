@@ -155,3 +155,42 @@ def test_bare_ids_still_validate_once_stamped() -> None:
     stamped = enforce_contract(_schema(), _ir(shape))
     db = {"orders": [{"order_id": "o1", "items": ["item_tee_classic_red_m"]}]}
     assert validate_schema_and_db(stamped, db) == []
+
+
+def test_map_shape_is_stamped_onto_additional_properties() -> None:
+    """A map's element subschema belongs on `additionalProperties`, not `items`."""
+    schema = _schema("options")
+    schema["$defs"]["Order"]["properties"]["options"] = {"type": "object"}
+    ir = _ir(ElementShape(kind="scalar", container="map", type="string"), "options")
+    out = enforce_contract(schema, ir)
+    prop = _order_prop(out, "options")
+    assert prop["additionalProperties"] == {"type": "string"}
+    assert "items" not in prop
+
+
+def test_map_container_is_not_stamped_onto_an_array_property() -> None:
+    """Declared type has to match the container the shape came from, or the stamp
+    would bury a real shape mismatch."""
+    ir = _ir(ElementShape(kind="scalar", container="map", type="string"), "items")
+    out = enforce_contract(_schema(), ir)
+    assert _order_prop(out)["items"] == {}
+
+
+def test_embedded_map_values_are_type_checked_by_the_seed_gate() -> None:
+    """What the map stamp does buy: a wrong value type is caught. Note it does NOT
+    catch a wholly invented value shape, since additionalProperties stays open and
+    no element-level `required` is emitted."""
+    schema = _schema("variants")
+    schema["$defs"]["Order"]["properties"]["variants"] = {"type": "object"}
+    shape = ElementShape(
+        kind="embedded",
+        container="map",
+        fields=(ElementField(name="price", type="number"),),
+    )
+    stamped = enforce_contract(schema, _ir(shape, "variants"))
+    good = {"orders": [{"order_id": "o1", "variants": {"v1": {"price": 25}}}]}
+    bad = {"orders": [{"order_id": "o1", "variants": {"v1": {"price": "twenty-five"}}}]}
+    extra = {"orders": [{"order_id": "o1", "variants": {"v1": {"colour": "blue"}}}]}
+    assert validate_schema_and_db(stamped, good) == []
+    assert validate_schema_and_db(stamped, bad)
+    assert validate_schema_and_db(stamped, extra) == []

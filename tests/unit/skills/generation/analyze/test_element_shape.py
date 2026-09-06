@@ -284,3 +284,66 @@ def test_no_hop_is_recorded_for_a_pure_projection() -> None:
     }
     ident = derive_identity(schemas, synthetic=True)
     assert _shapes(ident.entities, "Order")["items"].hop_collections == ()
+
+
+def test_map_of_scalars_is_pinned() -> None:
+    """`additionalProperties` maps were entirely unconstrained before: a map of
+    option names to values reached schema.json as a bare `{"type": "object"}`."""
+    schemas: dict[str, dict] = {
+        "Item": {
+            "properties": {
+                "item_id": {"type": "string"},
+                "options": {
+                    "type": "object",
+                    "additionalProperties": {"type": "string"},
+                },
+            }
+        }
+    }
+    ident = derive_identity(schemas, synthetic=True)
+    shape = _shapes(ident.entities, "Item")["options"]
+    assert (shape.container, shape.kind, shape.type) == ("map", "scalar", "string")
+
+
+def test_map_of_promoted_elements_stays_embedded_with_a_cross_reference() -> None:
+    """A map is keyed by the referenced identifier already, so its keys carry the
+    reference and its values stay an inline projection. Recording the target as an
+    annotation keeps that visible without claiming the values are identifiers."""
+    variant: dict = {
+        "properties": {"item_id": {"type": "string"}, "price": {"type": "number"}}
+    }
+    schemas: dict[str, dict] = {
+        "Item": {
+            "properties": {"item_id": {"type": "string"}, "price": {"type": "number"}}
+        },
+        "Product": {
+            "properties": {
+                "product_id": {"type": "string"},
+                "variants": {"type": "object", "additionalProperties": variant},
+            }
+        },
+    }
+    ident = derive_identity(schemas, synthetic=True)
+    shape = _shapes(ident.entities, "Product")["variants"]
+    assert (shape.container, shape.kind) == ("map", "embedded")
+    assert [f.name for f in shape.fields] == ["item_id", "price"]
+    assert (shape.target_collection, shape.target_key) == ("items", "item_id")
+    assert shape.link_fields == ()
+
+
+def test_a_plain_nested_object_is_not_a_container() -> None:
+    """An address is one value, not a collection of them, so it is out of scope and
+    keeps whatever the schema prompt wrote."""
+    schemas: dict[str, dict] = {
+        "Order": {
+            "properties": {
+                "order_id": {"type": "string"},
+                "address": {
+                    "type": "object",
+                    "properties": {"city": {"type": "string"}},
+                },
+            }
+        }
+    }
+    ident = derive_identity(schemas, synthetic=True)
+    assert "address" not in _shapes(ident.entities, "Order")
