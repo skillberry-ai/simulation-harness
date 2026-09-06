@@ -48,6 +48,7 @@ def structural_entities(identity: IdentityModel) -> list[Entity]:
                     name=field_name,
                     type=field_type,
                     required=field_name == derived.primary_key,
+                    element=dict(derived.elements).get(field_name),
                 )
                 for field_name, field_type in derived.fields
             ],

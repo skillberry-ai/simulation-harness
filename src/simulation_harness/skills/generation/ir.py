@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -18,6 +18,72 @@ class OperationKind(str, Enum):
     action = "action"
 
 
+class ElementField(BaseModel):
+    """One property of a container field's element, name and JSON type only.
+
+    Deliberately flatter than :class:`Field`: the identity pass walks exactly one
+    level into a container (see ``_nested_objects``), so there is no second level
+    to describe, and a recursive model would imply a depth nothing populates.
+    """
+
+    # Frozen, with tuple collections on ElementShape, so both stay hashable:
+    # DerivedEntity is a frozen dataclass and therefore hashable, and embedding
+    # an unhashable model in it would silently revoke that.
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    name: str
+    type: str
+
+
+class ElementShape(BaseModel):
+    """How the elements of an ``array`` field are stored.
+
+    Without this the storage element shape is unpinned end to end: ``_json_type``
+    collapses every array to ``"array"``, so the schema stage can only emit
+    ``"items": {}`` — which validates anything — and the operations, schema and
+    seed stages then each choose an element shape independently. They run
+    concurrently and cannot see each other, so nothing reconciles the choices;
+    tau2-retail seeded ``orders[].items`` as bare id strings while the operation
+    section specified it as objects.
+
+    ``kind`` is the decision:
+
+    - ``scalar`` — elements are a JSON primitive, given in ``type``.
+    - ``embedded`` — elements are objects stored inline, described by ``fields``.
+    - ``reference`` — the element clustered into its own entity during identity
+      derivation, so the parent stores references. ``target_collection`` and
+      ``target_key`` name where the elements live. ``link_fields`` is empty when
+      the element is a pure projection of the target (store the bare identifier)
+      and otherwise carries the parent-scoped leftovers that a link object must
+      keep alongside the key.
+
+    ``container`` says where the elements live, and the two differ in one way that
+    matters. An ``array`` of a promoted element stores *references*, so the
+    reference kind means bare identifiers (or a link object). A ``map`` is keyed by
+    the referenced identifier already, so its keys carry the reference and its
+    values stay an inline projection — a map is therefore never ``reference``; it
+    records ``target_collection``/``target_key`` as a cross-reference annotation
+    while staying ``embedded``.
+
+    ``None`` on a field means undecidable — the element shape was not declared in
+    the spec — and leaves the schema stage's ``items`` / ``additionalProperties``
+    untouched rather than guessing.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    kind: Literal["scalar", "embedded", "reference"]
+    container: Literal["array", "map"] = "array"
+    type: str | None = None
+    fields: tuple[ElementField, ...] = ()
+    target_collection: str | None = None
+    target_key: str | None = None
+    link_fields: tuple[ElementField, ...] = ()
+    # Collections carrying element fields the target does not: a response that
+    # denormalizes a grandparent's attribute onto the element needs a second read
+    # to assemble it. Recorded where the hop is detected so no consumer has to
+    # re-derive it. See ``_resolves_one_hop_out``.
+    hop_collections: tuple[str, ...] = ()
+
+
 class Field(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str
@@ -26,6 +92,9 @@ class Field(BaseModel):
     enum: list[str] | None = None
     format: str | None = None
     description: str | None = None
+    # Derived in code by the identity pass and re-pinned in compose_data_model,
+    # so an enrich prompt cannot move it. See ElementShape.
+    element: ElementShape | None = None
 
 
 class Relationship(BaseModel):
