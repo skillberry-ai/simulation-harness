@@ -6,6 +6,7 @@ import collections
 
 from simulation_harness.skills.generation.ir import (
     Entity,
+    Field,
     Operation,
     OperationEvidence,
     OperationKind,
@@ -16,7 +17,10 @@ from simulation_harness.skills.generation.stages.analyze.enrich import (
     structural_entities,
 )
 from simulation_harness.skills.generation.stages.analyze.extract import DataModel
-from simulation_harness.skills.generation.stages.analyze.identity import IdentityModel
+from simulation_harness.skills.generation.stages.analyze.identity import (
+    DerivedEntity,
+    IdentityModel,
+)
 from simulation_harness.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -172,6 +176,25 @@ def _surviving_fallback_entities(
     return survivors
 
 
+def _pin_element_shapes(fields: list[Field], derived: DerivedEntity) -> list[Field]:
+    """Re-assert the derived element shape on each field the enrich LLM returned.
+
+    Element shape is contract, not prose: it decides what ``schema.json`` allows
+    in an array and therefore what ``db.json`` may hold. ``fields`` is otherwise
+    taken wholesale from the enriched entity, so without this an enrich prompt
+    could move a decision the identity pass made in code — the same failure mode
+    the collection/primary-key pin above exists to prevent. Merged per field
+    rather than by swapping the list, so descriptions and enums survive.
+    """
+    shapes = dict(derived.elements)
+    return [
+        f.model_copy(update={"element": shapes.get(f.name)})
+        if shapes.get(f.name) != f.element
+        else f
+        for f in fields
+    ]
+
+
 def compose_data_model(
     api_name: str,
     identity: IdentityModel,
@@ -225,6 +248,7 @@ def compose_data_model(
                     "name": d.name,
                     "collection": d.collection,
                     "primary_key": d.primary_key,
+                    "fields": _pin_element_shapes(e.fields, d),
                 }
             )
         )

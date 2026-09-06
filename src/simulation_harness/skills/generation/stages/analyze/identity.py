@@ -14,6 +14,7 @@ import re
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 
+from simulation_harness.skills.generation.ir import ElementField, ElementShape
 from simulation_harness.skills.generation.repair import GenerationStageError
 
 _CAMEL_BOUNDARY = re.compile(r"(?<!^)(?=[A-Z])")
@@ -112,6 +113,11 @@ class DerivedEntity:
     ``fields`` is a sorted tuple of ``(name, json_type)`` pairs — enough to
     build a structurally correct Entity without an LLM, which is
     what the enrich stage degrades to when it fails.
+
+    ``elements`` is the subset of those fields that are arrays whose element
+    shape could be decided, as sorted ``(field_name, ElementShape)`` pairs. A
+    field absent from it is either not an array or an array whose element shape
+    the spec never declared.
     """
 
     name: str
@@ -119,6 +125,7 @@ class DerivedEntity:
     primary_key: str
     fields: tuple[tuple[str, str], ...]
     sources: tuple[str, ...]
+    elements: tuple[tuple[str, ElementShape], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -140,6 +147,15 @@ class _Cluster:
     primary_key: str
     fields: dict[str, str] = field(default_factory=dict)
     sources: list[str] = field(default_factory=list)
+    # Raw ``items`` schema per array property, kept so element shapes can be
+    # decided in a second pass — the reference/embedded call needs the final
+    # cluster set, which does not exist while clustering is still running.
+    array_items: dict[str, dict] = field(default_factory=dict)
+    # Which source schemas contributed each field. Needed because promoting a
+    # nested element absorbs that element's own fields into the target cluster:
+    # without provenance, "is this element a subset of its target?" is circular
+    # and trivially true, so a link object could never be detected.
+    field_sources: dict[str, set[str]] = field(default_factory=dict)
 
 
 def _json_type(prop: dict) -> str:
@@ -186,7 +202,157 @@ def _absorb(
                 cluster.fields.setdefault(
                     prop_name, _json_type(prop if isinstance(prop, dict) else {})
                 )
+                cluster.field_sources.setdefault(prop_name, set()).add(source)
+                if isinstance(prop, dict) and prop.get("type") == "array":
+                    items = prop.get("items")
+                    # setdefault, and iteration over sorted names, so a property
+                    # described by two source schemas resolves the same way every
+                    # run rather than by whichever was absorbed last.
+                    if isinstance(items, dict) and items:
+                        cluster.array_items.setdefault(prop_name, items)
     cluster.sources.append(source)
+
+
+def _element_fields(element: dict) -> tuple[ElementField, ...]:
+    props = element.get("properties")
+    if not isinstance(props, dict):
+        return ()
+    return tuple(
+        ElementField(
+            name=name,
+            type=_json_type(props[name] if isinstance(props[name], dict) else {}),
+        )
+        for name in sorted(props)
+        if isinstance(name, str)
+    )
+
+
+def _resolves_one_hop_out(
+    clusters: dict[str, _Cluster],
+    target: _Cluster,
+    field_name: str,
+    own_sources: set[str],
+) -> bool:
+    """True when ``field_name`` belongs to an entity the target hangs off.
+
+    A response often denormalizes a grandparent's attribute down onto a nested
+    element: tau2-retail's order line carries ``name`` and ``product_id``, which
+    are ``Product`` attributes reached through ``Product.variants``, not columns
+    of the ``Item`` the line references. Such a field is neither carried by the
+    target nor parent-scoped — it is one hop further out, so the parent still
+    stores a bare identifier and the response is assembled by a two-hop read.
+
+    Requiring the target to be *nested inside* the holder is what keeps this from
+    matching on a coincidence: ``User`` also carries a ``name``, and without the
+    nesting test that alone would excuse the leftover.
+    """
+    for noun, holder in clusters.items():
+        if holder is target:
+            continue
+        if not (holder.field_sources.get(field_name, set()) - own_sources):
+            continue
+        holder_sources = set(holder.sources)
+        if any(
+            source.rsplit(".", 1)[0] in holder_sources
+            for source in target.sources
+            if "." in source
+        ):
+            return True
+    return False
+
+
+def _element_shape(
+    clusters: dict[str, _Cluster],
+    parent: _Cluster,
+    prop_name: str,
+    items: dict,
+    *,
+    synthetic: bool,
+) -> ElementShape | None:
+    """Decide how one array property's elements are stored, or ``None``.
+
+    Mirrors the promotion test in :func:`derive_identity` rather than inventing a
+    second rule: an element is a ``reference`` exactly when that pass would have
+    clustered it into an entity of its own. Reading the promotion back out is the
+    point — the normalization decision is already made there, and today it is
+    made and then discarded.
+
+    ``None`` means the spec declared no element shape (``"items": {}``), so
+    nothing downstream should constrain it.
+    """
+    if not items:
+        return None
+    element = next(_nested_objects({"type": "array", "items": items}), None)
+    if element is None:
+        declared = items.get("type")
+        # A typed primitive is worth pinning (this is the field where the schema
+        # stage flip-flopped between `{}` and `{"type": "string"}` run to run);
+        # an untyped or non-string type annotation is not decidable here.
+        return (
+            ElementShape(kind="scalar", type=declared)
+            if isinstance(declared, str)
+            else None
+        )
+
+    fields = _element_fields(element)
+    nested = identity_key(prop_name, element, synthetic=synthetic)
+    if nested is None or nested == parent.primary_key:
+        return ElementShape(kind="embedded", fields=fields)
+    noun = noun_for(nested, prop_name)
+    target = clusters.get(noun)
+    if target is None:
+        # The nested schema names an identity but never became an entity, so
+        # there is no collection to reference. Stored inline.
+        return ElementShape(kind="embedded", fields=fields)
+
+    # Fork 1: a pure projection of the target keeps nothing of its own, so the
+    # parent stores the bare identifier. Anything the target does not carry is
+    # parent-scoped and has to survive in a link object beside the key.
+    #
+    # "Carry" means carried *independently*: this element's own promotion put its
+    # fields into the target cluster, so comparing against target.fields alone
+    # would compare the element with itself.
+    # One absorb path per parent source schema, so exclude them all — a cluster
+    # built from several response schemas absorbed this element once per schema.
+    own_sources = {f"{s}.{prop_name}" for s in parent.sources}
+    leftovers = [
+        f
+        for f in fields
+        if not (target.field_sources.get(f.name, set()) - own_sources)
+        and not _resolves_one_hop_out(clusters, target, f.name, own_sources)
+    ]
+    link_fields: tuple[ElementField, ...] = ()
+    if leftovers:
+        key_field = tuple(f for f in fields if f.name == nested)
+        link_fields = key_field + tuple(f for f in leftovers if f.name != nested)
+    return ElementShape(
+        kind="reference",
+        target_collection=pluralize(noun),
+        target_key=target.primary_key,
+        link_fields=link_fields,
+    )
+
+
+def _derive_element_shapes(
+    clusters: dict[str, _Cluster], *, synthetic: bool
+) -> dict[str, dict[str, ElementShape]]:
+    """Element shapes per cluster noun, decided once clustering is complete."""
+    out: dict[str, dict[str, ElementShape]] = {}
+    for noun in sorted(clusters):
+        cluster = clusters[noun]
+        shapes: dict[str, ElementShape] = {}
+        for prop_name in sorted(cluster.array_items):
+            shape = _element_shape(
+                clusters,
+                cluster,
+                prop_name,
+                cluster.array_items[prop_name],
+                synthetic=synthetic,
+            )
+            if shape is not None:
+                shapes[prop_name] = shape
+        out[noun] = shapes
+    return out
 
 
 def _reject_colliding_collections(clusters: dict[str, _Cluster]) -> None:
@@ -299,6 +465,7 @@ def derive_identity(
                     f"{name}.{prop_name}",
                 )
     _reject_colliding_collections(clusters)
+    element_shapes = _derive_element_shapes(clusters, synthetic=synthetic)
     entities = tuple(
         DerivedEntity(
             name=camel(noun),
@@ -306,6 +473,9 @@ def derive_identity(
             primary_key=clusters[noun].primary_key,
             fields=tuple(sorted(clusters[noun].fields.items())),
             sources=tuple(clusters[noun].sources),
+            elements=tuple(
+                sorted(element_shapes.get(noun, {}).items(), key=lambda kv: kv[0])
+            ),
         )
         for noun in sorted(clusters)
     )
