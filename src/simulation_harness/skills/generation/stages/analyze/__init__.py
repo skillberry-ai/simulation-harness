@@ -7,6 +7,7 @@ from collections.abc import Callable
 
 from simulation_harness.openapi.parser import OpenAPISpec
 from simulation_harness.skills.generation.ir import Entity, OperationEvidence, SpecModel
+from simulation_harness.skills.generation.llm import is_fatal_llm_error
 from simulation_harness.skills.generation.repair import (
     GenerationStageError,
     guard_timeout,
@@ -146,6 +147,14 @@ async def analyze(
             # connection reset — is worth discarding that contract for. A
             # code-level bug inside enrich_entities is caught by that module's
             # own unit tests, not by this handler.
+            #
+            # The exception is a settings fault: a rejected key, a model the
+            # team cannot reach, or a name the gateway does not know. Nothing
+            # downstream can succeed either, so softening it here only defers
+            # the identical failure to the next call with its cause already
+            # scrolled out of view (issue #13). Let those through.
+            if is_fatal_llm_error(e):
+                raise
             logger.warning(
                 "enrich stage skipped (%s: %s) — entities keep their derived "
                 "contract but lose descriptions, enums and relationships",
