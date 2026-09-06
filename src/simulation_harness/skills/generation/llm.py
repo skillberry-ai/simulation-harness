@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
-import os
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from openai import LengthFinishReasonError
+from openai import APIStatusError, LengthFinishReasonError
 from pydantic import SecretStr
+
+from simulation_harness.config.env_source import harness_env
 
 
 class StructuredCallError(RuntimeError):
@@ -26,14 +27,36 @@ _TRUNCATED_MSG = (
 # real cost/latency win for ordinary generation, and only a determinism
 # measurement (scripts/check-generation-determinism.sh) needs it disabled. The
 # harness reads this once per `build_chat` call, so it must be set in the
-# environment the harness process itself was started with — restart the
-# harness after exporting it, don't set it only in a client's shell.
+# environment the harness process itself was started with (or in that process's
+# `.env`) — restart the harness after changing it, don't set it only in a
+# client's shell.
 _NO_CACHE_ENV_VAR = "HARNESS_LLM_NO_CACHE"
 _TRUTHY = {"1", "true", "yes"}
 
 
 def _no_cache_requested() -> bool:
-    return os.environ.get(_NO_CACHE_ENV_VAR, "").strip().lower() in _TRUTHY
+    # Resolved through config.env_source so this variable has the same ingress as
+    # every other HARNESS_* one: process env first, then `.env` (issue #13).
+    return (harness_env(_NO_CACHE_ENV_VAR) or "").strip().lower() in _TRUTHY
+
+
+# Statuses that no retry, repair, or per-stage degrade can recover from: the key
+# is wrong (401), the team cannot reach the model (403), or the endpoint has
+# never heard of it (404). A stage that softens one of these into a warning just
+# defers the same failure to the next call and buries the cause above the
+# traceback — which is how issue #13's 403 was misread as a generation problem.
+_FATAL_STATUS_CODES = frozenset({401, 403, 404})
+
+
+def is_fatal_llm_error(error: BaseException) -> bool:
+    """True when ``error`` is a configuration fault, not a transient one.
+
+    Callers that degrade gracefully on LLM failure should re-raise these instead,
+    so the operator sees the credential or model-name problem directly.
+    """
+    return (
+        isinstance(error, APIStatusError) and error.status_code in _FATAL_STATUS_CODES
+    )
 
 
 def build_chat(

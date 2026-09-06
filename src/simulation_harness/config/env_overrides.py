@@ -3,27 +3,39 @@
 This layer exists so the YAML schema stays strict (extra="forbid") while still
 letting Kubernetes inject runtime tweaks via env vars. The full list of
 recognized variables is documented in deploy/README.md.
+
+Each variable is resolved through `config.env_source`: the process environment
+wins, then the dotenv file, then the YAML value stands. `.env` is consulted
+because `.env.example` documents `HARNESS_LLM_*` as belonging there; before
+that ingress existed, a `.env`-only override was silently discarded and the
+YAML model reached the gateway instead (issue #13).
 """
 
 import os
+from typing import Any, Callable, Sequence
 
+from .env_source import DEFAULT_ENV_FILE, dotenv_snapshot, env_value
 from .models import HarnessConfig, TransportType
 
+# Variables that belong in `.env` but are not config overrides, so the typo
+# check below must not flag them: secrets (config/secrets.py owns those), the
+# path to the YAML itself, and the gateway cache toggle read by
+# skills/generation/llm.py.
+_NON_OVERRIDE_KEYS = frozenset(
+    {"HARNESS_CONFIG_PATH", "HARNESS_LLM_NO_CACHE"},
+)
 
-def _int_env(name: str) -> int | None:
-    raw = os.getenv(name)
-    if raw is None:
-        return None
+_PROCESS_ENV_SOURCE = "process env"
+
+
+def _parse_int(name: str, raw: str) -> int:
     try:
         return int(raw)
     except ValueError as e:
         raise ValueError(f"{name} must be an integer, got {raw!r}") from e
 
 
-def _bool_env(name: str) -> bool | None:
-    raw = os.getenv(name)
-    if raw is None:
-        return None
+def _parse_bool(name: str, raw: str) -> bool:
     lowered = raw.strip().lower()
     if lowered in ("true", "1", "yes"):
         return True
@@ -32,8 +44,81 @@ def _bool_env(name: str) -> bool | None:
     raise ValueError(f"{name} must be a boolean, got {raw!r}")
 
 
-def apply_env_overrides(config: HarnessConfig) -> HarnessConfig:
-    """Return a copy of ``config`` with HARNESS_* env vars applied.
+def _parse_str(name: str, raw: str) -> str:  # noqa: ARG001 - uniform parser signature
+    return raw
+
+
+def _parse_transport(name: str, raw: str) -> str:
+    return TransportType(raw).value
+
+
+# (env var, path into the config dict, parser). The llm: block is overridable
+# because an orchestrator may deploy the image without mounting a harness.yaml
+# ConfigMap, leaving the baked-in models as the only ones reachable. provider is
+# included alongside the model names: the provider and the model prefix must
+# stay consistent with the endpoint LLM_API_BASE points at, so overriding one
+# without the other is a trap.
+_OVERRIDES: Sequence[tuple[str, tuple[str, str], Callable[[str, str], Any]]] = (
+    ("HARNESS_LLM_PROVIDER", ("llm", "provider"), _parse_str),
+    (
+        "HARNESS_LLM_SKILL_GENERATION_MODEL",
+        ("llm", "skill_generation_model"),
+        _parse_str,
+    ),
+    ("HARNESS_LLM_SIMULATION_MODEL", ("llm", "simulation_model"), _parse_str),
+    ("HARNESS_SERVER_HOST", ("server", "host"), _parse_str),
+    ("HARNESS_SERVER_PORT", ("server", "port"), _parse_int),
+    ("HARNESS_SKILLS_FOLDER", ("skills", "folder"), _parse_str),
+    ("HARNESS_LOG_LEVEL", ("logging", "level"), _parse_str),
+    ("HARNESS_LOG_DESTINATION", ("logging", "destination_folder"), _parse_str),
+    ("HARNESS_MCP_TRANSPORT", ("mcp", "transport"), _parse_transport),
+    ("HARNESS_SESSIONS_MAX_MESSAGES", ("sessions", "max_messages"), _parse_int),
+    (
+        "HARNESS_SESSIONS_IDLE_TIMEOUT_SECONDS",
+        ("sessions", "idle_timeout_seconds"),
+        _parse_int,
+    ),
+    (
+        "HARNESS_SESSIONS_MAX_CONCURRENT_QUEUE_DEPTH",
+        ("sessions", "max_concurrent_queue_depth"),
+        _parse_int,
+    ),
+    ("HARNESS_AUTOSTART_ENABLED", ("startup", "autostart_enabled"), _parse_bool),
+    ("HARNESS_AUTOSTART_SIMULATION", ("startup", "autostart_simulation"), _parse_str),
+)
+
+RECOGNIZED_KEYS = frozenset(name for name, _, _ in _OVERRIDES) | _NON_OVERRIDE_KEYS
+
+# What the last apply_env_overrides() call actually did. Recorded rather than
+# logged inline: main.py configures logging *from* the overridden config, so no
+# logger exists yet at the point the overrides are applied.
+_applied: dict[str, tuple[str, str]] = {}
+_unrecognized: list[str] = []
+
+
+def applied_overrides() -> dict[str, tuple[str, str]]:
+    """Overrides applied by the last call: name -> (value, source)."""
+    return dict(_applied)
+
+
+def unrecognized_dotenv_keys() -> list[str]:
+    """HARNESS_* keys found in the dotenv file that no override consumes.
+
+    Almost always a typo (``HARNESS_LLM_MODEL`` for
+    ``HARNESS_LLM_SIMULATION_MODEL``), which would otherwise be indistinguishable
+    from not having set it at all. Sorted, so the logged line is stable.
+    """
+    return list(_unrecognized)
+
+
+def apply_env_overrides(
+    config: HarnessConfig, *, env_file: str | None = DEFAULT_ENV_FILE
+) -> HarnessConfig:
+    """Return a copy of ``config`` with HARNESS_* overrides applied.
+
+    Precedence per variable: process environment, then ``env_file``, then the
+    value already in ``config``. Pass ``env_file=None`` to ignore the dotenv
+    file entirely.
 
     Recognized variables (all optional):
       HARNESS_SERVER_HOST, HARNESS_SERVER_PORT
@@ -45,71 +130,33 @@ def apply_env_overrides(config: HarnessConfig) -> HarnessConfig:
       HARNESS_AUTOSTART_ENABLED, HARNESS_AUTOSTART_SIMULATION
       HARNESS_LLM_PROVIDER, HARNESS_LLM_SKILL_GENERATION_MODEL,
       HARNESS_LLM_SIMULATION_MODEL
+
+    Raises:
+        ValueError: If a variable is set to a value of the wrong type, whether
+            it came from the process environment or from ``env_file``.
     """
+    global _applied, _unrecognized
+
+    snapshot = dotenv_snapshot(env_file)
     data = config.model_dump()
+    applied: dict[str, tuple[str, str]] = {}
 
-    # The llm: block is overridable because an orchestrator may deploy the image
-    # without mounting a harness.yaml ConfigMap, leaving the baked-in models as
-    # the only ones reachable. provider is included alongside the model names:
-    # the provider and the model prefix must stay consistent with the endpoint
-    # LLM_API_BASE points at, so overriding one without the other is a trap.
-    llm_provider = os.getenv("HARNESS_LLM_PROVIDER")
-    if llm_provider is not None:
-        data["llm"]["provider"] = llm_provider
-
-    skill_generation_model = os.getenv("HARNESS_LLM_SKILL_GENERATION_MODEL")
-    if skill_generation_model is not None:
-        data["llm"]["skill_generation_model"] = skill_generation_model
-
-    simulation_model = os.getenv("HARNESS_LLM_SIMULATION_MODEL")
-    if simulation_model is not None:
-        data["llm"]["simulation_model"] = simulation_model
-
-    server_host = os.getenv("HARNESS_SERVER_HOST")
-    if server_host is not None:
-        data["server"]["host"] = server_host
-
-    server_port = _int_env("HARNESS_SERVER_PORT")
-    if server_port is not None:
-        data["server"]["port"] = server_port
-
-    skills_folder = os.getenv("HARNESS_SKILLS_FOLDER")
-    if skills_folder is not None:
-        data["skills"]["folder"] = skills_folder
-
-    log_level = os.getenv("HARNESS_LOG_LEVEL")
-    if log_level is not None:
-        data["logging"]["level"] = log_level
-
-    log_dest = os.getenv("HARNESS_LOG_DESTINATION")
-    if log_dest is not None:
-        data["logging"]["destination_folder"] = log_dest
-
-    transport = os.getenv("HARNESS_MCP_TRANSPORT")
-    if transport is not None:
-        data["mcp"]["transport"] = TransportType(transport).value
-
-    max_messages = _int_env("HARNESS_SESSIONS_MAX_MESSAGES")
-    if max_messages is not None:
-        data["sessions"]["max_messages"] = max_messages
-
-    idle_timeout = _int_env("HARNESS_SESSIONS_IDLE_TIMEOUT_SECONDS")
-    if idle_timeout is not None:
-        data["sessions"]["idle_timeout_seconds"] = idle_timeout
-
-    queue_depth = _int_env("HARNESS_SESSIONS_MAX_CONCURRENT_QUEUE_DEPTH")
-    if queue_depth is not None:
-        data["sessions"]["max_concurrent_queue_depth"] = queue_depth
-
-    autostart_enabled = _bool_env("HARNESS_AUTOSTART_ENABLED")
-    if autostart_enabled is not None:
-        data["startup"]["autostart_enabled"] = autostart_enabled
-
-    autostart = os.getenv("HARNESS_AUTOSTART_SIMULATION")
-    if autostart is not None:
-        data["startup"]["autostart_simulation"] = autostart
+    for name, (section, field), parse in _OVERRIDES:
+        raw = env_value(name, snapshot)
+        if raw is None:
+            continue
+        data[section][field] = parse(name, raw)
+        source = _PROCESS_ENV_SOURCE if name in os.environ else str(env_file)
+        applied[name] = (raw, source)
 
     overridden = HarnessConfig(**data)
+
+    _applied = applied
+    _unrecognized = sorted(
+        key
+        for key in snapshot
+        if key.startswith("HARNESS_") and key not in RECOGNIZED_KEYS
+    )
 
     # Replace the cached singleton so get_config() returns the overridden values
     # everywhere (skill registry, dependency injection, etc.).

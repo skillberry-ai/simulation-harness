@@ -9,7 +9,8 @@ llm:
   provider: openai
   # Model ids are passed verbatim to the OpenAI-compatible endpoint, so use a
   # bare id (no "openai/" prefix). Point LLM_API_BASE at a proxy and override
-  # these with HARNESS_LLM_* if your gateway uses different names.
+  # these with HARNESS_LLM_* if your gateway uses different names — set in the
+  # process env or in .env, either of which wins over the values here.
   skill_generation_model: gpt-4.1   # one-time, per-spec skill generation
   simulation_model: gpt-4.1         # hot path - every tools/call
   temperature: 0

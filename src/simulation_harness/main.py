@@ -14,7 +14,12 @@ from fastapi.responses import JSONResponse
 
 from simulation_harness.api.dependencies import get_simulation_host, get_skill_registry
 from simulation_harness.api.v1.simulations import router as simulations_router
-from simulation_harness.config.env_overrides import apply_env_overrides
+from simulation_harness.config.env_overrides import (
+    applied_overrides,
+    apply_env_overrides,
+    unrecognized_dotenv_keys,
+)
+from simulation_harness.config.env_source import resolve_config_path
 from simulation_harness.config.settings import (
     ConfigValidationError,
     load_config,
@@ -36,16 +41,9 @@ from simulation_harness.utils.errors import (
 )
 from simulation_harness.utils.logging import configure_logging, get_logger
 
-# Read HARNESS_CONFIG_PATH from .env if not already in the process env.
-# Use dotenv_values (no side-effects) rather than load_dotenv (mutates os.environ).
-from dotenv import dotenv_values as _dotenv_values
-
-_dotenv_file_vars = _dotenv_values(".env")
-config_path = os.getenv(
-    "HARNESS_CONFIG_PATH",
-    _dotenv_file_vars.get("HARNESS_CONFIG_PATH", "config/harness.yaml"),
-)
-del _dotenv_values, _dotenv_file_vars
+# Process env wins, then .env, then the default path. config/env_source.py reads
+# .env without mutating os.environ, so nothing here leaks into other readers.
+config_path = resolve_config_path()
 
 try:
     config = load_config(config_path)
@@ -76,6 +74,28 @@ logger = get_logger(__name__)
 logger.info(f"Logging configured: level={config.logging.level}, file={log_file}")
 logger.info(f"Loading configuration from: {config_path}")
 logger.info(f"Configuration loaded successfully: transport={config.mcp.transport}")
+
+# Report the HARNESS_* overrides now rather than where they were applied: the
+# override runs above, before logging is configured from its own result. Naming
+# them here is what turns a surprising model id in a gateway 403 into a one-line
+# answer (issue #13). No HARNESS_* variable holds a secret, so values are safe
+# to log verbatim.
+_applied_env_overrides = applied_overrides()
+if _applied_env_overrides:
+    logger.info(
+        "env overrides applied: %s",
+        ", ".join(
+            f"{name}={value} ({source})"
+            for name, (value, source) in sorted(_applied_env_overrides.items())
+        ),
+    )
+_unrecognized_env_keys = unrecognized_dotenv_keys()
+if _unrecognized_env_keys:
+    logger.warning(
+        "env overrides ignored: %s set in .env but not a recognized HARNESS_* "
+        "variable — check the spelling against the table in deploy/README.md",
+        ", ".join(_unrecognized_env_keys),
+    )
 
 
 @asynccontextmanager

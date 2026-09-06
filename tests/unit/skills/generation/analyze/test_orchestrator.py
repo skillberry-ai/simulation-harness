@@ -1,6 +1,8 @@
 import asyncio
 from unittest.mock import AsyncMock, patch
 
+import httpx
+import openai
 import pytest
 
 from simulation_harness.openapi.parser import OpenAPISpec
@@ -819,3 +821,107 @@ async def test_analyze_hands_only_undecidable_schemas_to_the_fallback() -> None:
     assert captured["derived"].collections == ["orders"]
     assert ir.store_metadata.collections == ["orders"]
     assert ir.identity_provenance == {"Order": "derived"}
+
+
+def _api_error(cls: type, status: int) -> Exception:
+    request = httpx.Request("POST", "https://gateway.example.com/v1/chat/completions")
+    return cls("boom", response=httpx.Response(status, request=request), body=None)
+
+
+@pytest.mark.parametrize(
+    ("cls", "status"),
+    [
+        (openai.AuthenticationError, 401),
+        (openai.PermissionDeniedError, 403),
+        (openai.NotFoundError, 404),
+    ],
+)
+async def test_analyze_enrich_auth_failure_propagates(cls: type, status: int) -> None:
+    """Issue #13: a credential/model-access failure must not degrade to a warning.
+
+    Enrich is genuinely optional, but nothing downstream can succeed once the
+    gateway has refused the model — the extract stage raises the same error one
+    call later, with the real cause already scrolled past. Failing here names it.
+    """
+    records = [{"operation_id": "get_user", "kind": "read", "patterns": []}]
+    with (
+        patch.object(A, "extract_data_model", AsyncMock()) as fallback,
+        patch.object(A, "classify_batch", AsyncMock(return_value=records)),
+        patch.object(
+            A, "enrich_entities", AsyncMock(side_effect=_api_error(cls, status))
+        ),
+        pytest.raises(cls),
+    ):
+        await A.analyze(
+            RPC_SPEC,
+            "aha",
+            extract_llm=object(),
+            classify_llm=object(),
+            enrich_llm=object(),
+            retries=0,
+            batch_cap=40,
+            concurrency=5,
+        )
+    fallback.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ("cls", "status"),
+    [
+        (openai.RateLimitError, 429),
+        (openai.InternalServerError, 500),
+    ],
+)
+async def test_analyze_enrich_transient_api_failure_still_degrades(
+    cls: type, status: int
+) -> None:
+    """The degrade path is for exactly these, and must keep working."""
+    records = [{"operation_id": "get_user", "kind": "read", "patterns": []}]
+    with (
+        patch.object(A, "extract_data_model", AsyncMock()),
+        patch.object(A, "classify_batch", AsyncMock(return_value=records)),
+        patch.object(
+            A, "enrich_entities", AsyncMock(side_effect=_api_error(cls, status))
+        ),
+    ):
+        ir = await A.analyze(
+            RPC_SPEC,
+            "aha",
+            extract_llm=object(),
+            classify_llm=object(),
+            enrich_llm=object(),
+            retries=0,
+            batch_cap=40,
+            concurrency=5,
+        )
+    assert ir.entities[0].fields == _STRUCTURAL_USER_FIELDS
+    assert ir.identity_provenance == {"User": "derived"}
+
+
+async def test_analyze_enrich_stage_error_still_degrades() -> None:
+    """Regression guard: a bad LLM payload is still a soft skip, not a failure."""
+    records = [{"operation_id": "get_user", "kind": "read", "patterns": []}]
+    with (
+        patch.object(A, "extract_data_model", AsyncMock()),
+        patch.object(A, "classify_batch", AsyncMock(return_value=records)),
+        patch.object(
+            A,
+            "enrich_entities",
+            AsyncMock(
+                side_effect=GenerationStageError(
+                    "analyze:enrich", ["unrepairable payload"]
+                )
+            ),
+        ),
+    ):
+        ir = await A.analyze(
+            RPC_SPEC,
+            "aha",
+            extract_llm=object(),
+            classify_llm=object(),
+            enrich_llm=object(),
+            retries=0,
+            batch_cap=40,
+            concurrency=5,
+        )
+    assert ir.entities[0].fields == _STRUCTURAL_USER_FIELDS
