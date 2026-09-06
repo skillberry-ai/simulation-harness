@@ -170,6 +170,34 @@ response fields are computed rather than copied from the request or store; the
 (Stage 6), keeping numeric decisions in one authoritative place. Chunks generate
 concurrently, bounded by a semaphore (`concurrency`).
 
+Most of that prompt is rules for *reading* the spec, because the ambiguities it
+resolves all fail silently — the model picks a defensible reading and the section
+is confidently wrong rather than obviously broken. Four of them:
+
+- **Field-family ownership.** A group of fields named after an action belongs to
+  the operation that performs that action, and only that operation writes it.
+  "The field exists on the entity" is not a usable test, since a write operation
+  typically returns the whole resource. Matching is on the naming *relation*, so
+  `<verb>_*`, `<verb>By`/`<verb>At` and a nested `<verb>` object all count.
+- **Own workflow vs. mentioned workflow.** An operation implements the workflow
+  named by its own path, `operationId` and summary — not one its description
+  mentions in passing or reads to check a precondition. Another operation's field
+  family neither makes this one defer nor becomes writable by it.
+- **Recording an intent vs. applying an effect.** Where a dedicated field family
+  for the operation's own action exists, the operation records into it instead of
+  applying the effect to the general-purpose collections; doing both applies it
+  twice. Identical request prose cannot distinguish the two cases, so the
+  decision is made from the schema.
+- **Actor attribution.** A sentence whose subject is the caller, agent or user
+  states an obligation the simulator cannot observe, so it is recorded under
+  *Caller expectations* rather than becoming a required input, a precondition or
+  an error, and the state change is specified as unconditional.
+
+The prompt also separates the storage model from the response shape: the entities
+this stage receives may be normalized, so a nested object or array the response
+declares but the entity does not carry has to be assembled by joining the store
+that holds the foreign key, never answered with an empty value.
+
 ### Stage 4 — Schema
 
 `generate_schema` (`stages/schema.py:37`; prompt `assets/generation/schema.md`,

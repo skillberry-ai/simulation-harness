@@ -244,3 +244,82 @@ def test_operation_prompt_declares_description_normative() -> None:
     assert "behavioural contract, not commentary" in prompt
     assert "does not license inventing fields" in prompt
     assert "description" in prompt
+
+
+def _prompt_flat() -> str:
+    """The prompt is hard-wrapped, so a load-bearing phrase can straddle a line
+    break. Collapse whitespace so the assertions below test the wording rather
+    than where the wrap happened to fall."""
+    return " ".join(O._load_prompt().split())
+
+
+def test_operation_prompt_makes_ownership_the_test_not_existence() -> None:
+    """A write operation typically returns the whole resource, so "does the
+    field exist on the entity" admits every field — including another
+    operation's bookkeeping. Ownership has to be the test instead."""
+    p = _prompt_flat()
+    assert "A field family that names an operation belongs to that operation." in p
+    assert "far too weak a test" in p
+    assert "only that operation writes that group" in p
+
+
+def test_operation_prompt_matches_ownership_across_naming_conventions() -> None:
+    """The rule is the naming *relation* between a field group and an
+    operation, not one convention for spelling it: a spec using
+    `escalatedBy`/`escalatedAt`, or a nested object, has to match too."""
+    p = _prompt_flat()
+    assert "`<verb>By`/`<verb>At`, a nested `<verb>` object" in p
+    assert "Match on the naming *relation*, not on one spelling of it." in p
+
+
+def test_operation_prompt_scopes_the_workflow_to_the_operations_own_names() -> None:
+    """A description that mentions another workflow in passing, or reads it to
+    check a precondition, does not make this operation that workflow. And
+    concluding "no family of mine exists, so I apply directly" settles only
+    whether to defer — it is not permission to write someone else's fields."""
+    p = _prompt_flat()
+    assert (
+        "implements the workflow named by its **own** path, operationId and summary"
+        in p
+    )
+    assert "never a workflow its description merely mentions in passing" in p
+    assert "A foreign family is doubly out of bounds" in p
+    assert "name the foreign families your operation must not write" in p
+
+
+def test_operation_prompt_separates_recording_an_intent_from_applying_effect() -> None:
+    """Ownership decides which operation writes a dedicated field family.
+    Whether this operation records a pending intent into it or applies the
+    effect to the general-purpose collections is a second question, and doing
+    both applies the effect twice. Word-for-word identical prose can
+    distinguish neither, so the decision is sent to the schema."""
+    p = _prompt_flat()
+    assert "records an intent or applies an effect" in p
+    assert "doing both would apply it twice" in p
+    assert "Decide from the schema." in p
+
+
+def test_operation_prompt_attributes_sentences_to_an_actor() -> None:
+    """An obligation on the caller ("the agent must ask the user to confirm")
+    is not a condition on the endpoint: the simulator cannot observe a
+    conversation, so promoting it to a precondition or an error makes the state
+    change unreachable. Nor is unobservability an excuse for not computing a
+    value the stores already hold."""
+    p = _prompt_flat()
+    assert "Attribute every sentence to an actor before you act on it." in p
+    assert "can never be a condition on this operation's behaviour" in p
+    assert "`Caller expectations`" in p
+    assert "**unconditionally**" in p
+    assert 'Never answer that an operation "lacks the data"' in p
+
+
+def test_operation_prompt_distinguishes_storage_shape_from_response_shape() -> None:
+    """The entities handed to this stage are the storage model and may be
+    normalized. When the response declares a nested value the entity does not
+    carry, the two silent failures are answering with an empty object and
+    forbidding the join the response needs."""
+    p = _prompt_flat()
+    assert "Storage shape and response shape are not the same shape." in p
+    assert "Assemble it by joining." in p
+    assert "Do not fall back to an empty object or array" in p
+    assert "Do not forbid the reads the response needs." in p
