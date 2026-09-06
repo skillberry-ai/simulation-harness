@@ -347,3 +347,47 @@ def test_a_plain_nested_object_is_not_a_container() -> None:
     }
     ident = derive_identity(schemas, synthetic=True)
     assert "address" not in _shapes(ident.entities, "Order")
+
+
+def test_element_required_is_captured() -> None:
+    """`required` is what turns a type check into a shape check downstream."""
+    schemas: dict[str, dict] = {
+        "Order": {
+            "properties": {
+                "order_id": {"type": "string"},
+                "lines": {
+                    "type": "array",
+                    "items": {
+                        "properties": {
+                            "sku": {"type": "string"},
+                            "note": {"type": "string"},
+                        },
+                        "required": ["sku"],
+                    },
+                },
+            }
+        }
+    }
+    ident = derive_identity(schemas, synthetic=True)
+    shape = _shapes(ident.entities, "Order")["lines"]
+    assert {(f.name, f.required) for f in shape.fields} == {
+        ("sku", True),
+        ("note", False),
+    }
+
+
+def test_no_declared_required_means_no_required() -> None:
+    schemas: dict[str, dict] = {
+        "Order": {
+            "properties": {
+                "order_id": {"type": "string"},
+                "lines": {
+                    "type": "array",
+                    "items": {"properties": {"sku": {"type": "string"}}},
+                },
+            }
+        }
+    }
+    ident = derive_identity(schemas, synthetic=True)
+    shape = _shapes(ident.entities, "Order")["lines"]
+    assert [f.required for f in shape.fields] == [False]

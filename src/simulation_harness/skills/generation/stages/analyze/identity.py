@@ -235,10 +235,17 @@ def _element_fields(element: dict) -> tuple[ElementField, ...]:
     props = element.get("properties")
     if not isinstance(props, dict):
         return ()
+    declared = element.get("required")
+    required = (
+        {r for r in declared if isinstance(r, str)}
+        if isinstance(declared, list)
+        else set()
+    )
     return tuple(
         ElementField(
             name=name,
             type=_json_type(props[name] if isinstance(props[name], dict) else {}),
+            required=name in required,
         )
         for name in sorted(props)
         if isinstance(name, str)
