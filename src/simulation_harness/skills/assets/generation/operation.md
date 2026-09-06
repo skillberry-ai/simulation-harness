@@ -98,27 +98,47 @@ read: an unobservable CALLER conversation is out of scope, an amount derived fro
 already in the stores is not. Never answer that an operation "lacks the data" for a value the
 stores can supply — read the stores and compute it.
 
-**Storage shape and response shape are not the same shape.** The entities you were given
-are the STORAGE model, and it may be NORMALIZED: a collection that a response nests inside a
-resource often lives in its own store, linked back by a foreign key. So check the entity's
-field list before you write "return `<field>` as stored on the entity" — if the response shape
-declares a nested object, map or array that is **not** a field of the entity you read, the value
-is not there to copy and must be assembled.
+**Storage shape and response shape are not the same shape, and you are told which is which.**
+Do not infer normalization from field names. Every container field on the entity carries an
+`element` shape, and `linked_entities` carries the entities those elements point at:
 
-Assemble it by joining. Find the store whose entity carries a key referring back to the resource
-you read, then say so explicitly in both the store-access and the response steps: "read
-`<other collection>` where `<foreign key>` = `<the key you read by>`, keyed by `<its id field>`"
-(or as a list, when the response shape is an array). The nested objects' fields come from that
-other entity, projected to exactly the fields the response shape declares.
+- `scalar` — the container holds primitives of `element.type`.
+- `embedded` — the container holds the objects in `element.fields`, stored inline. Project them
+  directly; no further read is needed.
+- `reference` — storage holds **identifiers**, not the objects the response declares. The
+  elements live in `element.target_collection`, keyed by `element.target_key`, whose fields are
+  in `linked_entities`. Read that collection and project each element to exactly the fields the
+  response declares, naming the collection and the key in the store-read steps. When
+  `element.link_fields` is non-empty, storage holds those fields *beside* the identifier and the
+  rest still comes from the target.
+- `element.hop_collections`, when present, names collections holding element fields the target
+  does not carry — a response denormalizing a further-out entity's attribute onto the element.
+  Read those too; the value is available, so never answer that it is not.
+- **No `element` at all** means the spec never declared that shape. Specify what the response
+  needs and read what it requires, and assert nothing about how the elements are stored.
 
-Two failures to avoid:
+A `map` keeps its elements under its keys, and those keys are already the identifiers, so a map
+is projected in place rather than joined. `element.target_collection` on a map names the
+collection its keys identify.
+
+**Writing into a `reference` container is a cross-collection write.** When the request supplies
+an element's own fields, the operation creates the row in `element.target_collection` and stores
+its key in the container — it does not put the whole object in the container. Specify both steps,
+and say which collection each one touches.
+
+Three failures to avoid:
 
 - **Do not fall back to an empty object or array** for a nested value the stores can populate.
   An empty result is correct only when the join genuinely matches no rows — never as the
   standing answer because the field is missing from the entity you read.
-- **Do not forbid the reads the response needs.** "Do not read any other collection" is wrong
-  whenever the declared response shape requires a join. Read exactly the collections the
-  response requires, name each one, and no more.
+- **Do not forbid the reads the response needs.** "Do not read any other collection" belongs
+  only in an operation whose response is entirely scalars declared on the entity you read. For
+  any response that nests objects it is wrong, and stating it in the same section where you also
+  spell out a nested element shape is a flat self-contradiction.
+- **Do not wave at a nested container.** "Return the stored `<field>` as-is" is not a contract
+  for an array or map of objects — say what each element projects to, and from where. A value you
+  join or project is assembled, not copied, so it belongs under `Derived fields` with its
+  formula; `none` is wrong for an operation that assembles one.
 
 Also include a **Derived fields** subsection: for each response field whose
 value is COMPUTED rather than copied from the request or read unchanged from the

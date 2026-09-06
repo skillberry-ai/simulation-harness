@@ -313,13 +313,48 @@ def test_operation_prompt_attributes_sentences_to_an_actor() -> None:
     assert 'Never answer that an operation "lacks the data"' in p
 
 
-def test_operation_prompt_distinguishes_storage_shape_from_response_shape() -> None:
-    """The entities handed to this stage are the storage model and may be
-    normalized. When the response declares a nested value the entity does not
-    carry, the two silent failures are answering with an empty object and
-    forbidding the join the response needs."""
+def test_operation_prompt_reads_the_element_shape_rather_than_inferring_it() -> None:
+    """The stage is now *given* each container field's element shape and the
+    entities it points at, so the prompt names the three kinds instead of asking
+    the model to infer normalization from field names — which it could not do,
+    since a container field used to arrive typed only `array`."""
     p = _prompt_flat()
-    assert "Storage shape and response shape are not the same shape." in p
-    assert "Assemble it by joining." in p
+    assert "you are told which is which" in p
+    assert "Do not infer normalization from field names." in p
+    for kind in ("`scalar`", "`embedded`", "`reference`"):
+        assert kind in p
+    assert "`element.target_collection`" in p
+    assert "`linked_entities`" in p
+    assert "`element.hop_collections`" in p
+    # An undeclared shape must stay undeclared rather than be guessed at.
+    assert "No `element` at all" in p
+
+
+def test_operation_prompt_covers_maps_not_just_arrays() -> None:
+    """A map's keys are already the identifiers, so it is projected in place."""
+    p = _prompt_flat()
+    assert "keys are already the identifiers" in p
+
+
+def test_operation_prompt_requires_the_cross_collection_write() -> None:
+    """A reference container means creating an element writes the *target*
+    collection and stores only its key — the write side of the same fact."""
+    p = _prompt_flat()
+    assert "cross-collection write" in p
+    assert "does not put the whole object in the container" in p
+
+
+def test_operation_prompt_keeps_the_two_assembly_failures() -> None:
+    p = _prompt_flat()
     assert "Do not fall back to an empty object or array" in p
     assert "Do not forbid the reads the response needs." in p
+
+
+def test_operation_prompt_rejects_waving_at_a_nested_container() -> None:
+    """Carried over from the join-guard work: "as-is" is not a contract for a
+    container of objects, and `Derived fields: none` is wrong for a response the
+    operation assembles. The IR does not supply this, so the prompt must."""
+    p = _prompt_flat()
+    assert "Do not wave at a nested container." in p
+    assert "is not a contract" in p
+    assert "`none` is wrong for an operation that assembles one" in p
