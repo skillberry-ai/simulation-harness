@@ -4,8 +4,12 @@
 # Run against everything:
 #   uv run pre-commit run --all-files
 repos:
+  # Keep this rev equal to the pinned `ruff` in pyproject.toml's dev extra. CI
+  # checks formatting with the project's ruff (`uv run ruff format --check`), so a
+  # hook on a different version rewrites files the gate then rejects, and the two
+  # fight over every commit that touches an affected file. See issue #15.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.9
+    rev: v0.15.17
     hooks:
       - id: ruff
         name: ruff (lint + autofix)
