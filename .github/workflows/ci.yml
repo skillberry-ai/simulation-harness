@@ -6,6 +6,27 @@ on:
   pull_request:
     branches: [main]
 
+# Refuse to re-resolve dependencies in CI. Without this, uv treats a stale
+# `uv.lock` as something to fix rather than an error: `uv sync` re-resolves,
+# and so does a bare `uv run`, so a job can silently install versions the
+# lockfile does not describe and still report green. That is how the ruff
+# 0.16.6 bump (#25) ran 0.16.6 in CI while `uv.lock` still pinned 0.15.17.
+#
+# Set once at the workflow level rather than as `--locked` on each step,
+# because `uv run` re-locks too -- flagging only the four `uv sync` steps
+# would leave the eight `uv run` steps able to drift. Equivalent to passing
+# `--locked` to every uv command.
+#
+# If a job now fails with "the lockfile needs to be updated": run `uv lock`
+# and commit the result alongside the `pyproject.toml` change.
+#
+# On by default so a new job is guarded without having to remember this. A job
+# that legitimately needs uv to *write* a lockfile opts out with
+# `UV_LOCKED: "0"` -- note "0"/"false", not "": an empty value is a parse error,
+# not "unset".
+env:
+  UV_LOCKED: "1"
+
 # Cancel superseded runs on the same ref to save CI minutes.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -124,6 +145,14 @@ jobs:
   script-tests:
     name: Shell script tests
     runs-on: ubuntu-latest
+    # Opt out of the workflow-level lock guard. These tests drive
+    # scripts/release.sh against throwaway fixture repos, and
+    # scripts/tests/test-release.sh runs `uv lock` inside one to create its
+    # lockfile from scratch -- which `UV_LOCKED=1` refuses ("Unable to find
+    # lockfile"). The guard protects *this* project's uv.lock; the fixtures are
+    # not it.
+    env:
+      UV_LOCKED: "0"
     steps:
       - name: Checkout
         uses: actions/checkout@v7
