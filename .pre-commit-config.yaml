@@ -9,7 +9,7 @@ repos:
   # hook on a different version rewrites files the gate then rejects, and the two
   # fight over every commit that touches an affected file. See issue #15.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.17
+    rev: v0.16.6
     hooks:
       - id: ruff
         name: ruff (lint + autofix)
