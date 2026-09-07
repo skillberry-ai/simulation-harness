@@ -428,3 +428,167 @@ def test_extract_prompt_makes_declining_a_listing_the_answer_needing_a_reason() 
     # The naming trap: element titles say `DirectFlight`/`AirportCode`, and the
     # operation id says `search_direct_flight`. All three are the wrong collection.
     assert "not after the operation or the item schema's title" in p
+
+
+# --- insisting on listings ----------------------------------------------------
+#
+# #23 named the array-shaped leftovers in the prompt and moved acceptance from
+# 2/8 and 0/8 to 8/8 and 6/8. The residual 2/8 still costs `flights`, and
+# `SimulationStore.insert` raises UnknownStoreError for a store absent from
+# schema.json — so a missing collection cannot be worked around at runtime by
+# generating into it. Hence a validator that insists, with best-effort
+# degradation so no run that used to succeed can now fail.
+
+_LISTING_WITH_PROPS = {
+    "search_direct_flight": {
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {"flight_number": {"type": "string"}},
+            "required": ["flight_number"],
+        },
+    }
+}
+# `search_onestop_flight`'s real shape: an array whose element declares nothing.
+# Nothing can ever be modelled from it, so insisting would exhaust every run.
+_LISTING_WITHOUT_PROPS = {
+    "search_onestop_flight": {"type": "array", "items": {"type": "array"}}
+}
+
+
+def test_only_a_listing_with_a_declared_element_is_insistable() -> None:
+    assert E.insistable_listings(
+        frozenset({"search_direct_flight"}), _LISTING_WITH_PROPS
+    ) == {"search_direct_flight"}
+    assert (
+        E.insistable_listings(
+            frozenset({"search_onestop_flight"}), _LISTING_WITHOUT_PROPS
+        )
+        == set()
+    )
+
+
+def test_a_leftover_that_is_not_array_shaped_is_never_insistable() -> None:
+    assert E.insistable_listings(frozenset(), _LISTING_WITH_PROPS) == set()
+
+
+def test_declining_an_insistable_listing_is_a_validation_error() -> None:
+    errors = E.declined_listing_errors(
+        ["search_direct_flight", "Error"], {"search_direct_flight"}
+    )
+    assert len(errors) == 1
+    assert "search_direct_flight" in errors[0]
+    assert "Error" not in errors[0]
+
+
+def test_feedback_restates_every_listing_not_just_the_declined_one() -> None:
+    """Naming only the declined one makes the model oscillate — it models that
+    listing and drops the other, alternating and converging on neither. Measured
+    on tau2-airline across three attempts."""
+    errors = E.declined_listing_errors(
+        ["search_direct_flight"], {"search_direct_flight", "list_all_airports"}
+    )
+    assert len(errors) == 1
+    assert "search_direct_flight" in errors[0]
+    assert "list_all_airports" in errors[0]
+    assert "keep any you already modelled" in errors[0]
+    # Under pressure it reached for the item title and produced `direct_flights`.
+    assert "not after the operation or the item schema's title" in errors[0]
+
+
+def test_accepting_the_listing_leaves_no_error() -> None:
+    assert E.declined_listing_errors(["Error"], {"search_direct_flight"}) == []
+
+
+_DECLINE_ONLY = {
+    "api_name": "tau2-airline",
+    "entities": [],
+    "store_metadata": {"collections": [], "pk_map": {}},
+    "declined": ["search_direct_flight"],
+}
+_ACCEPTED = {
+    "api_name": "tau2-airline",
+    "entities": [
+        {
+            "name": "Flight",
+            "collection": "flights",
+            "primary_key": "flight_number",
+            "fields": [{"name": "flight_number", "type": "string", "required": True}],
+        }
+    ],
+    "store_metadata": {
+        "collections": ["flights"],
+        "pk_map": {"flights": "flight_number"},
+    },
+    "declined": [],
+}
+
+
+async def test_insistence_repairs_a_declined_listing() -> None:
+    """The 6/8 case: it declines, gets told why that is not an answer, complies."""
+    seq = iter([_DECLINE_ONLY, _ACCEPTED])
+    with patch.object(E, "call_json", AsyncMock(side_effect=lambda *a, **k: next(seq))):
+        dm = await E.extract_data_model(
+            _LISTING_WITH_PROPS,
+            slug="tau2-airline",
+            llm=object(),
+            retries=2,
+            array_shaped=frozenset({"search_direct_flight"}),
+        )
+    assert [e.collection for e in dm.entities] == ["flights"]
+    assert dm.declined == []
+
+
+async def test_persistent_decline_degrades_instead_of_failing(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """`extract_data_model` is awaited with no try/except in `analyze`, so raising
+    here would fail the whole generation. Insisting must never turn a run that
+    would have produced a usable skill into one that produces nothing."""
+    with patch.object(E, "call_json", AsyncMock(return_value=_DECLINE_ONLY)):
+        with caplog.at_level(logging.WARNING):
+            dm = await E.extract_data_model(
+                _LISTING_WITH_PROPS,
+                slug="tau2-airline",
+                llm=object(),
+                retries=1,
+                array_shaped=frozenset({"search_direct_flight"}),
+            )
+    assert dm.declined == ["search_direct_flight"]
+    assert "retrying without insistence" in caplog.text
+
+
+async def test_a_property_less_listing_is_never_insisted_on() -> None:
+    """`search_onestop_flight` can never be modelled, so a single decline must be
+    accepted first time — no repair attempts spent, no degradation path."""
+    call = AsyncMock(
+        return_value={
+            "api_name": "tau2-airline",
+            "entities": [],
+            "store_metadata": {"collections": [], "pk_map": {}},
+            "declined": ["search_onestop_flight"],
+        }
+    )
+    with patch.object(E, "call_json", call):
+        dm = await E.extract_data_model(
+            _LISTING_WITHOUT_PROPS,
+            slug="tau2-airline",
+            llm=object(),
+            retries=2,
+            array_shaped=frozenset({"search_onestop_flight"}),
+        )
+    assert dm.declined == ["search_onestop_flight"]
+    assert call.await_count == 1
+
+
+async def test_accepting_first_time_costs_one_call() -> None:
+    call = AsyncMock(return_value=_ACCEPTED)
+    with patch.object(E, "call_json", call):
+        await E.extract_data_model(
+            _LISTING_WITH_PROPS,
+            slug="tau2-airline",
+            llm=object(),
+            retries=2,
+            array_shaped=frozenset({"search_direct_flight"}),
+        )
+    assert call.await_count == 1
