@@ -63,7 +63,7 @@ dev = [
     "coverage>=7.0.0",
     # Pinned, not floating: .pre-commit-config.yaml must name this exact version
     # or the hook and the CI format gate drift apart (issue #15).
-    "ruff==0.15.17",
+    "ruff==0.16.6",
     "mypy>=1.8.0",
     "pre-commit>=3.5.0",
     "import-linter>=2.0",
@@ -85,6 +85,17 @@ simulation_harness = [
     "skills/assets/generation/*.jinja2",
     "agent/templates/*.jinja2"
 ]
+
+[tool.ruff]
+# Ruff 0.16 formats Python code blocks inside Markdown, by default, and the
+# v0.16.6 `ruff-format` pre-commit hook adds `markdown` to its `types_or`.
+# That reaches further than it looks: `docs/` prose, and the LLM prompt
+# templates under src/simulation_harness/skills/assets/generation/*.md whose
+# exact bytes are part of the harness's behavior. Opt out repo-wide rather
+# than per-hook, so the hook and the CI gate cannot disagree (issue #15).
+# `--force-exclude` in the hook entry makes this apply to the explicit
+# filenames pre-commit passes, not just to directory walks.
+extend-exclude = ["*.md"]
 
 [tool.ruff.lint]
 # Pinned explicitly, not inherited. With no `select` here, ruff lints on its
