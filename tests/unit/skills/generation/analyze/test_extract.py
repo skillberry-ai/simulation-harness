@@ -372,3 +372,59 @@ def test_validate_data_model_accepts_a_primary_key_present_in_fields() -> None:
         ),
     )
     assert E.validate_data_model(dm) == []
+
+
+# --- array-shaped leftovers ---------------------------------------------------
+#
+# These reach the fallback by an explicit route, not by the rule declining:
+# `_identity_responses` defers an array-of-objects response because deciding one is
+# outside what the deterministic rule may do. They are also the leftovers a decline
+# hurts most — a listing with no collection behind it leaves its operation inventing
+# results at runtime, which is how tau2-airline lost Flight and Airport.
+#
+# Measured on tau2-airline, 8 runs per arm, cache bypassed:
+#   list_all_airports     accepted 2/8 -> 8/8   (Fisher p=0.007)
+#   search_direct_flight  accepted 0/8 -> 6/8   (Fisher p=0.007)
+# Every acceptance was named `Airport`/`airports`/`iata` and
+# `Flight`/`flights`/`flight_number` — never `airport_codes` or `direct_flights`,
+# the names the element titles and operation ids would have suggested. The four
+# non-listing leftovers stayed declined in all 16 runs, so it did not trade the
+# decline bias for over-acceptance.
+
+
+def test_array_shaped_block_names_only_the_deferred_leftovers() -> None:
+    block = E._array_shaped_context(
+        frozenset({"list_all_airports", "search_direct_flight"}),
+        {
+            "list_all_airports": {},
+            "search_direct_flight": {},
+            "get_reservation_details": {},
+        },
+    )
+    assert "Array-shaped leftovers" in block
+    assert "list_all_airports" in block
+    assert "search_direct_flight" in block
+    assert "get_reservation_details" not in block
+
+
+def test_array_shaped_block_ignores_names_not_in_this_call() -> None:
+    """The fallback is scoped to the undecidable subset, so a deferred name that is
+    not in `components` must not be announced as present."""
+    block = E._array_shaped_context(frozenset({"absent_op"}), {"list_all_airports": {}})
+    assert block == ""
+
+
+def test_no_array_shaped_block_when_none_are_deferred() -> None:
+    assert E._array_shaped_context(frozenset(), {"a": {}}) == ""
+
+
+def test_extract_prompt_makes_declining_a_listing_the_answer_needing_a_reason() -> None:
+    """The prompt otherwise says declining is expected — correct for most leftovers,
+    and exactly the bias that lost these two."""
+    p = " ".join(E._load_prompt().split())
+    assert "Array-shaped leftovers" in p
+    assert "a listing is served from somewhere" in p
+    assert "declining is the answer that needs a reason" in p
+    # The naming trap: element titles say `DirectFlight`/`AirportCode`, and the
+    # operation id says `search_direct_flight`. All three are the wrong collection.
+    assert "not after the operation or the item schema's title" in p

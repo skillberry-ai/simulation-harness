@@ -192,6 +192,7 @@ async def analyze(
                 extract_llm,
                 retries=retries,
                 derived=identity if identity.entities else None,
+                array_shaped=sources.deferred,
             ),
             stage="analyze:extract",
             timeout=timeout,
