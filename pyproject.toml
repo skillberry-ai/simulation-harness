@@ -86,6 +86,20 @@ simulation_harness = [
     "agent/templates/*.jinja2"
 ]
 
+[tool.ruff.lint]
+# Pinned explicitly, not inherited. With no `select` here, ruff lints on its
+# built-in defaults -- and those are not stable across releases: 0.16.0
+# expanded the default set from 59 rules to 404 and, less visibly, *dropped*
+# 18 (E401, E402, E701-E703, E711-E714, E721, E731, E741-E743, F403, F405,
+# F406, F722). Inheriting defaults therefore means a routine version bump can
+# both flood CI with new findings and silently stop enforcing `== None`,
+# star imports, and ambiguous names -- with nothing in the diff to show it.
+#
+# This list reproduces ruff's pre-0.16 default set. It is the baseline, not a
+# ceiling: widening it is a deliberate code-quality change and belongs in its
+# own PR, not in a dependency bump.
+select = ["E4", "E7", "E9", "F"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
