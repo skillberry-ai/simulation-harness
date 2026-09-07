@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import re
+from collections.abc import Iterable
 from typing import Any
 
 try:
@@ -72,6 +74,58 @@ def _resolve_refs(
         else:
             result[key] = value
     return result
+
+
+_STORE_NAME = r"[a-z_][a-z0-9_]*"
+# Anchored on an explicit `collection`/`store` word, or on "read `X` by <key>", which
+# only ever addresses a store. Deliberately NOT "write to `X`": that is overwhelmingly
+# a field write ("written to `return_payment_method_id`") and was the sole source of
+# false positives when this was measured across the generated-bundle corpus.
+_STORE_REFERENCE = re.compile(
+    rf"(?ix) (?P<pre>.{{0,40}}?)"
+    rf"(?: `(?P<a>{_STORE_NAME})` \s+ (?:collection|store)"
+    rf"|  read \s+ (?:from \s+)? `(?P<b>{_STORE_NAME})` \s+ by )"
+)
+# A section may legitimately observe that a collection is absent — "no `User`
+# collection contract was provided for validation here". That is a statement about the
+# contract, not a read, and flagging it would send the repair loop chasing prose that
+# is already correct.
+_NEGATED = re.compile(
+    r"(?i)\b(?:no|not|never|without|absent|missing|lacks)\b[^`]{0,20}$"
+)
+
+
+def unknown_store_references(section: str, collections: Iterable[str]) -> list[str]:
+    """Collections the section tells the agent to read that do not exist.
+
+    The runtime store has exactly the collections in ``store_metadata``, so a section
+    naming any other one sends the agent to a store that was never created. Nothing
+    checked this, and tau2-airline does it in every bundle generated so far: a
+    `flights` collection (the spec's flight is keyed by `flight_number`, so identity
+    derivation declines it and no collection is made), a `direct_flight` /
+    `direct_flights` collection invented outright, `airports` in the runs where the
+    scoped fallback declined it, and a singular `payment` for `payments`.
+
+    This does not create the missing collections — that is the derivation gap in
+    issue #21. It stops the skill from claiming they exist.
+
+    Measured over the 12 generated bundles on hand: catches every invented store in
+    all 6 airline bundles, with no false positive in any of the 6 retail ones.
+    """
+    known = set(collections)
+    counts: dict[str, int] = {}
+    for match in _STORE_REFERENCE.finditer(section):
+        if _NEGATED.search(match.group("pre") or ""):
+            continue
+        name = next(v for k, v in match.groupdict().items() if k != "pre" and v)
+        if name not in known:
+            counts[name] = counts.get(name, 0) + 1
+    return [
+        f"section reads a '{name}' collection {count} time(s), which is not a store "
+        f"collection — the store holds exactly {sorted(known)}. Use one of those, or "
+        f"specify the value without a store read; do not invent a collection."
+        for name, count in sorted(counts.items())
+    ]
 
 
 def _linked_entities(ir: SpecModel, entity: Entity | None) -> list[dict]:
@@ -161,10 +215,12 @@ async def generate_section(
         return await call_text(llm, prompt, user)
 
     def validate(section: str) -> list[str]:
-        return [
+        errors = [
             f"missing required header line: '{h}'"
             for h in required_headers
             if h not in section
         ]
+        errors.extend(unknown_store_references(section, ir.store_metadata.collections))
+        return errors
 
     return await with_repair(produce, validate, stage="operations", retries=retries)
