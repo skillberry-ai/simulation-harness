@@ -24,6 +24,17 @@ key it arrived under.
 **Declining is the expected answer, and declining every single one is a valid
 answer.** Do not invent an entity to fill space.
 
+**One exception, and it is narrow.** A leftover named under `Array-shaped
+leftovers` returns an array or map of objects — it is a *listing*, and a listing is
+served from somewhere. Decline one and the simulator has no collection behind the
+operation that returns it, so that operation can only invent its results at
+runtime. For these, declining is the answer that needs a reason you can state, not
+the default: decline only when the items genuinely are not independently stored —
+a computed aggregate, a paginated envelope, a projection of an entity already
+modeled above. Otherwise model the item shape, and name the collection in the
+plural the API itself uses for those things, not after the operation or the item
+schema's title.
+
 ## Output
 
 Produce ONLY a JSON object:

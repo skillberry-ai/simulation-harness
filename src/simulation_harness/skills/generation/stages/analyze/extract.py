@@ -136,6 +136,25 @@ def _derived_context(derived: IdentityModel | None) -> str:
     )
 
 
+def _array_shaped_context(names: frozenset[str], components: dict) -> str:
+    """Name the leftovers whose response is an array or map of objects.
+
+    These reach this stage by an explicit route, not by the rule declining: see
+    ``_identity_responses``, which defers them because deciding an array-shaped
+    response is outside what the deterministic rule may do. They are exactly the
+    ones a decline hurts most — an array of objects is a listing, and declining it
+    leaves the operation that returns it with no store to read. Measured on
+    tau2-airline, that is how `Flight` and `Airport` came to be missing.
+    """
+    present = sorted(n for n in names if n in components)
+    if not present:
+        return ""
+    return (
+        "# Array-shaped leftovers (each returns an array or map of objects)\n"
+        f"```json\n{json.dumps(present, indent=2)}\n```\n\n"
+    )
+
+
 async def extract_data_model(
     components: dict,
     slug: str,
@@ -143,6 +162,7 @@ async def extract_data_model(
     *,
     retries: int,
     derived: IdentityModel | None = None,
+    array_shaped: frozenset[str] = frozenset(),
 ) -> DataModel:
     """Ask the LLM about schemas the deterministic rule could not decide.
 
@@ -151,8 +171,10 @@ async def extract_data_model(
     schema — that is frequently the right answer.
     """
     prompt = _load_prompt()
-    base_user = _derived_context(derived) + (
-        f"# Leftover schemas\n```json\n{json.dumps(components, indent=2)}\n```\n"
+    base_user = (
+        _derived_context(derived)
+        + _array_shaped_context(array_shaped, components)
+        + f"# Leftover schemas\n```json\n{json.dumps(components, indent=2)}\n```\n"
     )
 
     async def produce(feedback):
@@ -191,4 +213,16 @@ async def extract_data_model(
             len(components),
             sorted(dm.declined),
         )
+        listings = sorted(set(dm.declined) & array_shaped)
+        if listings:
+            # Louder than the line above, because this subset is the one with a
+            # known runtime cost: the operation returning the listing has no
+            # collection to read, so it can only invent its results.
+            logger.warning(
+                "extract declined %d array-shaped leftover(s): %s — the "
+                "operations returning these listings have no store collection "
+                "behind them",
+                len(listings),
+                listings,
+            )
     return dm
