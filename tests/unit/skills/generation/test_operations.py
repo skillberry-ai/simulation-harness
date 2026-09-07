@@ -1,3 +1,4 @@
+import pytest
 from unittest.mock import AsyncMock, patch
 
 from simulation_harness.openapi.parser import OpenAPISpec
@@ -10,6 +11,7 @@ from simulation_harness.skills.generation.ir import (
     SpecModel,
     StoreMetadata,
 )
+from simulation_harness.skills.generation.repair import GenerationStageError
 from simulation_harness.skills.generation.stages import operations as O
 from typing import Any
 
@@ -323,3 +325,102 @@ def test_operation_prompt_distinguishes_storage_shape_from_response_shape() -> N
     assert "Assemble it by joining." in p
     assert "Do not fall back to an empty object or array" in p
     assert "Do not forbid the reads the response needs." in p
+
+
+# --- unknown store references ------------------------------------------------
+#
+# The runtime store holds exactly the collections in `store_metadata`, so a section
+# naming any other one sends the agent to a store that was never created. Measured
+# over the 12 generated bundles on hand: this catches every invented store in all 6
+# airline bundles and fires on none of the 6 retail ones.
+
+
+def test_known_collection_read_is_accepted() -> None:
+    assert (
+        O.unknown_store_references("Read the `features` collection.", ["features"])
+        == []
+    )
+
+
+def test_invented_collection_is_reported_with_the_valid_set() -> None:
+    """The real airline defect: identity derivation declines the spec's flight
+    (keyed by `flight_number`, not `*_id`), so no `flights` collection exists, and
+    the section tells the agent to read one anyway."""
+    errors = O.unknown_store_references(
+        "- Read the `flights` collection by key `flight_number`.", ["features"]
+    )
+    assert len(errors) == 1
+    assert "'flights' collection" in errors[0]
+    assert "['features']" in errors[0]
+    assert "do not invent a collection" in errors[0]
+
+
+def test_repeated_mentions_collapse_into_one_error_with_a_count() -> None:
+    section = (
+        "- Read the `flights` collection.\n"
+        "- Filter the `flights` collection by date.\n"
+        "- Read `flights` by key `flight_number`.\n"
+    )
+    errors = O.unknown_store_references(section, ["features"])
+    assert len(errors) == 1
+    assert "3 time(s)" in errors[0]
+
+
+def test_a_field_write_is_not_a_store_reference() -> None:
+    """The one false-positive class found in the corpus: "written to `<field>`" is a
+    field write, not a collection. Both retail-main hits were this, and dropping the
+    pattern is what took retail to zero."""
+    section = (
+        "- When proceeding, this is written to `return_payment_method_id`.\n"
+        "- Use it as the value to write to `exchange_payment_method_id`.\n"
+    )
+    assert O.unknown_store_references(section, ["orders"]) == []
+
+
+def test_observing_that_a_collection_is_absent_is_not_a_reference() -> None:
+    """A section may legitimately note a collection was never provided. Flagging that
+    sends the repair loop chasing prose that is already correct."""
+    section = (
+        "- no `User` collection contract was provided for validation here.\n"
+        "- No `PaymentMethod` collection schema was provided.\n"
+    )
+    assert O.unknown_store_references(section, ["orders"]) == []
+
+
+def test_a_field_named_like_a_collection_is_not_flagged() -> None:
+    """`flights` is also a legitimate `Reservation` *field*, which is what makes this
+    subtle: only the store-context phrasing is a defect."""
+    section = (
+        "- `flights` contains exactly 1 entry when `flight_type` is `one_way`.\n"
+        "- `segment_count` equals the length of `flights`.\n"
+    )
+    assert O.unknown_store_references(section, ["reservations"]) == []
+
+
+async def test_generate_section_rejects_an_invented_collection() -> None:
+    """It has to reach `with_repair` as feedback, not slip through."""
+    ir = _ir([_op("getFeature", "/features/{id}")])
+    bad = "### /features/{id} GET\n- Read the `flights` collection by key `flight_number`."
+    with patch.object(O, "call_text", AsyncMock(return_value=bad)):
+        with pytest.raises(GenerationStageError) as excinfo:
+            await O.generate_section(
+                OpenAPISpec(SPEC), ir, ir.operations, llm=object(), retries=0
+            )
+    assert "not a store collection" in str(excinfo.value)
+
+
+async def test_generate_section_repairs_an_invented_collection() -> None:
+    ir = _ir([_op("getFeature", "/features/{id}")])
+    attempts = iter(
+        [
+            "### /features/{id} GET\n- Read the `flights` collection by key `x`.",
+            "### /features/{id} GET\n- Read the `features` collection by key `id`.",
+        ]
+    )
+    with patch.object(
+        O, "call_text", AsyncMock(side_effect=lambda *a, **k: next(attempts))
+    ):
+        section = await O.generate_section(
+            OpenAPISpec(SPEC), ir, ir.operations, llm=object(), retries=1
+        )
+    assert "`features`" in section
