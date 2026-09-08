@@ -90,14 +90,25 @@ def _singular_segment(segment: str) -> str:
 
 
 def singularize(noun: str) -> str:
-    """Inverse of :func:`pluralize`, per underscore-separated segment.
+    """Inverse of :func:`pluralize`, which only ever alters the tail.
 
-    Conservative by construction: :func:`_singular_segment` only reduces a
-    segment when ``pluralize`` round-trips back to it, so ``status`` and ``axis``
-    (which ``pluralize`` treats as singular) are returned unchanged and no
-    collection name can move.
+    ``pluralize`` appends to the whole string, so it can only change the final
+    underscore-separated segment. Mirroring that, ``singularize`` reduces only
+    the final segment via :func:`_singular_segment` and leaves every earlier
+    segment untouched — ``objs_bot_profile`` must stay ``objs_bot_profile``
+    rather than losing the ``s`` off ``objs``, which is not a plural of
+    anything here, just an earlier segment that happens to end in ``s``.
+
+    Conservative by construction on the segment it does touch:
+    :func:`_singular_segment` only reduces it when ``pluralize`` round-trips
+    back to it, so ``status`` and ``axis`` (which ``pluralize`` treats as
+    singular) are returned unchanged and no collection name can move.
     """
-    return "_".join(_singular_segment(s) for s in noun.split("_") if s)
+    parts = [s for s in noun.split("_") if s]
+    if not parts:
+        return noun
+    parts[-1] = _singular_segment(parts[-1])
+    return "_".join(parts)
 
 
 def _noun_is_stem(noun: str, holder: str) -> bool:

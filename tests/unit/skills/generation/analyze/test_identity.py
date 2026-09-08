@@ -120,6 +120,12 @@ def test_noun_for_bare_id_falls_back_to_the_schema_name() -> None:
         ("status", "status"),
         ("axis", "axis"),
         ("user", "user"),
+        # Tail-only reduction: pluralize() only ever alters the final segment, so
+        # singularize must mirror that and leave earlier segments untouched, even
+        # when an earlier segment happens to end in "s" (it is not a plural of
+        # anything here, just a fixed prefix).
+        ("objs_bot_profile", "objs_bot_profile"),
+        ("objs_channels", "objs_channel"),
     ],
 )
 def test_singularize(plural: str, expected: str) -> None:
