@@ -419,6 +419,36 @@ def test_two_nouns_pluralizing_alike_fail_as_an_identity_error(
     assert snake(plural) in message
 
 
+def test_bare_id_singular_plural_pair_merges_instead_of_colliding() -> None:
+    """Locks the positive counterpart of the collision guard above.
+
+    Before ``noun_for`` singularized a bare-``id`` holder name, an
+    ``Address``/``Addresses`` pair — both keyed by a bare ``id`` — used to
+    raise here: they produced two different nouns (``address``,
+    ``addresses``) that both pluralize to ``addresses``, so
+    ``_reject_colliding_collections`` fired.
+
+    Now ``singularize`` reduces both schema names to the same noun
+    (``address``), so the pair merges into one cluster instead of colliding —
+    which is correct: it is one entity, not two claiming one collection. The
+    still-colliding case — two schemas keyed by ``*_id`` rather than a bare
+    ``id`` — is unaffected by that change and stays covered by
+    ``test_two_nouns_pluralizing_alike_fail_as_an_identity_error``.
+
+    ``synthetic=False`` is required to reach this: on the synthetic path a
+    top-level bare ``id`` is undecidable by construction (see
+    ``derive_identity``'s ``synthetic and key == "id"`` veto), so this pair
+    would land in ``undecidable`` instead of merging.
+    """
+    schemas = {
+        "Address": {"properties": {"id": {"type": "string"}}},
+        "Addresses": {"properties": {"id": {"type": "string"}}},
+    }
+    model = derive_identity(schemas, synthetic=False)
+    assert model.collections == ["addresses"]
+    assert model.pk_map == {"addresses": "id"}
+
+
 def test_a_lone_already_plural_noun_is_not_a_collision() -> None:
     """The guard must not fire on the ordinary single-schema case.
 
