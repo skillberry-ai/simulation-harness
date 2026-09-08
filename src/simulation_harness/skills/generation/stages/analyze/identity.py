@@ -400,9 +400,68 @@ def _element_fields(element: dict) -> tuple[ElementField, ...]:
     )
 
 
+def _foreign_key(
+    element: dict, clusters: dict[str, _Cluster]
+) -> tuple[str, str, str] | None:
+    """``(local_key, target_collection, target_key)`` for an inlined element, or ``None``.
+
+    A sole scalar ``*_id`` whose noun names an existing entity is a reference:
+    the element has no identity of its own, so it stays inline, but the join is
+    still worth recording. Without this, declining the key in rule 4 would lose
+    the link entirely.
+    """
+    props = element.get("properties")
+    if not isinstance(props, dict):
+        return None
+    candidates = [
+        p
+        for p in sorted(props)
+        if isinstance(p, str) and p.endswith("_id") and _scalar_candidate(props[p])
+    ]
+    if len(candidates) != 1:
+        return None
+    noun = noun_for(candidates[0], "")
+    target = clusters.get(noun)
+    if target is None:
+        return None
+    return candidates[0], pluralize(noun), target.primary_key
+
+
+def _holds_reference_to(
+    holder: _Cluster, collection: str, clusters: dict[str, _Cluster]
+) -> bool:
+    """Whether one of ``holder``'s container elements is a foreign key into ``collection``.
+
+    This is the structural relationship "``collection``'s rows hang off this
+    holder", read off the foreign key rather than off provenance: a product's
+    ``variants`` element carries ``item_id``, so items hang off products. It used
+    to be visible in ``target.sources`` because such an element was also
+    *absorbed* into the target cluster — but absorbing it coined a collection out
+    of a foreign key, which is the defect rule 4's stem test now refuses. The key
+    the element carries says the same thing without coining anything.
+
+    Deliberately narrow: it is the same sole-scalar-``*_id`` test
+    :func:`_foreign_key` applies, so a holder that merely shares a field *name*
+    with the element (``User.name`` beside an order line's ``name``) is not a
+    hop — see :func:`_resolves_one_hop_out`.
+    """
+    for prop_name in sorted(holder.element_schemas):
+        _, element_schema = holder.element_schemas[prop_name]
+        element = next(
+            _nested_objects({"type": "array", "items": element_schema}), None
+        )
+        if element is None:
+            continue
+        fk = _foreign_key(element, clusters)
+        if fk is not None and fk[1] == collection:
+            return True
+    return False
+
+
 def _resolves_one_hop_out(
     clusters: dict[str, _Cluster],
     target: _Cluster,
+    target_collection: str,
     field_name: str,
     own_sources: set[str],
 ) -> str | None:
@@ -419,10 +478,19 @@ def _resolves_one_hop_out(
     matching on a coincidence: ``User`` also carries a ``name``, and without the
     nesting test that alone would excuse the leftover.
 
+    Nesting shows up two ways, and both count. Provenance: one of the target's
+    source schemas is a property of a schema the holder was built from
+    (``"Product.variants"`` against a holder sourced from ``"Product"``). Or a
+    foreign key: the holder has a container element pointing at the target's
+    collection (:func:`_holds_reference_to`). The second is needed because an
+    element whose sole ``*_id`` is a foreign key is no longer absorbed into the
+    target, so it contributes no source for the first test to see.
+
     Returns the holder's collection name, so the extra read the response needs can
     be recorded rather than merely permitted.
     """
-    for noun, holder in clusters.items():
+    for noun in sorted(clusters):
+        holder = clusters[noun]
         if holder is target:
             continue
         if not (holder.field_sources.get(field_name, set()) - own_sources):
@@ -432,7 +500,7 @@ def _resolves_one_hop_out(
             source.rsplit(".", 1)[0] in holder_sources
             for source in target.sources
             if "." in source
-        ):
+        ) or _holds_reference_to(holder, target_collection, clusters):
             return pluralize(noun)
     return None
 
@@ -481,7 +549,17 @@ def _element_shape(
     embedded = ElementShape(kind="embedded", container=container, fields=fields)
     nested = identity_key(prop_name, element, synthetic=synthetic, nested=True)
     if nested is None or nested == parent.primary_key:
-        return embedded
+        fk = _foreign_key(element, clusters)
+        if fk is None:
+            return embedded
+        local_key, target_collection, target_key = fk
+        return embedded.model_copy(
+            update={
+                "local_key": local_key,
+                "target_collection": target_collection,
+                "target_key": target_key,
+            }
+        )
     noun = noun_for(nested, prop_name)
     target = clusters.get(noun)
     if target is None:
@@ -511,7 +589,9 @@ def _element_shape(
     for f in fields:
         if target.field_sources.get(f.name, set()) - own_sources:
             continue  # the target carries it independently
-        hop = _resolves_one_hop_out(clusters, target, f.name, own_sources)
+        hop = _resolves_one_hop_out(
+            clusters, target, pluralize(noun), f.name, own_sources
+        )
         if hop is None:
             leftovers.append(f)
         elif hop not in hops:

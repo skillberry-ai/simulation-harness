@@ -61,6 +61,11 @@ class ElementShape(BaseModel):
       and otherwise carries the parent-scoped leftovers that a link object must
       keep alongside the key.
 
+    An ``embedded`` element may also carry ``target_collection`` /
+    ``target_key`` / ``local_key``: the element stays inline (it has no identity
+    of its own) but one of its fields is a foreign key. That is a reference
+    *annotation*, not the ``reference`` kind.
+
     ``container`` says where the elements live, and the two differ in one way that
     matters. An ``array`` of a promoted element stores *references*, so the
     reference kind means bare identifiers (or a link object). A ``map`` is keyed by
@@ -81,6 +86,10 @@ class ElementShape(BaseModel):
     fields: tuple[ElementField, ...] = ()
     target_collection: str | None = None
     target_key: str | None = None
+    # The element's own field holding a ``target_collection`` primary key. Needed
+    # when the two names differ: a payment-history line item's
+    # ``payment_method_id`` points at a payment method keyed ``id``.
+    local_key: str | None = None
     link_fields: tuple[ElementField, ...] = ()
     # Collections carrying element fields the target does not: a response that
     # denormalizes a grandparent's attribute onto the element needs a second read
