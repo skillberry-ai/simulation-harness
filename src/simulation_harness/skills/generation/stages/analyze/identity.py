@@ -401,7 +401,10 @@ def _element_fields(element: dict) -> tuple[ElementField, ...]:
 
 
 def _foreign_key(
-    element: dict, clusters: dict[str, _Cluster]
+    element: dict,
+    clusters: dict[str, _Cluster],
+    *,
+    parent: _Cluster | None = None,
 ) -> tuple[str, str, str] | None:
     """``(local_key, target_collection, target_key)`` for an inlined element, or ``None``.
 
@@ -409,6 +412,13 @@ def _foreign_key(
     the element has no identity of its own, so it stays inline, but the join is
     still worth recording. Without this, declining the key in rule 4 would lose
     the link entirely.
+
+    ``parent`` is the cluster the element is stored in, when the caller has it.
+    A key resolving back to that cluster is a **back-reference**
+    (``Order.lines[].order_id``) and is declined: containment already states the
+    parent link, and annotating it would put a self-pointing reference into the
+    generated schema. Compared by cluster identity rather than by name, so
+    :func:`pluralize` collapsing two nouns cannot fake a match.
     """
     props = element.get("properties")
     if not isinstance(props, dict):
@@ -422,7 +432,7 @@ def _foreign_key(
         return None
     noun = noun_for(candidates[0], "")
     target = clusters.get(noun)
-    if target is None:
+    if target is None or target is parent:
         return None
     return candidates[0], pluralize(noun), target.primary_key
 
@@ -549,7 +559,7 @@ def _element_shape(
     embedded = ElementShape(kind="embedded", container=container, fields=fields)
     nested = identity_key(prop_name, element, synthetic=synthetic, nested=True)
     if nested is None or nested == parent.primary_key:
-        fk = _foreign_key(element, clusters)
+        fk = _foreign_key(element, clusters, parent=parent)
         if fk is None:
             return embedded
         local_key, target_collection, target_key = fk

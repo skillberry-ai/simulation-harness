@@ -170,6 +170,40 @@ def test_list_valued_foreign_key_gets_no_annotation() -> None:
     assert shape.target_collection is None
 
 
+def test_a_back_reference_to_the_parent_is_not_annotated() -> None:
+    """An order line carrying its parent's own `order_id` is a back-reference, and a
+    back-reference is redundant: containment already states the parent link, so
+    recording it as a reference annotation adds nothing.
+
+    Suppressed at the source rather than downstream, because `x-element-ref` is
+    stamped for any shape with a `target_collection` — leaving it set here would put
+    a self-pointing reference into schema.json for a shape that already lives in
+    `orders`.
+    """
+    schemas: dict[str, dict] = {
+        "Order": {
+            "properties": {
+                "order_id": {"type": "string"},
+                "lines": {
+                    "type": "array",
+                    "items": {
+                        "properties": {
+                            "order_id": {"type": "string"},
+                            "quantity": {"type": "integer"},
+                        }
+                    },
+                },
+            }
+        },
+    }
+    ident = derive_identity(schemas, synthetic=True)
+    assert [e.collection for e in ident.entities] == ["orders"]
+    shape = _shapes(ident.entities, "Order")["lines"]
+    assert shape.kind == "embedded"
+    assert shape.local_key is None
+    assert shape.target_collection is None
+
+
 def test_own_id_element_still_becomes_a_reference() -> None:
     """The reference path must survive: Order.items/item_id name-matches, so it is
     still promoted and the parent stores bare identifiers."""
