@@ -8,6 +8,7 @@ from simulation_harness.skills.generation.repair import GenerationStageError
 from simulation_harness.skills.generation.stages.analyze.identity import (
     _flatten_union,
     _nested_objects,
+    _noun_is_stem,
     camel,
     derive_identity,
     identity_key,
@@ -573,3 +574,55 @@ def test_identity_key_honours_a_declared_key_without_the_scalar_filter() -> None
         "properties": {"tracking_id": {"type": "array"}},
     }
     assert identity_key("Tracking", schema, synthetic=False) == "tracking_id"
+
+
+@pytest.mark.parametrize(
+    ("noun", "holder", "expected"),
+    [
+        ("payment", "payment_history", True),
+        ("payment_method", "payment_history", False),
+        ("tracking", "fulfillments", False),
+        ("item", "items", True),
+        ("order_item", "order_items", True),
+        ("item", "order_items", False),
+    ],
+)
+def test_noun_is_stem(noun: str, holder: str, expected: bool) -> None:
+    assert _noun_is_stem(noun, holder) is expected
+
+
+def test_rule_four_declines_a_foreign_key_at_element_level() -> None:
+    """tau2-retail: payment_method_id in a payment_history line item references a
+    payment method; it is not the line item's identity."""
+    element: dict = {
+        "properties": {
+            "payment_method_id": {"type": "string"},
+            "amount": {"type": "number"},
+            "transaction_type": {"type": "string"},
+        }
+    }
+    assert identity_key("payment_history", element, synthetic=True, nested=True) is None
+
+
+def test_rule_four_keeps_an_own_id_at_element_level() -> None:
+    """tau2-airline: payment_id in a payment_history line item IS its identity.
+    This is the regression guard for the airline contract."""
+    element: dict = {
+        "properties": {"payment_id": {"type": "string"}, "amount": {"type": "number"}}
+    }
+    assert (
+        identity_key("payment_history", element, synthetic=True, nested=True)
+        == "payment_id"
+    )
+
+
+def test_rule_four_is_unchanged_at_top_level() -> None:
+    """A synthetic response whose sole *_id carries a different noun still adopts
+    it: at top level that id is the only signal available."""
+    schema: dict = {
+        "properties": {"tracking_id": {"type": "string"}, "status": {"type": "string"}}
+    }
+    assert (
+        identity_key("get_shipping_label__response", schema, synthetic=True)
+        == "tracking_id"
+    )

@@ -67,7 +67,47 @@ def _scalar_candidate(prop: object) -> bool:
     )
 
 
-def identity_key(name: str, schema: dict, *, synthetic: bool) -> str | None:
+def _singular_segment(segment: str) -> str:
+    """One path segment reduced to singular, conservatively.
+
+    Two guards, both needed. Segments ending in ``_SINGULAR_S_ENDINGS`` are
+    singular despite the trailing ``s`` and are returned untouched — without this
+    ``status`` reduces to ``statu``, because ``pluralize("statu")`` really is
+    ``status`` and the round-trip check below is satisfied. Otherwise a reduction
+    is accepted only when ``pluralize`` round-trips back to the original, so an
+    irregular segment is left exactly as it was.
+    """
+    if segment.endswith(_SINGULAR_S_ENDINGS):
+        return segment
+    for candidate in (
+        segment[:-3] + "y" if segment.endswith("ies") else "",
+        segment[:-2] if segment.endswith("es") else "",
+        segment[:-1] if segment.endswith("s") else "",
+    ):
+        if candidate and pluralize(candidate) == segment:
+            return candidate
+    return segment
+
+
+def _noun_is_stem(noun: str, holder: str) -> bool:
+    """Whether ``noun`` names the thing ``holder`` holds, rather than something else.
+
+    A sole ``*_id`` on an element is the element's own identity when its noun is a
+    **prefix** of the holder's name (``payment_history`` holds ``payment``
+    entries), and a foreign key when it is not (``payment_history`` holding
+    ``payment_method_id``, ``fulfillments`` holding ``tracking_id``).
+
+    Prefix, not subset: sharing a segment is not enough, or ``payment_history``
+    and ``payment_method`` would still match on ``payment``.
+    """
+    want = [_singular_segment(s) for s in noun.split("_") if s]
+    have = [_singular_segment(s) for s in holder.split("_") if s]
+    return bool(want) and have[: len(want)] == want
+
+
+def identity_key(
+    name: str, schema: dict, *, synthetic: bool, nested: bool = False
+) -> str | None:
     """The property that identifies instances of ``schema``, or ``None``.
 
     ``None`` means **undecidable**: the caller must route the schema to the
@@ -80,6 +120,12 @@ def identity_key(name: str, schema: dict, *, synthetic: bool) -> str | None:
     Only those get rule 4 (sole ``<noun>_id``): a synthetic key can never
     name-match, so its single ``*_id`` is the only signal available, whereas a
     *named* schema carrying one foreign-looking id is genuinely ambiguous.
+
+    ``nested`` marks an element-level decision, where ``name`` is the holder
+    property rather than a schema name. There rule 4 additionally requires the
+    noun to be a stem of the holder (:func:`_noun_is_stem`): a line item's sole
+    ``*_id`` is usually a foreign key, and adopting it coins a collection named
+    after the entity it references.
 
     Note that a bare ``id`` is returned here on both paths — it is a correct
     *key* either way. What a synthetic name cannot supply is a usable **noun**
@@ -113,7 +159,8 @@ def identity_key(name: str, schema: dict, *, synthetic: bool) -> str | None:
     if "id" in props and _scalar_candidate(props["id"]):
         return "id"
     if synthetic and len(candidates) == 1:
-        return candidates[0]
+        if not nested or _noun_is_stem(candidates[0][:-3], name):
+            return candidates[0]
     return None
 
 
@@ -421,7 +468,7 @@ def _element_shape(
 
     fields = _element_fields(element)
     embedded = ElementShape(kind="embedded", container=container, fields=fields)
-    nested = identity_key(prop_name, element, synthetic=synthetic)
+    nested = identity_key(prop_name, element, synthetic=synthetic, nested=True)
     if nested is None or nested == parent.primary_key:
         return embedded
     noun = noun_for(nested, prop_name)
@@ -595,7 +642,9 @@ def derive_identity(
                 # A bare `id` *is* decidable here even on the synthetic path:
                 # the name in hand is a property name, which is a real noun,
                 # not the enclosing operation id.
-                nested = identity_key(prop_name, target, synthetic=synthetic)
+                nested = identity_key(
+                    prop_name, target, synthetic=synthetic, nested=True
+                )
                 if nested is None or nested == key:
                     continue
                 _absorb(
