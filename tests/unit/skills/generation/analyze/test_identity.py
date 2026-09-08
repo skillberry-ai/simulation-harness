@@ -7,6 +7,7 @@ import pytest
 from simulation_harness.skills.generation.repair import GenerationStageError
 from simulation_harness.skills.generation.stages.analyze.identity import (
     _flatten_union,
+    _nested_objects,
     camel,
     derive_identity,
     identity_key,
@@ -480,3 +481,58 @@ def test_flatten_union_reads_oneof_too() -> None:
     assert flat is not None
     assert sorted(flat["properties"]) == ["a", "b"]
     assert flat["required"] == []
+
+
+def test_nested_objects_sees_through_a_union_map() -> None:
+    """tau2-retail's get_user_details.payment_methods: a map whose values are an
+    anyOf union. Before this, the union had no `properties` so the promotion pass
+    never saw the entity at all."""
+    prop: dict = {
+        "type": "object",
+        "additionalProperties": {
+            "anyOf": [
+                {
+                    "properties": {
+                        "source": {"const": "credit_card"},
+                        "id": {"type": "string"},
+                    }
+                },
+                {
+                    "properties": {
+                        "source": {"const": "gift_card"},
+                        "balance": {"type": "number"},
+                        "id": {"type": "string"},
+                    }
+                },
+            ]
+        },
+    }
+    targets = list(_nested_objects(prop))
+    assert len(targets) == 1
+    assert sorted(targets[0]["properties"]) == ["balance", "id", "source"]
+
+
+def test_identity_key_decides_a_union_schema() -> None:
+    schema: dict = {
+        "anyOf": [
+            {
+                "properties": {
+                    "source": {"const": "credit_card"},
+                    "id": {"type": "string"},
+                }
+            },
+            {
+                "properties": {
+                    "source": {"const": "gift_card"},
+                    "id": {"type": "string"},
+                }
+            },
+        ]
+    }
+    assert identity_key("payment_methods", schema, synthetic=True) == "id"
+
+
+def test_identity_key_still_declines_a_scalar_union() -> None:
+    assert (
+        identity_key("thing", {"anyOf": [{"type": "string"}]}, synthetic=True) is None
+    )

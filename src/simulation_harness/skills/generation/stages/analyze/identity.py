@@ -75,7 +75,12 @@ def identity_key(name: str, schema: dict, *, synthetic: bool) -> str | None:
         return declared
     props = schema.get("properties")
     if not isinstance(props, dict):
-        return None
+        # A union of objects is an entity described in variants; flatten it so the
+        # rules below see one property set. Anything else is genuinely undecidable.
+        flattened = _flatten_union(schema)
+        if flattened is None:
+            return None
+        props = flattened["properties"]
     candidates = [p for p in props if isinstance(p, str) and p.endswith("_id")]
     own = snake(name)
     # Longest noun first so "order_item_id" beats "item_id" for OrderItem, and
@@ -233,10 +238,20 @@ def _nested_objects(prop: dict) -> Iterator[dict]:
     if not isinstance(inner, dict):
         return
     extra = inner.get("additionalProperties")
-    if isinstance(extra, dict) and isinstance(extra.get("properties"), dict):
-        yield extra
-    elif isinstance(inner.get("properties"), dict):
+    if isinstance(extra, dict):
+        if isinstance(extra.get("properties"), dict):
+            yield extra
+            return
+        flattened = _flatten_union(extra)
+        if flattened is not None:
+            yield flattened
+            return
+    if isinstance(inner.get("properties"), dict):
         yield inner
+        return
+    flattened = _flatten_union(inner)
+    if flattened is not None:
+        yield flattened
 
 
 def _container_element(prop: dict) -> tuple[str, dict] | None:
