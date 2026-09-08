@@ -114,6 +114,53 @@ def test_embedded_and_scalar_arrays_link_nothing() -> None:
         assert _linked_entities(ir, _order_of(ir)) == []
 
 
+def test_embedded_foreign_key_annotation_links_its_target() -> None:
+    """An ``embedded`` element can carry a foreign-key annotation without being
+    promoted to ``kind="reference"`` — e.g. ``Order.payment_history`` lines that
+    point at ``payment_methods`` while staying inline. The stage still needs the
+    target named, or it cannot document maintaining a payment method's balance
+    on refund."""
+    order = _entity(
+        "Order",
+        "orders",
+        "order_id",
+        [
+            Field(name="order_id", type="string", required=True),
+            Field(
+                name="payment_history",
+                type="array",
+                element=ElementShape(
+                    kind="embedded",
+                    local_key="payment_method_id",
+                    target_collection="payment_methods",
+                    target_key="id",
+                ),
+            ),
+        ],
+    )
+    payment_method = _entity(
+        "PaymentMethod",
+        "payment_methods",
+        "id",
+        [
+            Field(name="id", type="string", required=True),
+            Field(name="balance", type="number"),
+        ],
+    )
+    ir = SpecModel(
+        api_name="shop",
+        slug="shop",
+        entities=[order, payment_method],
+        operations=[],
+        store_metadata=StoreMetadata(
+            collections=["orders", "payment_methods"],
+            pk_map={"orders": "order_id", "payment_methods": "id"},
+        ),
+    )
+    linked = _linked_entities(ir, order)
+    assert [e["collection"] for e in linked] == ["payment_methods"]
+
+
 def test_an_entity_never_links_to_itself() -> None:
     """A self-referencing array would otherwise duplicate the whole entity into
     its own context."""
