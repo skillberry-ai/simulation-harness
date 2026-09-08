@@ -17,7 +17,10 @@ from simulation_harness.skills.generation.ir import (
     SpecModel,
     StoreMetadata,
 )
-from simulation_harness.skills.generation.stages.schema import enforce_contract
+from simulation_harness.skills.generation.stages.schema import (
+    enforce_contract,
+    validate_schema,
+)
 from simulation_harness.skills.generation.stages.seed import validate_schema_and_db
 
 
@@ -275,3 +278,67 @@ def test_extra_element_fields_are_still_allowed() -> None:
     stamped = enforce_contract(_schema("lines"), _ir(shape, "lines"))
     db = {"orders": [{"order_id": "o1", "lines": [{"sku": "s1", "internal_seq": 3}]}]}
     assert validate_schema_and_db(stamped, db) == []
+def test_element_ref_records_the_local_field_when_it_differs() -> None:
+    """An inlined element whose own key name differs from the target's pk."""
+    shape = ElementShape(
+        kind="embedded",
+        container="array",
+        fields=(ElementField(name="amount", type="number"),),
+        local_key="payment_method_id",
+        target_collection="payment_methods",
+        target_key="id",
+    )
+    out = enforce_contract(_schema("payment_history"), _ir(shape, "payment_history"))
+    assert _order_prop(out, "payment_history")["x-element-ref"] == {
+        "collection": "payment_methods",
+        "key": "id",
+        "field": "payment_method_id",
+    }
+
+
+def test_element_ref_omits_field_when_the_names_coincide() -> None:
+    """The pre-existing reference shape must keep its two-key annotation."""
+    shape = ElementShape(
+        kind="reference", target_collection="items", target_key="item_id"
+    )
+    out = enforce_contract(_schema(), _ir(shape))
+    assert _order_prop(out)["x-element-ref"] == {
+        "collection": "items",
+        "key": "item_id",
+    }
+
+
+def test_validate_schema_rejects_a_list_valued_primary_key() -> None:
+    """`validate_schema` returns [] early without an ir, so one must be passed."""
+    schema: dict = {
+        "type": "object",
+        "properties": {
+            "trackings": {"type": "array", "items": {"$ref": "#/$defs/Tracking"}}
+        },
+        "$defs": {
+            "Tracking": {
+                "type": "object",
+                "properties": {
+                    "tracking_id": {"type": "array", "items": {"type": "string"}}
+                },
+            }
+        },
+    }
+    ir = SpecModel(
+        api_name="shop",
+        slug="shop",
+        entities=[
+            Entity(
+                name="Tracking",
+                collection="trackings",
+                primary_key="tracking_id",
+                fields=[Field(name="tracking_id", type="array")],
+            )
+        ],
+        operations=[],
+        store_metadata=StoreMetadata(
+            collections=["trackings"], pk_map={"trackings": "tracking_id"}
+        ),
+    )
+    errors = validate_schema(schema, ir)
+    assert any("tracking_id" in e and "scalar" in e for e in errors)

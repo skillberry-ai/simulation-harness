@@ -117,6 +117,18 @@ def validate_schema(schema: dict, ir: SpecModel | None = None) -> list[str]:
                 f"$defs/{def_name} must declare the primary-key property "
                 f"'{pk}' for collection '{collection}'"
             )
+        pk_prop = (entity_def.get("properties") or {}).get(pk) if pk else None
+        if isinstance(pk_prop, dict) and (
+            pk_prop.get("type") in ("array", "object")
+            or isinstance(pk_prop.get("items"), dict)
+            or isinstance(pk_prop.get("properties"), dict)
+        ):
+            errors.append(
+                f"$defs/{def_name} declares primary key '{pk}' for collection "
+                f"'{collection}', but that property is not scalar. The runtime keys "
+                f"rows by str(pk_value), so a list- or object-valued key silently "
+                f"becomes a stringified value."
+            )
         def_collections.setdefault(def_name, []).append(collection)
     for def_name, collections in def_collections.items():
         pks = {ir.store_metadata.pk_map.get(c) for c in collections}
@@ -205,13 +217,18 @@ def _stamp_element_shapes(entity_def: dict, entity: Entity) -> None:
         if items is None:
             continue
         prop[keyword] = items
-        if field.element.kind == "reference":
-            # Recorded so the runtime and the operation stage can see which
-            # collection an identifier points at; validators ignore `x-` keywords.
-            prop["x-element-ref"] = {
-                "collection": field.element.target_collection,
-                "key": field.element.target_key,
+        element = field.element
+        if element.target_collection is not None:
+            # Recorded so the operation stage can see which collection an
+            # identifier points at; validators ignore `x-` keywords. `field` is
+            # present when the element's own key name differs from the target's.
+            ref: dict = {
+                "collection": element.target_collection,
+                "key": element.target_key,
             }
+            if element.local_key is not None:
+                ref["field"] = element.local_key
+            prop["x-element-ref"] = ref
 
 
 def enforce_contract(schema: dict, ir: SpecModel) -> dict:
