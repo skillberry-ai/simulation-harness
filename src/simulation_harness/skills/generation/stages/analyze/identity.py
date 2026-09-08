@@ -177,9 +177,10 @@ def _merge_props(into: dict, incoming: dict) -> None:
     asserting that every row is a gift card. Any other conflict keeps the first
     definition seen — shape validation belongs to the schema stage, not here.
     """
-    for name, prop in incoming.items():
+    for name in sorted(incoming):
         if not isinstance(name, str):
             continue
+        prop = incoming[name]
         existing = into.get(name)
         if existing is None:
             into[name] = prop
