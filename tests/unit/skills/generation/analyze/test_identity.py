@@ -676,6 +676,61 @@ def test_noun_is_stem(noun: str, holder: str, expected: bool) -> None:
     assert _noun_is_stem(noun, holder) is expected
 
 
+@pytest.mark.parametrize(
+    "noun",
+    [
+        # Corpus collection names, taken from the checked-in example specs.
+        # Already plural, so pluralize() below is a no-op on them.
+        "payment_methods",
+        "items",
+        "orders",
+        "products",
+        "users",
+        "payments",
+        "reservations",
+        "trackings",
+        "categories",
+        "boxes",
+        "addresses",
+        "objs_channels",
+        # Singular nouns with the "looks plural but isn't" tail
+        # (_SINGULAR_S_ENDINGS) that made this rule's special-casing necessary.
+        # No spec names a *collection* "status"/"axis"/"user" outright — a
+        # collection is always a pluralize() output — so these are anchored on
+        # their collection-shaped form (pluralize(noun) below) rather than
+        # tested as raw collection nouns themselves.
+        "status",
+        "axis",
+        "user",
+    ],
+)
+def test_pluralize_singularize_round_trip(noun: str) -> None:
+    """A collection name is stable under ``singularize`` -> ``pluralize``.
+
+    ``noun_for``'s bare-``id`` path (``singularize(snake(schema_name))``) feeds
+    straight into ``collection=pluralize(noun)`` in :func:`derive_identity`, so
+    the property that actually has to hold is that a collection name, once
+    produced, is a fixed point of ``pluralize . singularize`` — computing it
+    again from itself must not drift. ``collection = pluralize(noun)`` makes
+    every parametrized word collection-shaped first (a no-op for the
+    already-plural corpus entries above), then asserts
+    ``pluralize(singularize(collection)) == collection``.
+
+    NOT a universal law over all strings: a brute-force search over the whole
+    space found two remaining contrived families where it fails — a final
+    segment of exactly ``"ys"`` (not covered by ``_SINGULAR_S_ENDINGS`` nor by
+    any of the ``-ies``/``-es``/``-s`` reductions ``_singular_segment`` tries)
+    and doubled underscores (an empty segment from ``"__"`` splitting). Neither
+    shape appears in any checked-in spec, and ``singularize``/
+    ``_singular_segment`` are deliberately conservative (see their docstrings)
+    rather than chasing those two families — so this test covers the
+    corpus-realistic space the derivation rule actually runs on, not the full
+    string space.
+    """
+    collection = pluralize(noun)
+    assert pluralize(singularize(collection)) == collection
+
+
 def test_rule_four_declines_a_foreign_key_at_element_level() -> None:
     """tau2-retail: payment_method_id in a payment_history line item references a
     payment method; it is not the line item's identity."""
