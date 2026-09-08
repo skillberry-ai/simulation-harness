@@ -50,6 +50,23 @@ def pluralize(noun: str) -> str:
     return noun + "s"
 
 
+def _scalar_candidate(prop: object) -> bool:
+    """Whether ``prop`` could hold a primary-key value.
+
+    A primary key has to be one value: ``state/store.py`` keys rows by
+    ``str(pk_value)``, so a list-valued key becomes the stringified list rather
+    than failing. Only *declared* evidence disqualifies a candidate — an absent
+    type is the common case in these specs and is not evidence of a problem.
+    """
+    if not isinstance(prop, dict):
+        return True
+    if prop.get("type") in ("array", "object"):
+        return False
+    return not (
+        isinstance(prop.get("items"), dict) or isinstance(prop.get("properties"), dict)
+    )
+
+
 def identity_key(name: str, schema: dict, *, synthetic: bool) -> str | None:
     """The property that identifies instances of ``schema``, or ``None``.
 
@@ -81,7 +98,11 @@ def identity_key(name: str, schema: dict, *, synthetic: bool) -> str | None:
         if flattened is None:
             return None
         props = flattened["properties"]
-    candidates = [p for p in props if isinstance(p, str) and p.endswith("_id")]
+    candidates = [
+        p
+        for p in sorted(props)
+        if isinstance(p, str) and p.endswith("_id") and _scalar_candidate(props[p])
+    ]
     own = snake(name)
     # Longest noun first so "order_item_id" beats "item_id" for OrderItem, and
     # so the outcome does not depend on property declaration order.
@@ -89,7 +110,7 @@ def identity_key(name: str, schema: dict, *, synthetic: bool) -> str | None:
         noun = candidate[:-3]
         if noun and (own == noun or own.endswith(noun) or pluralize(noun) == own):
             return candidate
-    if "id" in props:
+    if "id" in props and _scalar_candidate(props["id"]):
         return "id"
     if synthetic and len(candidates) == 1:
         return candidates[0]

@@ -536,3 +536,40 @@ def test_identity_key_still_declines_a_scalar_union() -> None:
     assert (
         identity_key("thing", {"anyOf": [{"type": "string"}]}, synthetic=True) is None
     )
+
+
+def test_identity_key_rejects_a_list_valued_candidate() -> None:
+    """tau2-retail's Order.fulfillments carries `tracking_id` as an ARRAY of ids.
+    Adopting it made a collection whose primary key is a list, which store.py
+    then keys under the stringified list "['TRK-DEL-001']"."""
+    schema: dict = {
+        "properties": {
+            "tracking_id": {"type": "array", "items": {"type": "string"}},
+            "item_ids": {"type": "array", "items": {"type": "string"}},
+        }
+    }
+    assert identity_key("fulfillments", schema, synthetic=True) is None
+
+
+def test_identity_key_rejects_an_object_valued_bare_id() -> None:
+    schema: dict = {"properties": {"id": {"type": "object", "properties": {"v": {}}}}}
+    assert identity_key("Thing", schema, synthetic=False) is None
+
+
+def test_identity_key_accepts_an_untyped_candidate() -> None:
+    """Absent type is the common case in these specs and is not evidence of a
+    problem, so it must stay acceptable."""
+    assert (
+        identity_key("Order", {"properties": {"order_id": {}}}, synthetic=True)
+        == "order_id"
+    )
+
+
+def test_identity_key_honours_a_declared_key_without_the_scalar_filter() -> None:
+    """An explicit but impossible x-primary-key must fail loudly in the schema
+    stage, not be quietly downgraded to undecidable here."""
+    schema: dict = {
+        "x-primary-key": "tracking_id",
+        "properties": {"tracking_id": {"type": "array"}},
+    }
+    assert identity_key("Tracking", schema, synthetic=False) == "tracking_id"
