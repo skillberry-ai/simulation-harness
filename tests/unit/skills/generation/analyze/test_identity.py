@@ -629,6 +629,19 @@ def test_identity_key_rejects_an_object_valued_bare_id() -> None:
     assert identity_key("Thing", schema, synthetic=False) is None
 
 
+def test_identity_key_rejects_a_list_valued_type_candidate() -> None:
+    """JSON Schema permits `"type": ["array", "string"]`; a plain `type in
+    ("array", "object")` check missed that shape and would accept it as a
+    primary-key candidate."""
+    schema: dict = {
+        "properties": {
+            "tag_id": {"type": ["array", "string"], "items": {"type": "string"}},
+            "name": {"type": "string"},
+        }
+    }
+    assert identity_key("Thing", schema, synthetic=True) is None
+
+
 def test_identity_key_accepts_an_untyped_candidate() -> None:
     """Absent type is the common case in these specs and is not evidence of a
     problem, so it must stay acceptable."""

@@ -60,7 +60,17 @@ def _scalar_candidate(prop: object) -> bool:
     """
     if not isinstance(prop, dict):
         return True
-    if prop.get("type") in ("array", "object"):
+    declared = prop.get("type")
+    # JSON Schema permits a list-valued "type" (e.g. {"type": ["array", "string"]}),
+    # so a plain `in ("array", "object")` check missed it: normalize to a set of
+    # strings regardless of whether it arrived as one string or several.
+    if isinstance(declared, str):
+        types: set[str] = {declared}
+    elif isinstance(declared, list):
+        types = {t for t in declared if isinstance(t, str)}
+    else:
+        types = set()
+    if types & {"array", "object"}:
         return False
     return not (
         isinstance(prop.get("items"), dict) or isinstance(prop.get("properties"), dict)
