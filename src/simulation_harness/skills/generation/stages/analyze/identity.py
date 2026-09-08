@@ -89,6 +89,17 @@ def _singular_segment(segment: str) -> str:
     return segment
 
 
+def singularize(noun: str) -> str:
+    """Inverse of :func:`pluralize`, per underscore-separated segment.
+
+    Conservative by construction: :func:`_singular_segment` only reduces a
+    segment when ``pluralize`` round-trips back to it, so ``status`` and ``axis``
+    (which ``pluralize`` treats as singular) are returned unchanged and no
+    collection name can move.
+    """
+    return "_".join(_singular_segment(s) for s in noun.split("_") if s)
+
+
 def _noun_is_stem(noun: str, holder: str) -> bool:
     """Whether ``noun`` names the thing ``holder`` holds, rather than something else.
 
@@ -175,7 +186,7 @@ def noun_for(key: str, schema_name: str) -> str:
     if key.endswith("_id") and len(key) > 3:
         return snake(key[:-3])
     if key == "id":
-        return snake(schema_name)
+        return singularize(snake(schema_name))
     return snake(key)
 
 

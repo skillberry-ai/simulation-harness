@@ -14,6 +14,7 @@ from simulation_harness.skills.generation.stages.analyze.identity import (
     identity_key,
     noun_for,
     pluralize,
+    singularize,
     snake,
 )
 
@@ -105,6 +106,34 @@ def test_noun_for_comes_from_the_key_not_the_name() -> None:
 
 def test_noun_for_bare_id_falls_back_to_the_schema_name() -> None:
     assert noun_for("id", "Restaurant") == "restaurant"
+
+
+@pytest.mark.parametrize(
+    ("plural", "expected"),
+    [
+        ("payment_methods", "payment_method"),
+        ("categories", "category"),
+        ("boxes", "box"),
+        ("addresses", "address"),
+        ("items", "item"),
+        # Round-trip guard: pluralize() leaves these alone, so singularize must too.
+        ("status", "status"),
+        ("axis", "axis"),
+        ("user", "user"),
+    ],
+)
+def test_singularize(plural: str, expected: str) -> None:
+    assert singularize(plural) == expected
+
+
+def test_noun_for_singularizes_a_plural_bare_id_holder() -> None:
+    """get_user_details.payment_methods is a map keyed by id; the noun comes from
+    the property name, which is plural."""
+    assert noun_for("id", "payment_methods") == "payment_method"
+
+
+def test_noun_for_leaves_a_key_derived_noun_alone() -> None:
+    assert noun_for("payment_method_id", "anything") == "payment_method"
 
 
 def test_identity_key_matches_plural_property_name_to_singular_key() -> None:
@@ -364,16 +393,23 @@ def test_two_nouns_pluralizing_alike_fail_as_an_identity_error(
 ) -> None:
     """``pluralize`` is not injective, and the collision must fail here.
 
-    An ``Address`` entity beside an ``Addresses`` wrapper is an ordinary spec
-    shape. Both nouns pluralize to ``addresses``, so the two clusters claim one
-    collection and ``pk_map`` — keyed by collection — loses a primary key.
-    Downstream that surfaces as a duplicate entry in the schema's top-level
-    ``required``, which jsonschema rejects, wasting every repair attempt before
-    hard-failing under stage "schema".
+    Two ``*_id``-keyed schemas whose nouns are exactly a singular/plural pair
+    (``address``/``addresses``) both pluralize to ``addresses``, so the two
+    clusters claim one collection and ``pk_map`` — keyed by collection — loses
+    a primary key. Downstream that surfaces as a duplicate entry in the
+    schema's top-level ``required``, which jsonschema rejects, wasting every
+    repair attempt before hard-failing under stage "schema".
+
+    Built from ``*_id`` keys rather than a bare ``id``: a bare-id noun is now
+    singularized (see ``noun_for``), so an ``Address``/``Addresses`` pair built
+    that way would collapse into one cluster instead of colliding — the
+    intended effect of that fix, not a regression of this guard. The ``*_id``
+    branch of ``noun_for`` is unaffected, so it still reaches the collision
+    this guard exists to catch.
     """
     schemas = {
-        singular: {"properties": {"id": {"type": "string"}}},
-        plural: {"properties": {"id": {"type": "string"}}},
+        singular: {"properties": {f"{snake(singular)}_id": {"type": "string"}}},
+        plural: {"properties": {f"{snake(plural)}_id": {"type": "string"}}},
     }
     with pytest.raises(GenerationStageError) as exc:
         derive_identity(schemas, synthetic=False)
