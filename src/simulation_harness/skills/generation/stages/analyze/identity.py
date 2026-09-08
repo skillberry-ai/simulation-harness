@@ -168,6 +168,59 @@ def _json_type(prop: dict) -> str:
     return "string"
 
 
+def _merge_props(into: dict, incoming: dict) -> None:
+    """Merge one union variant's properties into the accumulator.
+
+    Differing ``const`` values across variants fold into an ``enum``: that is the
+    discriminator (``source`` on tau2-retail's payment methods), and a plain
+    ``dict.update`` would keep only whichever variant sorted last, silently
+    asserting that every row is a gift card. Any other conflict keeps the first
+    definition seen — shape validation belongs to the schema stage, not here.
+    """
+    for name, prop in incoming.items():
+        if not isinstance(name, str):
+            continue
+        existing = into.get(name)
+        if existing is None:
+            into[name] = prop
+            continue
+        if not (isinstance(existing, dict) and isinstance(prop, dict)):
+            continue
+        old, new = existing.get("const"), prop.get("const")
+        if old is not None and new is not None and old != new:
+            into[name] = {"enum": [old, new]}
+        elif "enum" in existing and new is not None and new not in existing["enum"]:
+            into[name] = {"enum": [*existing["enum"], new]}
+
+
+def _flatten_union(schema: dict) -> dict | None:
+    """One object schema equivalent to an ``anyOf``/``oneOf`` of objects, or ``None``.
+
+    Properties are unioned and ``required`` intersected, so a field required by
+    only some variants comes out optional. ``None`` means this is not a union of
+    objects — a union with a scalar variant stays undecidable exactly as it was,
+    rather than being coerced into an entity.
+    """
+    variants = schema.get("anyOf") or schema.get("oneOf")
+    if not isinstance(variants, list) or not variants:
+        return None
+    props: dict = {}
+    reqs: list[set[str]] = []
+    for variant in variants:
+        if not isinstance(variant, dict) or not isinstance(
+            variant.get("properties"), dict
+        ):
+            return None
+        _merge_props(props, variant["properties"])
+        required = variant.get("required")
+        reqs.append(set(required) if isinstance(required, list) else set())
+    return {
+        "type": "object",
+        "properties": props,
+        "required": sorted(set.intersection(*reqs)) if reqs else [],
+    }
+
+
 def _nested_objects(prop: dict) -> Iterator[dict]:
     """Yield object schemas reachable one level below ``prop``.
 

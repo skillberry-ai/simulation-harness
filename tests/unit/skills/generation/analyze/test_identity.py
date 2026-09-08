@@ -6,6 +6,7 @@ import pytest
 
 from simulation_harness.skills.generation.repair import GenerationStageError
 from simulation_harness.skills.generation.stages.analyze.identity import (
+    _flatten_union,
     camel,
     derive_identity,
     identity_key,
@@ -390,3 +391,92 @@ def test_a_lone_already_plural_noun_is_not_a_collision() -> None:
         {"Addresses": {"properties": {"id": {"type": "string"}}}}, synthetic=False
     )
     assert model.collections == ["addresses"]
+
+
+def test_flatten_union_unions_properties_and_intersects_required() -> None:
+    schema: dict = {
+        "anyOf": [
+            {
+                "properties": {
+                    "source": {"const": "credit_card"},
+                    "id": {"type": "string"},
+                    "brand": {"type": "string"},
+                    "last_four": {"type": "string"},
+                },
+                "required": ["source", "id", "brand", "last_four"],
+            },
+            {
+                "properties": {
+                    "source": {"const": "gift_card"},
+                    "id": {"type": "string"},
+                    "balance": {"type": "number"},
+                },
+                "required": ["source", "id", "balance"],
+            },
+            {
+                "properties": {
+                    "source": {"const": "gift_card"},
+                    "id": {"type": "string"},
+                },
+                "required": ["source", "id"],
+            },
+        ]
+    }
+    flat = _flatten_union(schema)
+    assert flat is not None
+    assert sorted(flat["properties"]) == [
+        "balance",
+        "brand",
+        "id",
+        "last_four",
+        "source",
+    ]
+    assert flat["required"] == ["id", "source"]
+    assert flat["type"] == "object"
+
+
+def test_flatten_union_folds_differing_const_into_enum() -> None:
+    """A plain dict.update() would keep only the last variant's const, so every
+    generated row would claim to be whichever variant sorted last."""
+    schema: dict = {
+        "anyOf": [
+            {"properties": {"source": {"const": "credit_card"}}},
+            {"properties": {"source": {"const": "gift_card"}}},
+        ]
+    }
+    flat = _flatten_union(schema)
+    assert flat is not None
+    assert flat["properties"]["source"] == {"enum": ["credit_card", "gift_card"]}
+
+
+def test_flatten_union_keeps_a_shared_const_as_is() -> None:
+    schema: dict = {
+        "anyOf": [
+            {"properties": {"kind": {"const": "only"}}},
+            {"properties": {"kind": {"const": "only"}}},
+        ]
+    }
+    flat = _flatten_union(schema)
+    assert flat is not None
+    assert flat["properties"]["kind"] == {"const": "only"}
+
+
+def test_flatten_union_declines_a_non_object_variant() -> None:
+    """anyOf: [{type: string}, ...] is not an entity union."""
+    assert (
+        _flatten_union({"anyOf": [{"type": "string"}, {"properties": {"id": {}}}]})
+        is None
+    )
+
+
+def test_flatten_union_declines_a_plain_schema() -> None:
+    assert _flatten_union({"properties": {"id": {}}}) is None
+
+
+def test_flatten_union_reads_oneof_too() -> None:
+    flat = _flatten_union(
+        {"oneOf": [{"properties": {"a": {}}}, {"properties": {"b": {}}}]}
+    )
+    assert flat is not None
+    assert sorted(flat["properties"]) == ["a", "b"]
+    assert flat["required"] == []
