@@ -59,6 +59,17 @@ assert_fails() {
     fi
 }
 
+# assert_exit_code <label> <expected> <command...> — asserts the exact exit status.
+# Distinguishes the script's own convention (1 = a commit lacks sign-off,
+# 2 = bad invocation or unusable history) where assert_fails only sees non-zero.
+assert_exit_code() {
+    local label="$1" expected="$2"
+    shift 2
+    local actual=0
+    "$@" >/dev/null 2>&1 || actual=$?
+    assert_eq "$label" "$actual" "$expected"
+}
+
 assert_summary() {
     printf '\n%s check(s), %s failure(s)\n' "$ASSERT_CHECKS" "$ASSERT_FAILURES"
     if (( ASSERT_FAILURES > 0 )); then

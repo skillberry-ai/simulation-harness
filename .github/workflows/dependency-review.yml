@@ -1,0 +1,31 @@
+name: Dependency Review
+
+# Blocks a pull request that introduces a dependency with a known high-or-worse
+# advisory, before it reaches main. Complements Dependabot, which reports on
+# what is already merged: this gate is the one that sees the change first.
+on:
+  pull_request:
+    branches: [main]
+
+# The action reads the dependency graph through the repository's compare API,
+# which `contents: read` covers. `pull-requests: write` is needed only for
+# `comment-summary-in-pr`, which this does not enable -- the failing check and
+# its log are the report.
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@v5
+        with:
+          # High and critical fail the check. Moderate and below are reported in
+          # the log without blocking, so a routine bump is not held up by an
+          # advisory that does not warrant it.
+          fail-on-severity: high

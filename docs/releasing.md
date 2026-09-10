@@ -32,6 +32,32 @@ The release page is created on `$RELEASE_GH_REPO`, which defaults to
 fork. `RELEASE_SKIP_GH=1` skips the page entirely, and `RELEASE_REMOTE` selects
 the push remote (default `origin`).
 
+## The CHANGELOG link block
+
+`CHANGELOG.md` follows Keep a Changelog: section headers are bracketed
+(`## [v0.2.0] — <date>`) and resolve against a block of link definitions at the
+bottom of the file.
+
+```
+[Unreleased]: <repo>/compare/v0.2.0...HEAD
+[v0.2.0]: <repo>/compare/v0.1.2...v0.2.0
+```
+
+`release.sh` regenerates that whole block on every release from the release tags
+that exist plus the one it is creating, so `[Unreleased]` is rebased onto the new
+tag and the new version gets its own compare link. The URLs are built from
+`$RELEASE_GH_REPO`, so a fork release produces links to the fork.
+
+Two consequences worth knowing:
+
+- The bracketed header and its definition move together. A header with no
+  definition renders as literal brackets, so do not add a section by hand
+  without a matching link line — `scripts/tests/test-release.sh` asserts every
+  version header has one.
+- Because the block is regenerated rather than appended to, a hand-edit to one of
+  those lines is overwritten at the next release. Any other reference-style link
+  in the file is left alone.
+
 ## Container images
 
 Cutting a release does not build an image directly — pushing the tag does.
