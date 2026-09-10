@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "simulation-harness"
-version = "0.1.2"
+version = "0.2.0"
 description = "MCP server simulation harness for testing and development"
 readme = "README.md"
 requires-python = ">=3.11"

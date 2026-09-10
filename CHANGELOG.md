@@ -1,5 +1,57 @@
 # Changelog
 
+## [v0.2.0] — 2026-09-10
+
+### Breaking changes
+
+- **docker:** The `latest` image tag now follows the newest release instead of `main`. A bare `docker pull ghcr.io/skillberry-ai/simulation-harness`, or an explicit `:latest`, now serves released code rather than unreleased trunk. Switch to `:main` to keep tracking the default branch.
+- **api:** POST /api/v1/simulation, /api/v1/simulation/setup and /api/v1/simulation/start now return 422 for a body containing any field outside the documented set. Callers that sent stray or misspelled keys were previously served a 2xx with that key ignored; they will now fail until the key is removed or corrected. The most likely offender is `regenerate`, which should be `regenerate_skill`.
+
+### Features
+
+- **generation:** pin array element shapes in the IR (#16)
+- **generation:** enforce element shape, not just element value types (#20)
+
+### Fixes
+
+- **security:** triage and remediate open code scanning + Dependabot alerts (#5)
+- **security:** close the two residual CodeQL flows in the test-client proxy (#6)
+- **api:** reject unknown request fields, and gate the shell script suite in CI (#11)
+- **config:** resolve HARNESS_* overrides from .env, and fail fast on LLM auth errors (#14)
+- **generation:** give the operation prompt explicit contract-reading rules (#12)
+- **generation:** reject caller-gate rules in the behavior preamble (#17)
+- **generation:** reject sections that read a collection the store does not have (#22)
+- **generation:** stop the fallback declining array-shaped listings (#23)
+- **generation:** insist the fallback model a listing it can model (#24)
+- **test-client:** migrate vitest workspace file to test.projects, and gate the suite in CI (#36)
+- **test-client:** align .nvmrc and server @types/node with the declared floors (#37)
+- **generation:** stop deriving collections from foreign keys, and derive union-shaped entities (#33)
+
+### Refactoring
+
+- **analyze:** derive the runtime contract in code, not from an LLM call (#8)
+
+### Build
+
+- **deps:** bump @vitest/mocker and vitest in /utils/test-client (#35)
+
+### CI
+
+- **docker:** point the latest tag at the newest release, not main (#7)
+- refuse to re-resolve dependencies, so uv.lock drift fails loudly (#28)
+
+### Chores
+
+- **generation:** run the operation and behavior stages at temperature 0 (#10)
+- align pre-commit's ruff with the project's, and pin both (#18)
+- pin ruff's lint rule set instead of inheriting defaults (#26)
+- bump ruff from 0.15.17 to 0.16.6 (#27)
+- add missing trailing newlines to fixtures and example specs (#29)
+- refresh .secrets.baseline line numbers (#30)
+- refresh the last stale .secrets.baseline line number (#31)
+- re-scan .secrets.baseline, recording two unlisted test placeholders (#32)
+- adopt CI permissions, dependency review, and changelog compare links (#38)
+
 ## [v0.1.2] — 2026-08-31
 
 ### Breaking changes
@@ -310,7 +362,8 @@
 - style: drop unused os import in health-endpoints test
 - style: apply ruff format to scenario test files
 
-[Unreleased]: https://github.com/skillberry-ai/simulation-harness/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/skillberry-ai/simulation-harness/compare/v0.2.0...HEAD
+[v0.2.0]: https://github.com/skillberry-ai/simulation-harness/compare/v0.1.2...v0.2.0
 [v0.1.2]: https://github.com/skillberry-ai/simulation-harness/compare/v0.1.1...v0.1.2
 [v0.1.1]: https://github.com/skillberry-ai/simulation-harness/compare/v0.1.0...v0.1.1
 [v0.1.0]: https://github.com/skillberry-ai/simulation-harness/releases/tag/v0.1.0
