@@ -50,7 +50,96 @@ def pluralize(noun: str) -> str:
     return noun + "s"
 
 
-def identity_key(name: str, schema: dict, *, synthetic: bool) -> str | None:
+def _scalar_candidate(prop: object) -> bool:
+    """Whether ``prop`` could hold a primary-key value.
+
+    A primary key has to be one value: ``state/store.py`` keys rows by
+    ``str(pk_value)``, so a list-valued key becomes the stringified list rather
+    than failing. Only *declared* evidence disqualifies a candidate — an absent
+    type is the common case in these specs and is not evidence of a problem.
+    """
+    if not isinstance(prop, dict):
+        return True
+    declared = prop.get("type")
+    # JSON Schema permits a list-valued "type" (e.g. {"type": ["array", "string"]}),
+    # so a plain `in ("array", "object")` check missed it: normalize to a set of
+    # strings regardless of whether it arrived as one string or several.
+    if isinstance(declared, str):
+        types: set[str] = {declared}
+    elif isinstance(declared, list):
+        types = {t for t in declared if isinstance(t, str)}
+    else:
+        types = set()
+    if types & {"array", "object"}:
+        return False
+    return not (
+        isinstance(prop.get("items"), dict) or isinstance(prop.get("properties"), dict)
+    )
+
+
+def _singular_segment(segment: str) -> str:
+    """One path segment reduced to singular, conservatively.
+
+    Two guards, both needed. Segments ending in ``_SINGULAR_S_ENDINGS`` are
+    singular despite the trailing ``s`` and are returned untouched — without this
+    ``status`` reduces to ``statu``, because ``pluralize("statu")`` really is
+    ``status`` and the round-trip check below is satisfied. Otherwise a reduction
+    is accepted only when ``pluralize`` round-trips back to the original, so an
+    irregular segment is left exactly as it was.
+    """
+    if segment.endswith(_SINGULAR_S_ENDINGS):
+        return segment
+    for candidate in (
+        segment[:-3] + "y" if segment.endswith("ies") else "",
+        segment[:-2] if segment.endswith("es") else "",
+        segment[:-1] if segment.endswith("s") else "",
+    ):
+        if candidate and pluralize(candidate) == segment:
+            return candidate
+    return segment
+
+
+def singularize(noun: str) -> str:
+    """Inverse of :func:`pluralize`, which only ever alters the tail.
+
+    ``pluralize`` appends to the whole string, so it can only change the final
+    underscore-separated segment. Mirroring that, ``singularize`` reduces only
+    the final segment via :func:`_singular_segment` and leaves every earlier
+    segment untouched — ``objs_bot_profile`` must stay ``objs_bot_profile``
+    rather than losing the ``s`` off ``objs``, which is not a plural of
+    anything here, just an earlier segment that happens to end in ``s``.
+
+    Conservative by construction on the segment it does touch:
+    :func:`_singular_segment` only reduces it when ``pluralize`` round-trips
+    back to it, so ``status`` and ``axis`` (which ``pluralize`` treats as
+    singular) are returned unchanged and no collection name can move.
+    """
+    parts = [s for s in noun.split("_") if s]
+    if not parts:
+        return noun
+    parts[-1] = _singular_segment(parts[-1])
+    return "_".join(parts)
+
+
+def _noun_is_stem(noun: str, holder: str) -> bool:
+    """Whether ``noun`` names the thing ``holder`` holds, rather than something else.
+
+    A sole ``*_id`` on an element is the element's own identity when its noun is a
+    **prefix** of the holder's name (``payment_history`` holds ``payment``
+    entries), and a foreign key when it is not (``payment_history`` holding
+    ``payment_method_id``, ``fulfillments`` holding ``tracking_id``).
+
+    Prefix, not subset: sharing a segment is not enough, or ``payment_history``
+    and ``payment_method`` would still match on ``payment``.
+    """
+    want = [_singular_segment(s) for s in noun.split("_") if s]
+    have = [_singular_segment(s) for s in holder.split("_") if s]
+    return bool(want) and have[: len(want)] == want
+
+
+def identity_key(
+    name: str, schema: dict, *, synthetic: bool, nested: bool = False
+) -> str | None:
     """The property that identifies instances of ``schema``, or ``None``.
 
     ``None`` means **undecidable**: the caller must route the schema to the
@@ -64,6 +153,12 @@ def identity_key(name: str, schema: dict, *, synthetic: bool) -> str | None:
     name-match, so its single ``*_id`` is the only signal available, whereas a
     *named* schema carrying one foreign-looking id is genuinely ambiguous.
 
+    ``nested`` marks an element-level decision, where ``name`` is the holder
+    property rather than a schema name. There rule 4 additionally requires the
+    noun to be a stem of the holder (:func:`_noun_is_stem`): a line item's sole
+    ``*_id`` is usually a foreign key, and adopting it coins a collection named
+    after the entity it references.
+
     Note that a bare ``id`` is returned here on both paths — it is a correct
     *key* either way. What a synthetic name cannot supply is a usable **noun**
     for it, so :func:`derive_identity` treats a bare ``id`` on a top-level
@@ -75,8 +170,17 @@ def identity_key(name: str, schema: dict, *, synthetic: bool) -> str | None:
         return declared
     props = schema.get("properties")
     if not isinstance(props, dict):
-        return None
-    candidates = [p for p in props if isinstance(p, str) and p.endswith("_id")]
+        # A union of objects is an entity described in variants; flatten it so the
+        # rules below see one property set. Anything else is genuinely undecidable.
+        flattened = _flatten_union(schema)
+        if flattened is None:
+            return None
+        props = flattened["properties"]
+    candidates = [
+        p
+        for p in sorted(props)
+        if isinstance(p, str) and p.endswith("_id") and _scalar_candidate(props[p])
+    ]
     own = snake(name)
     # Longest noun first so "order_item_id" beats "item_id" for OrderItem, and
     # so the outcome does not depend on property declaration order.
@@ -84,10 +188,11 @@ def identity_key(name: str, schema: dict, *, synthetic: bool) -> str | None:
         noun = candidate[:-3]
         if noun and (own == noun or own.endswith(noun) or pluralize(noun) == own):
             return candidate
-    if "id" in props:
+    if "id" in props and _scalar_candidate(props["id"]):
         return "id"
     if synthetic and len(candidates) == 1:
-        return candidates[0]
+        if not nested or _noun_is_stem(candidates[0][:-3], name):
+            return candidates[0]
     return None
 
 
@@ -102,7 +207,7 @@ def noun_for(key: str, schema_name: str) -> str:
     if key.endswith("_id") and len(key) > 3:
         return snake(key[:-3])
     if key == "id":
-        return snake(schema_name)
+        return singularize(snake(schema_name))
     return snake(key)
 
 
@@ -168,6 +273,60 @@ def _json_type(prop: dict) -> str:
     return "string"
 
 
+def _merge_props(into: dict, incoming: dict) -> None:
+    """Merge one union variant's properties into the accumulator.
+
+    Differing ``const`` values across variants fold into an ``enum``: that is the
+    discriminator (``source`` on tau2-retail's payment methods), and a plain
+    ``dict.update`` would keep only whichever variant sorted last, silently
+    asserting that every row is a gift card. Any other conflict keeps the first
+    definition seen — shape validation belongs to the schema stage, not here.
+    """
+    for name in sorted(incoming):
+        if not isinstance(name, str):
+            continue
+        prop = incoming[name]
+        existing = into.get(name)
+        if existing is None:
+            into[name] = prop
+            continue
+        if not (isinstance(existing, dict) and isinstance(prop, dict)):
+            continue
+        old, new = existing.get("const"), prop.get("const")
+        if old is not None and new is not None and old != new:
+            into[name] = {"enum": [old, new]}
+        elif "enum" in existing and new is not None and new not in existing["enum"]:
+            into[name] = {"enum": [*existing["enum"], new]}
+
+
+def _flatten_union(schema: dict) -> dict | None:
+    """One object schema equivalent to an ``anyOf``/``oneOf`` of objects, or ``None``.
+
+    Properties are unioned and ``required`` intersected, so a field required by
+    only some variants comes out optional. ``None`` means this is not a union of
+    objects — a union with a scalar variant stays undecidable exactly as it was,
+    rather than being coerced into an entity.
+    """
+    variants = schema.get("anyOf") or schema.get("oneOf")
+    if not isinstance(variants, list) or not variants:
+        return None
+    props: dict = {}
+    reqs: list[set[str]] = []
+    for variant in variants:
+        if not isinstance(variant, dict) or not isinstance(
+            variant.get("properties"), dict
+        ):
+            return None
+        _merge_props(props, variant["properties"])
+        required = variant.get("required")
+        reqs.append(set(required) if isinstance(required, list) else set())
+    return {
+        "type": "object",
+        "properties": props,
+        "required": sorted(set.intersection(*reqs)) if reqs else [],
+    }
+
+
 def _nested_objects(prop: dict) -> Iterator[dict]:
     """Yield object schemas reachable one level below ``prop``.
 
@@ -179,10 +338,20 @@ def _nested_objects(prop: dict) -> Iterator[dict]:
     if not isinstance(inner, dict):
         return
     extra = inner.get("additionalProperties")
-    if isinstance(extra, dict) and isinstance(extra.get("properties"), dict):
-        yield extra
-    elif isinstance(inner.get("properties"), dict):
+    if isinstance(extra, dict):
+        if isinstance(extra.get("properties"), dict):
+            yield extra
+            return
+        flattened = _flatten_union(extra)
+        if flattened is not None:
+            yield flattened
+            return
+    if isinstance(inner.get("properties"), dict):
         yield inner
+        return
+    flattened = _flatten_union(inner)
+    if flattened is not None:
+        yield flattened
 
 
 def _container_element(prop: dict) -> tuple[str, dict] | None:
@@ -252,9 +421,78 @@ def _element_fields(element: dict) -> tuple[ElementField, ...]:
     )
 
 
+def _foreign_key(
+    element: dict,
+    clusters: dict[str, _Cluster],
+    *,
+    parent: _Cluster | None = None,
+) -> tuple[str, str, str] | None:
+    """``(local_key, target_collection, target_key)`` for an inlined element, or ``None``.
+
+    A sole scalar ``*_id`` whose noun names an existing entity is a reference:
+    the element has no identity of its own, so it stays inline, but the join is
+    still worth recording. Without this, declining the key in rule 4 would lose
+    the link entirely.
+
+    ``parent`` is the cluster the element is stored in, when the caller has it.
+    A key resolving back to that cluster is a **back-reference**
+    (``Order.lines[].order_id``) and is declined: containment already states the
+    parent link, and annotating it would put a self-pointing reference into the
+    generated schema. Compared by cluster identity rather than by name, so
+    :func:`pluralize` collapsing two nouns cannot fake a match.
+    """
+    props = element.get("properties")
+    if not isinstance(props, dict):
+        return None
+    candidates = [
+        p
+        for p in sorted(props)
+        if isinstance(p, str) and p.endswith("_id") and _scalar_candidate(props[p])
+    ]
+    if len(candidates) != 1:
+        return None
+    noun = noun_for(candidates[0], "")
+    target = clusters.get(noun)
+    if target is None or target is parent:
+        return None
+    return candidates[0], pluralize(noun), target.primary_key
+
+
+def _holds_reference_to(
+    holder: _Cluster, collection: str, clusters: dict[str, _Cluster]
+) -> bool:
+    """Whether one of ``holder``'s container elements is a foreign key into ``collection``.
+
+    This is the structural relationship "``collection``'s rows hang off this
+    holder", read off the foreign key rather than off provenance: a product's
+    ``variants`` element carries ``item_id``, so items hang off products. It used
+    to be visible in ``target.sources`` because such an element was also
+    *absorbed* into the target cluster — but absorbing it coined a collection out
+    of a foreign key, which is the defect rule 4's stem test now refuses. The key
+    the element carries says the same thing without coining anything.
+
+    Deliberately narrow: it is the same sole-scalar-``*_id`` test
+    :func:`_foreign_key` applies, so a holder that merely shares a field *name*
+    with the element (``User.name`` beside an order line's ``name``) is not a
+    hop — see :func:`_resolves_one_hop_out`.
+    """
+    for prop_name in sorted(holder.element_schemas):
+        _, element_schema = holder.element_schemas[prop_name]
+        element = next(
+            _nested_objects({"type": "array", "items": element_schema}), None
+        )
+        if element is None:
+            continue
+        fk = _foreign_key(element, clusters)
+        if fk is not None and fk[1] == collection:
+            return True
+    return False
+
+
 def _resolves_one_hop_out(
     clusters: dict[str, _Cluster],
     target: _Cluster,
+    target_collection: str,
     field_name: str,
     own_sources: set[str],
 ) -> str | None:
@@ -271,10 +509,19 @@ def _resolves_one_hop_out(
     matching on a coincidence: ``User`` also carries a ``name``, and without the
     nesting test that alone would excuse the leftover.
 
+    Nesting shows up two ways, and both count. Provenance: one of the target's
+    source schemas is a property of a schema the holder was built from
+    (``"Product.variants"`` against a holder sourced from ``"Product"``). Or a
+    foreign key: the holder has a container element pointing at the target's
+    collection (:func:`_holds_reference_to`). The second is needed because an
+    element whose sole ``*_id`` is a foreign key is no longer absorbed into the
+    target, so it contributes no source for the first test to see.
+
     Returns the holder's collection name, so the extra read the response needs can
     be recorded rather than merely permitted.
     """
-    for noun, holder in clusters.items():
+    for noun in sorted(clusters):
+        holder = clusters[noun]
         if holder is target:
             continue
         if not (holder.field_sources.get(field_name, set()) - own_sources):
@@ -284,7 +531,7 @@ def _resolves_one_hop_out(
             source.rsplit(".", 1)[0] in holder_sources
             for source in target.sources
             if "." in source
-        ):
+        ) or _holds_reference_to(holder, target_collection, clusters):
             return pluralize(noun)
     return None
 
@@ -331,9 +578,19 @@ def _element_shape(
 
     fields = _element_fields(element)
     embedded = ElementShape(kind="embedded", container=container, fields=fields)
-    nested = identity_key(prop_name, element, synthetic=synthetic)
+    nested = identity_key(prop_name, element, synthetic=synthetic, nested=True)
     if nested is None or nested == parent.primary_key:
-        return embedded
+        fk = _foreign_key(element, clusters, parent=parent)
+        if fk is None:
+            return embedded
+        local_key, target_collection, target_key = fk
+        return embedded.model_copy(
+            update={
+                "local_key": local_key,
+                "target_collection": target_collection,
+                "target_key": target_key,
+            }
+        )
     noun = noun_for(nested, prop_name)
     target = clusters.get(noun)
     if target is None:
@@ -363,7 +620,9 @@ def _element_shape(
     for f in fields:
         if target.field_sources.get(f.name, set()) - own_sources:
             continue  # the target carries it independently
-        hop = _resolves_one_hop_out(clusters, target, f.name, own_sources)
+        hop = _resolves_one_hop_out(
+            clusters, target, pluralize(noun), f.name, own_sources
+        )
         if hop is None:
             leftovers.append(f)
         elif hop not in hops:
@@ -505,7 +764,9 @@ def derive_identity(
                 # A bare `id` *is* decidable here even on the synthetic path:
                 # the name in hand is a property name, which is a real noun,
                 # not the enclosing operation id.
-                nested = identity_key(prop_name, target, synthetic=synthetic)
+                nested = identity_key(
+                    prop_name, target, synthetic=synthetic, nested=True
+                )
                 if nested is None or nested == key:
                     continue
                 _absorb(

@@ -34,6 +34,12 @@ def _derive(filename: str) -> tuple[list[str], dict[str, str], list[str]]:
     return model.collections, model.pk_map, list(model.undecidable)
 
 
+# `trackings` and the transaction-shaped `payment_methods` were removed here
+# deliberately, not refreshed away: both were Order line items promoted by rule 4
+# adopting a foreign key (`tracking_id`, itself array-valued, and
+# `payment_method_id`). `payment_methods` now derives from get_user_details'
+# instrument map and is keyed `id`. See
+# docs/superpowers/specs/2026-09-08-payment-methods-identity-design.md.
 def test_tau2_retail_contract() -> None:
     collections, pk_map, undecidable = _derive("tau2_retail_openapi.json")
     assert collections == [
@@ -41,15 +47,13 @@ def test_tau2_retail_contract() -> None:
         "orders",
         "payment_methods",
         "products",
-        "trackings",
         "users",
     ]
     assert pk_map == {
         "items": "item_id",
         "orders": "order_id",
-        "payment_methods": "payment_method_id",
+        "payment_methods": "id",
         "products": "product_id",
-        "trackings": "tracking_id",
         "users": "user_id",
     }
     assert undecidable == [
@@ -62,11 +66,18 @@ def test_tau2_retail_contract() -> None:
     ]
 
 
+# Airline gains `payment_methods` (pk `id`) for the same reason as retail: its
+# `User.payment_methods` is the same credit_card/gift_card instrument map behind
+# an anyOf, now derived directly instead of being left undecidable. `payments`,
+# `reservations` and `users` (and their primary keys) are untouched — that is the
+# regression guard for this change. See
+# docs/superpowers/specs/2026-09-08-payment-methods-identity-design.md.
 def test_tau2_airline_contract() -> None:
     collections, pk_map, undecidable = _derive("tau2_airline_openapi.json")
-    assert collections == ["payments", "reservations", "users"]
+    assert collections == ["payments", "payment_methods", "reservations", "users"]
     assert pk_map == {
         "payments": "payment_id",
+        "payment_methods": "id",
         "reservations": "reservation_id",
         "users": "user_id",
     }
@@ -237,7 +248,7 @@ def test_synthetic_carve_out_is_load_bearing_on_tau2_retail() -> None:
     """Rule 1.4 is why tau2-retail resolves at all.
 
     Re-deriving the same identity map with ``synthetic=False`` disables rule 1.4.
-    The measured result is 2 collections and 10 undecidable schemas, against 6 and
+    The measured result is 2 collections and 10 undecidable schemas, against 5 and
     6 with it. If this test starts passing with equal numbers, rule 1.4 has been
     made unconditional and the named-schema over-merge guard is now dead.
     """
@@ -248,7 +259,7 @@ def test_synthetic_carve_out_is_load_bearing_on_tau2_retail() -> None:
     with_rule = derive_identity(sources.identity, synthetic=True)
     without = derive_identity(sources.identity, synthetic=False)
 
-    assert len(with_rule.entities) == 6
+    assert len(with_rule.entities) == 5
     assert len(with_rule.undecidable) == 6
     assert without.collections == ["items", "orders"]
     assert len(without.undecidable) == 10

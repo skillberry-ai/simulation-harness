@@ -131,12 +131,22 @@ def unknown_store_references(section: str, collections: Iterable[str]) -> list[s
 def _linked_entities(ir: SpecModel, entity: Entity | None) -> list[dict]:
     """The entities this operation's own entity points at through its arrays.
 
-    A ``reference`` element shape says the parent stores identifiers, so both the
-    read side and the write side need the target: projecting the response means
-    reading it, and creating one of these elements means inserting into it. The
-    entity alone is not enough — without this the stage can see that
-    ``orders[].items`` holds ``items`` identifiers but not what an ``Item``
-    carries, so it cannot say which fields the projection yields.
+    Any element shape naming a ``target_collection`` says the parent's array
+    holds (or annotates a field with) an identifier into that collection, so
+    both the read side and the write side need the target: projecting the
+    response means reading it, and creating or updating one of these elements
+    means writing to it. The entity alone is not enough — without this the
+    stage can see that ``orders[].items`` holds ``items`` identifiers but not
+    what an ``Item`` carries, so it cannot say which fields the projection
+    yields.
+
+    This is not limited to ``kind == "reference"``: an ``embedded`` element can
+    also carry a foreign-key annotation (``target_collection``/``target_key``/
+    ``local_key``) while staying inline, e.g. ``Order.payment_history`` lines
+    that point at ``payment_methods`` without being promoted into their own
+    entity. Gating on ``target_collection is not None`` catches that case too,
+    and correctly pulls in ``items`` for ``Product.variants``, which carries a
+    foreign key to it.
 
     ``hop_collections`` is included for the same reason one level further out: a
     response that denormalizes a grandparent attribute onto the element (retail's
@@ -151,7 +161,7 @@ def _linked_entities(ir: SpecModel, entity: Entity | None) -> list[dict]:
     wanted: list[str] = []
     for field in entity.fields:
         shape = field.element
-        if shape is None or shape.kind != "reference":
+        if shape is None or shape.target_collection is None:
             continue
         for collection in (shape.target_collection, *shape.hop_collections):
             if collection and collection not in wanted:

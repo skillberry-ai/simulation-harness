@@ -102,13 +102,14 @@ def test_promoted_element_that_projects_its_target_stores_a_bare_id() -> None:
     assert shape.link_fields == ()
 
 
-def test_parent_scoped_element_fields_become_a_link_object() -> None:
-    """`amount` is carried by nothing but this element, so it is order-scoped and
-    has to survive beside the key.
+def test_foreign_key_element_stays_inline_with_a_reference_annotation() -> None:
+    """tau2-retail's Order.payment_history. `payment_method_id` references a
+    payment method rather than identifying the line item, so the element is
+    stored inline and the reference is recorded as an annotation.
 
-    This is the case a naive subset test cannot see: promoting the element copies
-    `amount` into the `payment_methods` cluster, so comparing the element against
-    its target compares it with itself.
+    This replaces an earlier test that asserted `kind == "reference"` here. That
+    encoded the defect: adopting the foreign key coined a `payment_methods`
+    collection out of payment-history line items.
     """
     schemas: dict[str, dict] = {
         "PaymentMethod": {"properties": {"payment_method_id": {"type": "string"}}},
@@ -129,9 +130,106 @@ def test_parent_scoped_element_fields_become_a_link_object() -> None:
     }
     ident = derive_identity(schemas, synthetic=True)
     shape = _shapes(ident.entities, "Order")["payment_history"]
+    assert shape.kind == "embedded"
+    assert [f.name for f in shape.fields] == ["amount", "payment_method_id"]
+    assert shape.local_key == "payment_method_id"
+    assert (shape.target_collection, shape.target_key) == (
+        "payment_methods",
+        "payment_method_id",
+    )
+    assert shape.link_fields == ()
+
+
+def test_list_valued_foreign_key_gets_no_annotation() -> None:
+    """Order.fulfillments' tracking_id is an array, so it can identify nothing and
+    references nothing: plain inline data, and no `trackings` collection."""
+    schemas: dict[str, dict] = {
+        "Order": {
+            "properties": {
+                "order_id": {"type": "string"},
+                "fulfillments": {
+                    "type": "array",
+                    "items": {
+                        "properties": {
+                            "tracking_id": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            },
+                            "item_ids": {"type": "array", "items": {"type": "string"}},
+                        }
+                    },
+                },
+            }
+        },
+    }
+    ident = derive_identity(schemas, synthetic=True)
+    assert [e.collection for e in ident.entities] == ["orders"]
+    shape = _shapes(ident.entities, "Order")["fulfillments"]
+    assert shape.kind == "embedded"
+    assert shape.local_key is None
+    assert shape.target_collection is None
+
+
+def test_a_back_reference_to_the_parent_is_not_annotated() -> None:
+    """An order line carrying its parent's own `order_id` is a back-reference, and a
+    back-reference is redundant: containment already states the parent link, so
+    recording it as a reference annotation adds nothing.
+
+    Suppressed at the source rather than downstream, because `x-element-ref` is
+    stamped for any shape with a `target_collection` — leaving it set here would put
+    a self-pointing reference into schema.json for a shape that already lives in
+    `orders`.
+    """
+    schemas: dict[str, dict] = {
+        "Order": {
+            "properties": {
+                "order_id": {"type": "string"},
+                "lines": {
+                    "type": "array",
+                    "items": {
+                        "properties": {
+                            "order_id": {"type": "string"},
+                            "quantity": {"type": "integer"},
+                        }
+                    },
+                },
+            }
+        },
+    }
+    ident = derive_identity(schemas, synthetic=True)
+    assert [e.collection for e in ident.entities] == ["orders"]
+    shape = _shapes(ident.entities, "Order")["lines"]
+    assert shape.kind == "embedded"
+    assert shape.local_key is None
+    assert shape.target_collection is None
+
+
+def test_own_id_element_still_becomes_a_reference() -> None:
+    """The reference path must survive: Order.items/item_id name-matches, so it is
+    still promoted and the parent stores bare identifiers."""
+    schemas: dict[str, dict] = {
+        "Item": {
+            "properties": {"item_id": {"type": "string"}, "name": {"type": "string"}}
+        },
+        "Order": {
+            "properties": {
+                "order_id": {"type": "string"},
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "properties": {
+                            "item_id": {"type": "string"},
+                            "name": {"type": "string"},
+                        }
+                    },
+                },
+            }
+        },
+    }
+    ident = derive_identity(schemas, synthetic=True)
+    shape = _shapes(ident.entities, "Order")["items"]
     assert shape.kind == "reference"
-    assert shape.target_collection == "payment_methods"
-    assert [f.name for f in shape.link_fields] == ["payment_method_id", "amount"]
+    assert (shape.target_collection, shape.target_key) == ("items", "item_id")
 
 
 def test_grandparent_attribute_is_a_second_hop_not_parent_scoped() -> None:

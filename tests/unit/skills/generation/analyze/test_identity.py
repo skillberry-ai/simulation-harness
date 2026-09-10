@@ -6,11 +6,15 @@ import pytest
 
 from simulation_harness.skills.generation.repair import GenerationStageError
 from simulation_harness.skills.generation.stages.analyze.identity import (
+    _flatten_union,
+    _nested_objects,
+    _noun_is_stem,
     camel,
     derive_identity,
     identity_key,
     noun_for,
     pluralize,
+    singularize,
     snake,
 )
 
@@ -102,6 +106,40 @@ def test_noun_for_comes_from_the_key_not_the_name() -> None:
 
 def test_noun_for_bare_id_falls_back_to_the_schema_name() -> None:
     assert noun_for("id", "Restaurant") == "restaurant"
+
+
+@pytest.mark.parametrize(
+    ("plural", "expected"),
+    [
+        ("payment_methods", "payment_method"),
+        ("categories", "category"),
+        ("boxes", "box"),
+        ("addresses", "address"),
+        ("items", "item"),
+        # Round-trip guard: pluralize() leaves these alone, so singularize must too.
+        ("status", "status"),
+        ("axis", "axis"),
+        ("user", "user"),
+        # Tail-only reduction: pluralize() only ever alters the final segment, so
+        # singularize must mirror that and leave earlier segments untouched, even
+        # when an earlier segment happens to end in "s" (it is not a plural of
+        # anything here, just a fixed prefix).
+        ("objs_bot_profile", "objs_bot_profile"),
+        ("objs_channels", "objs_channel"),
+    ],
+)
+def test_singularize(plural: str, expected: str) -> None:
+    assert singularize(plural) == expected
+
+
+def test_noun_for_singularizes_a_plural_bare_id_holder() -> None:
+    """get_user_details.payment_methods is a map keyed by id; the noun comes from
+    the property name, which is plural."""
+    assert noun_for("id", "payment_methods") == "payment_method"
+
+
+def test_noun_for_leaves_a_key_derived_noun_alone() -> None:
+    assert noun_for("payment_method_id", "anything") == "payment_method"
 
 
 def test_identity_key_matches_plural_property_name_to_singular_key() -> None:
@@ -361,16 +399,23 @@ def test_two_nouns_pluralizing_alike_fail_as_an_identity_error(
 ) -> None:
     """``pluralize`` is not injective, and the collision must fail here.
 
-    An ``Address`` entity beside an ``Addresses`` wrapper is an ordinary spec
-    shape. Both nouns pluralize to ``addresses``, so the two clusters claim one
-    collection and ``pk_map`` — keyed by collection — loses a primary key.
-    Downstream that surfaces as a duplicate entry in the schema's top-level
-    ``required``, which jsonschema rejects, wasting every repair attempt before
-    hard-failing under stage "schema".
+    Two ``*_id``-keyed schemas whose nouns are exactly a singular/plural pair
+    (``address``/``addresses``) both pluralize to ``addresses``, so the two
+    clusters claim one collection and ``pk_map`` — keyed by collection — loses
+    a primary key. Downstream that surfaces as a duplicate entry in the
+    schema's top-level ``required``, which jsonschema rejects, wasting every
+    repair attempt before hard-failing under stage "schema".
+
+    Built from ``*_id`` keys rather than a bare ``id``: a bare-id noun is now
+    singularized (see ``noun_for``), so an ``Address``/``Addresses`` pair built
+    that way would collapse into one cluster instead of colliding — the
+    intended effect of that fix, not a regression of this guard. The ``*_id``
+    branch of ``noun_for`` is unaffected, so it still reaches the collision
+    this guard exists to catch.
     """
     schemas = {
-        singular: {"properties": {"id": {"type": "string"}}},
-        plural: {"properties": {"id": {"type": "string"}}},
+        singular: {"properties": {f"{snake(singular)}_id": {"type": "string"}}},
+        plural: {"properties": {f"{snake(plural)}_id": {"type": "string"}}},
     }
     with pytest.raises(GenerationStageError) as exc:
         derive_identity(schemas, synthetic=False)
@@ -378,6 +423,36 @@ def test_two_nouns_pluralizing_alike_fail_as_an_identity_error(
     message = "; ".join(exc.value.errors)
     assert snake(singular) in message
     assert snake(plural) in message
+
+
+def test_bare_id_singular_plural_pair_merges_instead_of_colliding() -> None:
+    """Locks the positive counterpart of the collision guard above.
+
+    Before ``noun_for`` singularized a bare-``id`` holder name, an
+    ``Address``/``Addresses`` pair — both keyed by a bare ``id`` — used to
+    raise here: they produced two different nouns (``address``,
+    ``addresses``) that both pluralize to ``addresses``, so
+    ``_reject_colliding_collections`` fired.
+
+    Now ``singularize`` reduces both schema names to the same noun
+    (``address``), so the pair merges into one cluster instead of colliding —
+    which is correct: it is one entity, not two claiming one collection. The
+    still-colliding case — two schemas keyed by ``*_id`` rather than a bare
+    ``id`` — is unaffected by that change and stays covered by
+    ``test_two_nouns_pluralizing_alike_fail_as_an_identity_error``.
+
+    ``synthetic=False`` is required to reach this: on the synthetic path a
+    top-level bare ``id`` is undecidable by construction (see
+    ``derive_identity``'s ``synthetic and key == "id"`` veto), so this pair
+    would land in ``undecidable`` instead of merging.
+    """
+    schemas = {
+        "Address": {"properties": {"id": {"type": "string"}}},
+        "Addresses": {"properties": {"id": {"type": "string"}}},
+    }
+    model = derive_identity(schemas, synthetic=False)
+    assert model.collections == ["addresses"]
+    assert model.pk_map == {"addresses": "id"}
 
 
 def test_a_lone_already_plural_noun_is_not_a_collision() -> None:
@@ -390,3 +465,304 @@ def test_a_lone_already_plural_noun_is_not_a_collision() -> None:
         {"Addresses": {"properties": {"id": {"type": "string"}}}}, synthetic=False
     )
     assert model.collections == ["addresses"]
+
+
+def test_flatten_union_unions_properties_and_intersects_required() -> None:
+    schema: dict = {
+        "anyOf": [
+            {
+                "properties": {
+                    "source": {"const": "credit_card"},
+                    "id": {"type": "string"},
+                    "brand": {"type": "string"},
+                    "last_four": {"type": "string"},
+                },
+                "required": ["source", "id", "brand", "last_four"],
+            },
+            {
+                "properties": {
+                    "source": {"const": "gift_card"},
+                    "id": {"type": "string"},
+                    "balance": {"type": "number"},
+                },
+                "required": ["source", "id", "balance"],
+            },
+            {
+                "properties": {
+                    "source": {"const": "gift_card"},
+                    "id": {"type": "string"},
+                },
+                "required": ["source", "id"],
+            },
+        ]
+    }
+    flat = _flatten_union(schema)
+    assert flat is not None
+    assert sorted(flat["properties"]) == [
+        "balance",
+        "brand",
+        "id",
+        "last_four",
+        "source",
+    ]
+    assert flat["required"] == ["id", "source"]
+    assert flat["type"] == "object"
+
+
+def test_flatten_union_folds_differing_const_into_enum() -> None:
+    """A plain dict.update() would keep only the last variant's const, so every
+    generated row would claim to be whichever variant sorted last."""
+    schema: dict = {
+        "anyOf": [
+            {"properties": {"source": {"const": "credit_card"}}},
+            {"properties": {"source": {"const": "gift_card"}}},
+        ]
+    }
+    flat = _flatten_union(schema)
+    assert flat is not None
+    assert flat["properties"]["source"] == {"enum": ["credit_card", "gift_card"]}
+
+
+def test_flatten_union_keeps_a_shared_const_as_is() -> None:
+    schema: dict = {
+        "anyOf": [
+            {"properties": {"kind": {"const": "only"}}},
+            {"properties": {"kind": {"const": "only"}}},
+        ]
+    }
+    flat = _flatten_union(schema)
+    assert flat is not None
+    assert flat["properties"]["kind"] == {"const": "only"}
+
+
+def test_flatten_union_declines_a_non_object_variant() -> None:
+    """anyOf: [{type: string}, ...] is not an entity union."""
+    assert (
+        _flatten_union({"anyOf": [{"type": "string"}, {"properties": {"id": {}}}]})
+        is None
+    )
+
+
+def test_flatten_union_declines_a_plain_schema() -> None:
+    assert _flatten_union({"properties": {"id": {}}}) is None
+
+
+def test_flatten_union_reads_oneof_too() -> None:
+    flat = _flatten_union(
+        {"oneOf": [{"properties": {"a": {}}}, {"properties": {"b": {}}}]}
+    )
+    assert flat is not None
+    assert sorted(flat["properties"]) == ["a", "b"]
+    assert flat["required"] == []
+
+
+def test_nested_objects_sees_through_a_union_map() -> None:
+    """tau2-retail's get_user_details.payment_methods: a map whose values are an
+    anyOf union. Before this, the union had no `properties` so the promotion pass
+    never saw the entity at all."""
+    prop: dict = {
+        "type": "object",
+        "additionalProperties": {
+            "anyOf": [
+                {
+                    "properties": {
+                        "source": {"const": "credit_card"},
+                        "id": {"type": "string"},
+                    }
+                },
+                {
+                    "properties": {
+                        "source": {"const": "gift_card"},
+                        "balance": {"type": "number"},
+                        "id": {"type": "string"},
+                    }
+                },
+            ]
+        },
+    }
+    targets = list(_nested_objects(prop))
+    assert len(targets) == 1
+    assert sorted(targets[0]["properties"]) == ["balance", "id", "source"]
+
+
+def test_identity_key_decides_a_union_schema() -> None:
+    schema: dict = {
+        "anyOf": [
+            {
+                "properties": {
+                    "source": {"const": "credit_card"},
+                    "id": {"type": "string"},
+                }
+            },
+            {
+                "properties": {
+                    "source": {"const": "gift_card"},
+                    "id": {"type": "string"},
+                }
+            },
+        ]
+    }
+    assert identity_key("payment_methods", schema, synthetic=True) == "id"
+
+
+def test_identity_key_still_declines_a_scalar_union() -> None:
+    assert (
+        identity_key("thing", {"anyOf": [{"type": "string"}]}, synthetic=True) is None
+    )
+
+
+def test_identity_key_rejects_a_list_valued_candidate() -> None:
+    """tau2-retail's Order.fulfillments carries `tracking_id` as an ARRAY of ids.
+    Adopting it made a collection whose primary key is a list, which store.py
+    then keys under the stringified list "['TRK-DEL-001']"."""
+    schema: dict = {
+        "properties": {
+            "tracking_id": {"type": "array", "items": {"type": "string"}},
+            "item_ids": {"type": "array", "items": {"type": "string"}},
+        }
+    }
+    assert identity_key("fulfillments", schema, synthetic=True) is None
+
+
+def test_identity_key_rejects_an_object_valued_bare_id() -> None:
+    schema: dict = {"properties": {"id": {"type": "object", "properties": {"v": {}}}}}
+    assert identity_key("Thing", schema, synthetic=False) is None
+
+
+def test_identity_key_rejects_a_list_valued_type_candidate() -> None:
+    """JSON Schema permits `"type": ["array", "string"]`; a plain `type in
+    ("array", "object")` check missed that shape and would accept it as a
+    primary-key candidate."""
+    schema: dict = {
+        "properties": {
+            "tag_id": {"type": ["array", "string"], "items": {"type": "string"}},
+            "name": {"type": "string"},
+        }
+    }
+    assert identity_key("Thing", schema, synthetic=True) is None
+
+
+def test_identity_key_accepts_an_untyped_candidate() -> None:
+    """Absent type is the common case in these specs and is not evidence of a
+    problem, so it must stay acceptable."""
+    assert (
+        identity_key("Order", {"properties": {"order_id": {}}}, synthetic=True)
+        == "order_id"
+    )
+
+
+def test_identity_key_honours_a_declared_key_without_the_scalar_filter() -> None:
+    """An explicit but impossible x-primary-key must fail loudly in the schema
+    stage, not be quietly downgraded to undecidable here."""
+    schema: dict = {
+        "x-primary-key": "tracking_id",
+        "properties": {"tracking_id": {"type": "array"}},
+    }
+    assert identity_key("Tracking", schema, synthetic=False) == "tracking_id"
+
+
+@pytest.mark.parametrize(
+    ("noun", "holder", "expected"),
+    [
+        ("payment", "payment_history", True),
+        ("payment_method", "payment_history", False),
+        ("tracking", "fulfillments", False),
+        ("item", "items", True),
+        ("order_item", "order_items", True),
+        ("item", "order_items", False),
+    ],
+)
+def test_noun_is_stem(noun: str, holder: str, expected: bool) -> None:
+    assert _noun_is_stem(noun, holder) is expected
+
+
+@pytest.mark.parametrize(
+    "noun",
+    [
+        # Corpus collection names, taken from the checked-in example specs.
+        # Already plural, so pluralize() below is a no-op on them.
+        "payment_methods",
+        "items",
+        "orders",
+        "products",
+        "users",
+        "payments",
+        "reservations",
+        "trackings",
+        "categories",
+        "boxes",
+        "addresses",
+        "objs_channels",
+        # Singular nouns with the "looks plural but isn't" tail
+        # (_SINGULAR_S_ENDINGS) that made this rule's special-casing necessary.
+        # No spec names a *collection* "status"/"axis"/"user" outright — a
+        # collection is always a pluralize() output — so these are anchored on
+        # their collection-shaped form (pluralize(noun) below) rather than
+        # tested as raw collection nouns themselves.
+        "status",
+        "axis",
+        "user",
+    ],
+)
+def test_pluralize_singularize_round_trip(noun: str) -> None:
+    """A collection name is stable under ``singularize`` -> ``pluralize``.
+
+    ``noun_for``'s bare-``id`` path (``singularize(snake(schema_name))``) feeds
+    straight into ``collection=pluralize(noun)`` in :func:`derive_identity`, so
+    the property that actually has to hold is that a collection name, once
+    produced, is a fixed point of ``pluralize . singularize`` — computing it
+    again from itself must not drift. ``collection = pluralize(noun)`` makes
+    every parametrized word collection-shaped first (a no-op for the
+    already-plural corpus entries above), then asserts
+    ``pluralize(singularize(collection)) == collection``.
+
+    NOT a universal law over all strings: a brute-force search over the whole
+    space found two remaining contrived families where it fails — a final
+    segment of exactly ``"ys"`` (not covered by ``_SINGULAR_S_ENDINGS`` nor by
+    any of the ``-ies``/``-es``/``-s`` reductions ``_singular_segment`` tries)
+    and doubled underscores (an empty segment from ``"__"`` splitting). Neither
+    shape appears in any checked-in spec, and ``singularize``/
+    ``_singular_segment`` are deliberately conservative (see their docstrings)
+    rather than chasing those two families — so this test covers the
+    corpus-realistic space the derivation rule actually runs on, not the full
+    string space.
+    """
+    collection = pluralize(noun)
+    assert pluralize(singularize(collection)) == collection
+
+
+def test_rule_four_declines_a_foreign_key_at_element_level() -> None:
+    """tau2-retail: payment_method_id in a payment_history line item references a
+    payment method; it is not the line item's identity."""
+    element: dict = {
+        "properties": {
+            "payment_method_id": {"type": "string"},
+            "amount": {"type": "number"},
+            "transaction_type": {"type": "string"},
+        }
+    }
+    assert identity_key("payment_history", element, synthetic=True, nested=True) is None
+
+
+def test_rule_four_keeps_an_own_id_at_element_level() -> None:
+    """tau2-airline: payment_id in a payment_history line item IS its identity.
+    This is the regression guard for the airline contract."""
+    element: dict = {
+        "properties": {"payment_id": {"type": "string"}, "amount": {"type": "number"}}
+    }
+    assert (
+        identity_key("payment_history", element, synthetic=True, nested=True)
+        == "payment_id"
+    )
+
+
+def test_rule_four_is_unchanged_at_top_level() -> None:
+    """A synthetic response whose sole *_id carries a different noun still adopts
+    it: at top level that id is the only signal available."""
+    schema: dict = {
+        "properties": {"tracking_id": {"type": "string"}, "status": {"type": "string"}}
+    }
+    assert (
+        identity_key("get_shipping_label__response", schema, synthetic=True)
+        == "tracking_id"
+    )

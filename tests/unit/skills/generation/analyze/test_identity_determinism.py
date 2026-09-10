@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import subprocess
 import sys
 from pathlib import Path
@@ -56,6 +57,79 @@ def test_derivation_is_repeatable() -> None:
     assert derive_identity(SCHEMAS, synthetic=True) == derive_identity(
         SCHEMAS, synthetic=True
     )
+
+
+# Shaped so element-shape derivation actually runs: `items` promotes to its own
+# `reference` element (Item carries a leftover `qty`, so its link_fields are
+# exercised too), and `payment_history` stays `embedded` but carries a foreign-key
+# annotation onto `payment_methods` — the exact shape this branch introduced and
+# the one `_linked_entities` (operations.py) now has to read. Neither of these
+# was covered by SCHEMAS above, which has no arrays at all, so re-deriving the
+# *same* dict (as `test_derivation_is_repeatable` does) cannot catch a dict
+# -iteration-order dependence that only shows up in the element-shape pass.
+ELEMENT_SCHEMAS: dict[str, dict] = {
+    "Order": {
+        "properties": {
+            "order_id": {"type": "string"},
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "item_id": {"type": "string"},
+                        "qty": {"type": "integer"},
+                    },
+                },
+            },
+            "payment_history": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "payment_method_id": {"type": "string"},
+                        "amount": {"type": "number"},
+                    },
+                },
+            },
+        }
+    },
+    "PaymentMethod": {
+        "properties": {"id": {"type": "string"}, "balance": {"type": "number"}}
+    },
+}
+
+
+def test_derivation_is_stable_under_shuffled_key_insertion_order() -> None:
+    """Re-deriving the same dict (as `test_derivation_is_repeatable` does) cannot
+    detect a dict-iteration-order dependence, because a dict re-literal in one
+    process iterates in the same insertion order every time. This shuffles the
+    *insertion order* of the schema map's keys — with a fixed seed, so it cannot
+    flake — and re-derives several times, checking not just the collection list
+    but the pk_map and every element shape (including the foreign-key annotation
+    and the reference's link_fields), which is exactly the kind of value a
+    dict-order leak in the element-shape pass could silently reorder or drop.
+    """
+    rng = random.Random(20260908)
+    baseline = derive_identity(ELEMENT_SCHEMAS, synthetic=False)
+    assert baseline.collections == ["items", "orders", "payment_methods"]
+    assert baseline.pk_map == {
+        "items": "item_id",
+        "orders": "order_id",
+        "payment_methods": "id",
+    }
+    order = next(e for e in baseline.entities if e.collection == "orders")
+    elements = dict(order.elements)
+    assert elements["items"].kind == "reference"
+    assert elements["items"].target_collection == "items"
+    assert elements["payment_history"].kind == "embedded"
+    assert elements["payment_history"].target_collection == "payment_methods"
+    assert elements["payment_history"].local_key == "payment_method_id"
+
+    for _ in range(20):
+        items = list(ELEMENT_SCHEMAS.items())
+        rng.shuffle(items)
+        shuffled = dict(items)
+        assert derive_identity(shuffled, synthetic=False) == baseline
 
 
 # --- cross-interpreter guard -------------------------------------------------
