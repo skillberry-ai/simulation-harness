@@ -15,16 +15,26 @@
 # Usage:
 #   scripts/check-dco.sh <base-ref> <head-ref>
 #
-# Checks the commits reachable from <head-ref> but not from <base-ref>, using
-# their merge base so a moving base branch does not drag unrelated commits in.
+# Checks the commits reachable from <head-ref> but not from <base-ref>. Because
+# that range subtracts everything the base branch already carries, a base branch
+# that has advanced since the branch was cut drags nothing extra in.
 # Requires full history: in CI use actions/checkout with fetch-depth: 0.
+#
+# Exit codes:
+#   0  every checked commit carries a matching sign-off
+#   1  at least one commit does not
+#   2  bad invocation, or history too incomplete to resolve a ref
 set -euo pipefail
 
 PROG="${0##*/}"
 
 err()  { printf '\033[31merror:\033[0m %s\n' "$*" >&2; }
 info() { printf '\033[36m==>\033[0m %s\n' "$*"; }
-die()  { err "$*"; exit 1; }
+# The only fatal error this script raises is a caller it cannot work with: a ref
+# that will not resolve, or the wrong argument count. That is not the same thing
+# as an unsigned commit, so it exits 2 and leaves 1 to mean a real finding,
+# reported at the bottom of this file.
+die_misconfig() { err "$*"; exit 2; }
 
 if [[ $# -ne 2 ]]; then
     printf 'Usage: %s <base-ref> <head-ref>\n' "$PROG" >&2
@@ -35,18 +45,18 @@ BASE="$1"
 HEAD_REF="$2"
 
 git rev-parse --verify --quiet "$BASE^{commit}" >/dev/null \
-    || die "cannot resolve base ref: $BASE (is the history complete? use fetch-depth: 0)"
+    || die_misconfig "cannot resolve base ref: $BASE (is the history complete? use fetch-depth: 0)"
 git rev-parse --verify --quiet "$HEAD_REF^{commit}" >/dev/null \
-    || die "cannot resolve head ref: $HEAD_REF"
+    || die_misconfig "cannot resolve head ref: $HEAD_REF"
 
-# Prefer the merge base so that commits already on the base branch are excluded
-# even when it has advanced since the branch was cut. Fall back to BASE itself
-# for unrelated histories, where no merge base exists.
-if MERGE_BASE="$(git merge-base "$BASE" "$HEAD_REF" 2>/dev/null)"; then
-    RANGE="$MERGE_BASE..$HEAD_REF"
-else
-    RANGE="$BASE..$HEAD_REF"
-fi
+# BASE..HEAD_REF is reachable(HEAD_REF) minus reachable(BASE), which is exactly
+# the commits this branch adds. Deliberately *not* MERGE_BASE..HEAD_REF: with a
+# single merge base the two ranges are identical, since every common ancestor is
+# then reachable from that base. With two (a criss-cross history) `git merge-base`
+# reports only one, and the range widens to include commits reachable from the
+# other -- commits the base branch already carries, so not this branch's to
+# certify. See the criss-cross case in scripts/tests/test-check-dco.sh.
+RANGE="$BASE..$HEAD_REF"
 
 # Lowercase + collapse surrounding whitespace, so "  Jane Doe " and "jane doe"
 # compare equal. Avoids failing a contributor over capitalisation.

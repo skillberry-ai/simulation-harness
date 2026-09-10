@@ -112,10 +112,36 @@ git -C "$R" checkout -q main
 # An unsigned commit lands on the base branch after the feature branch was cut.
 commit "$R" "feat: unrelated unsigned commit on base" "" base-side.txt
 out="$(run_check "$R" main feature || true)"
-assert_contains "base-branch commits are excluded via merge-base" "$out" "DCO ok"
+assert_contains "commits already on the base branch are excluded" "$out" "DCO ok"
+
+# Regression: the range used to be MERGE_BASE..HEAD. With a single merge base
+# that is identical to BASE..HEAD, but a criss-cross history has two, and
+# `git merge-base` returns only one of them -- so commits reachable from the
+# other were dragged into the range even though the base branch already carries
+# them. Here F1 is unsigned and already merged into main; only a BASE..HEAD
+# range leaves it out.
+echo "== a criss-cross history does not drag in commits the base already has"
+R="$TMPDIR_TEST/crisscross"; fixture_repo "$R"
+git -C "$R" checkout -q -b feature
+commit "$R" "feat: unsigned, later merged into base" "" feature.txt
+F1="$(git -C "$R" rev-parse HEAD)"
+git -C "$R" checkout -q main
+commit "$R" "feat: base work" "Signed-off-by: $AUTHOR_NAME <$AUTHOR_EMAIL>" main.txt
+# Each branch merges a commit of the other's, leaving two merge bases.
+git -C "$R" checkout -q feature
+git -C "$R" merge -q --no-ff --no-edit main
+git -C "$R" checkout -q main
+git -C "$R" merge -q --no-ff --no-edit "$F1"
+assert_eq "the fixture really has two merge bases" \
+    "$(git -C "$R" merge-base --all main feature | wc -l | tr -d ' ')" "2"
+out="$(run_check "$R" main feature || true)"
+assert_contains "the base branch's own unsigned commit is not reported" "$out" "DCO ok"
 
 echo "== a bad invocation is rejected"
-assert_fails "missing arguments exit non-zero" bash -c "cd '$R' && '$CHECK' main"
-assert_fails "an unresolvable ref exits non-zero" bash -c "cd '$R' && '$CHECK' main nope-not-a-ref"
+assert_exit_code "missing arguments exit 2" 2 bash -c "cd '$R' && '$CHECK' main"
+assert_exit_code "an unresolvable head ref exits 2" 2 \
+    bash -c "cd '$R' && '$CHECK' main nope-not-a-ref"
+assert_exit_code "an unresolvable base ref exits 2" 2 \
+    bash -c "cd '$R' && '$CHECK' nope-not-a-ref main"
 
 assert_summary
