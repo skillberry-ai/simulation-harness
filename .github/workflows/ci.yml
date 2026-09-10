@@ -184,12 +184,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # 22, not the `.nvmrc` 20: `package.json` requires node >=22.22.0, and
-      # vitest 5 requires ^22.12.0 || ^24 || >=26.
+      # Read the version from `.nvmrc` rather than repeating it here, so CI and
+      # a contributor's `nvm use` cannot drift apart. That file is the floor
+      # from `package.json`'s `engines` (>=22.22.0), which also satisfies
+      # vitest 5's ^22.12.0 || ^24 || >=26.
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version-file: utils/test-client/.nvmrc
           cache: npm
           cache-dependency-path: utils/test-client/package-lock.json
 
