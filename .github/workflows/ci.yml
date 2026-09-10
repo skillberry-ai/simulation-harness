@@ -6,6 +6,14 @@ on:
   pull_request:
     branches: [main]
 
+# Least privilege for GITHUB_TOKEN. Nothing in this workflow writes to the repo:
+# the gates read the tree and the DCO job reads history. Declared at workflow
+# level rather than per job so a job added later inherits read-only and has to
+# opt up deliberately. (upload-artifact needs nothing here -- it authenticates
+# with the Actions runtime token, not GITHUB_TOKEN.)
+permissions:
+  contents: read
+
 # Refuse to re-resolve dependencies in CI. Without this, uv treats a stale
 # `uv.lock` as something to fix rather than an error: `uv sync` re-resolves,
 # and so does a bare `uv run`, so a job can silently install versions the
