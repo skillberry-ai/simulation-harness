@@ -168,3 +168,46 @@ jobs:
 
       - name: Run shell script tests
         run: make test-scripts
+
+  test-client:
+    name: Test client (vitest)
+    runs-on: ubuntu-latest
+    # Nothing in CI ran `utils/test-client` before this job, which is how #35
+    # (vitest 3 -> 5) went green on all eleven checks while breaking 15 of the
+    # 19 test files: the whole suite is JS, and every other job is Python or
+    # shell. Dependabot watches these manifests, so the next major bump lands
+    # the same way without a gate here.
+    defaults:
+      run:
+        working-directory: utils/test-client
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # 22, not the `.nvmrc` 20: `package.json` requires node >=22.22.0, and
+      # vitest 5 requires ^22.12.0 || ^24 || >=26.
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: utils/test-client/package-lock.json
+
+      # `npm ci` over `npm install`: it installs exactly what package-lock.json
+      # describes and fails if the lockfile and manifests disagree, so a bump
+      # that edits one without the other cannot pass by re-resolving. Same
+      # reasoning as UV_LOCKED above.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Prettier format check
+        run: npm run format:check
+
+      - name: Build (SPA + server tsc)
+        run: npm run build
+
+      - name: Vitest
+        run: npm test
