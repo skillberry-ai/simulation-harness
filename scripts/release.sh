@@ -119,12 +119,63 @@ version_gt() {
 }
 
 # Extract the CHANGELOG.md section for a version, used when resuming.
+# Headers are written bracketed (`## [vX.Y.Z] — date`) so the compare-link
+# definitions at the bottom of the file resolve; match that form. Stop at the
+# link block as well as at the next header, because on a first-ever release the
+# new section is the last one in the file and the block follows it directly.
 changelog_section() {
-    awk -v want="## $TAG " '
+    awk -v want="## [$TAG] " '
         index($0, want) == 1 { grab = 1; next }
         grab && /^## / { exit }
+        grab && /^\[[^]]+\]: / { exit }
         grab { print }
     ' CHANGELOG.md | sed '/./,$!d'
+}
+
+# ---- CHANGELOG compare links ----------------------------------------------
+#
+# CHANGELOG.md ends in a Keep a Changelog link block:
+#
+#     [Unreleased]: <repo>/compare/v0.2.0...HEAD
+#     [v0.2.0]: <repo>/compare/v0.1.0...v0.2.0
+#     [v0.1.0]: <repo>/releases/tag/v0.1.0
+#
+# These definitions are what turn each `## [vX.Y.Z]` header into a link, so the
+# two move together: a release that adds a header must add a definition, or the
+# header renders as literal brackets.
+
+# Matches exactly the definitions this script owns. Any other reference-style
+# link a human adds to the file is left alone.
+CHANGELOG_LINK_RE='^\[(Unreleased|v[0-9]+\.[0-9]+\.[0-9]+)\]: '
+
+# changelog_link_block <new-tag> — the whole block, newest first, regenerated
+# from the release tags that exist plus the one about to be created (the tag
+# does not exist yet at the point the CHANGELOG is written). Regenerating rather
+# than inserting keeps the block correct even if a line was hand-edited away.
+changelog_link_block() {
+    local new_tag="$1" base="https://$RELEASE_GH_REPO"
+    local tags=() t i
+
+    while read -r t; do
+        [[ -n "$t" ]] || continue
+        # Skip a tag equal to the new one so the list cannot contain it twice
+        # and emit a `compare/vX...vX` line. release.sh writes the CHANGELOG
+        # before creating the tag, so this only guards a re-entrant caller.
+        [[ "$t" != "$new_tag" ]] || continue
+        tags+=("$t")
+    done < <(git tag -l "$RELEASE_TAG_GLOB" | { grep -E "$RELEASE_TAG_RE" || true; } | sort -V)
+    tags+=("$new_tag")
+
+    printf '[Unreleased]: %s/compare/%s...HEAD\n' "$base" "$new_tag"
+    for (( i = ${#tags[@]} - 1; i >= 0; i-- )); do
+        if (( i == 0 )); then
+            # The oldest release has no predecessor to compare against.
+            printf '[%s]: %s/releases/tag/%s\n' "${tags[i]}" "$base" "${tags[i]}"
+        else
+            printf '[%s]: %s/compare/%s...%s\n' \
+                "${tags[i]}" "$base" "${tags[i - 1]}" "${tags[i]}"
+        fi
+    done
 }
 
 push_release() {
@@ -370,7 +421,7 @@ fi
 info "Prepending the v$VERSION section to CHANGELOG.md"
 SECTION_FILE="$(mktemp "${TMPDIR:-/tmp}/release-section.XXXXXX")"
 {
-    printf '## %s — %s\n\n' "$TAG" "$(date -u +%Y-%m-%d)"
+    printf '## [%s] — %s\n\n' "$TAG" "$(date -u +%Y-%m-%d)"
     # Normalize to exactly one trailing blank line, regardless of how the
     # notes ended, so the separator before the next "## v..." header is
     # always present — command substitution strips all trailing newlines,
@@ -404,7 +455,15 @@ fi
 # whole release back. Normalize the assembled file to exactly one trailing
 # newline: command substitution strips every trailing newline, then add one back.
 # Internal blank lines, including the separators between sections, are untouched.
-printf '%s\n' "$(cat CHANGELOG.md.new)" > CHANGELOG.md
+#
+# The link block is dropped and re-emitted in the same pass, so it stays at the
+# bottom and gains a line for this release. The final printf ends in exactly one
+# newline, which keeps the end-of-file-fixer invariant above.
+{
+    printf '%s\n' "$(grep -vE "$CHANGELOG_LINK_RE" CHANGELOG.md.new || true)"
+    printf '\n'
+    changelog_link_block "$TAG"
+} > CHANGELOG.md
 rm -f -- CHANGELOG.md.new "$SECTION_FILE"
 
 # ---- commit, tag, push -----------------------------------------------------

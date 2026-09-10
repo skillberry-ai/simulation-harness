@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.1.2 — 2026-08-31
+## [v0.1.2] — 2026-08-31
 
 ### Breaking changes
 
@@ -38,13 +38,13 @@
 
 - prepare the repo for its public home
 
-## v0.1.1 — 2026-08-05
+## [v0.1.1] — 2026-08-05
 
 ### Fixes
 
 - **deps:** upgrade cryptography to 50.0.0 for PYSEC-2026-3552
 
-## v0.1.0 — 2026-08-05
+## [v0.1.0] — 2026-08-05
 
 ### Features
 
@@ -309,3 +309,8 @@
 - Implement skill package schema/db separation
 - style: drop unused os import in health-endpoints test
 - style: apply ruff format to scenario test files
+
+[Unreleased]: https://github.com/skillberry-ai/simulation-harness/compare/v0.1.2...HEAD
+[v0.1.2]: https://github.com/skillberry-ai/simulation-harness/compare/v0.1.1...v0.1.2
+[v0.1.1]: https://github.com/skillberry-ai/simulation-harness/compare/v0.1.0...v0.1.1
+[v0.1.0]: https://github.com/skillberry-ai/simulation-harness/releases/tag/v0.1.0

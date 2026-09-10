@@ -50,8 +50,14 @@ git -C "$FIXTURE" commit -q --allow-empty -m "feat(api): add an endpoint"
 git -C "$FIXTURE" commit -q --allow-empty -m "fix: repair a thing"
 git -C "$FIXTURE" push -q origin main
 
+# Compare links are built from RELEASE_GH_REPO, so pin it to a fixture repo
+# rather than letting the assertions depend on this checkout's real remote.
+GH_REPO="github.com/acme/fixture"
+LINK_BASE="https://$GH_REPO"
+
 run_release() {
-    ( cd "$FIXTURE" && RELEASE_SKIP_GH=1 ./scripts/release.sh "$@" 2>&1 )
+    ( cd "$FIXTURE" && RELEASE_SKIP_GH=1 RELEASE_GH_REPO="$GH_REPO" \
+        ./scripts/release.sh "$@" 2>&1 )
 }
 
 # --- dry run: reports, changes nothing -------------------------------------
@@ -100,7 +106,7 @@ assert_eq "release commit subject" \
 assert_eq "pyproject version unchanged at 0.1.0" \
     "$(sed -n 's/^version = "\(.*\)"$/\1/p' "$FIXTURE/pyproject.toml" | head -1)" "0.1.0"
 assert_contains "changelog has the section" \
-    "$(cat "$FIXTURE/CHANGELOG.md")" "## v0.1.0"
+    "$(cat "$FIXTURE/CHANGELOG.md")" "## [v0.1.0]"
 assert_contains "changelog lists the feat" \
     "$(cat "$FIXTURE/CHANGELOG.md")" "**api:** add an endpoint"
 assert_eq "changelog starts with the header" \
@@ -122,6 +128,30 @@ eof_is_single_newline() {
 }
 assert_eq "changelog ends with exactly one newline (end-of-file-fixer safe)" \
     "$(eof_is_single_newline "$FIXTURE/CHANGELOG.md")" "yes"
+
+# --- compare links -----------------------------------------------------------
+#
+# A `## [vX.Y.Z]` header only renders as a link if a matching definition exists
+# at the bottom of the file, so the two are asserted together. The first release
+# has no predecessor, so it points at its own tag page rather than a compare.
+changelog="$(cat "$FIXTURE/CHANGELOG.md")"
+assert_contains "Unreleased compares from the new tag" \
+    "$changelog" "[Unreleased]: $LINK_BASE/compare/v0.1.0...HEAD"
+assert_contains "the first release links to its tag page, not a compare" \
+    "$changelog" "[v0.1.0]: $LINK_BASE/releases/tag/v0.1.0"
+
+# Every bracketed version header must have a definition, or it renders as bare
+# literal brackets. Asserted as a property so a later release cannot drift.
+unlinked_headers() {
+    local f="$1" v missing=""
+    while read -r v; do
+        [[ -n "$v" ]] || continue
+        grep -qF "[$v]: http" "$f" || missing="$missing $v"
+    done < <(sed -n 's/^## \[\(v[0-9][^]]*\)\].*/\1/p' "$f")
+    printf '%s' "${missing# }"
+}
+assert_empty "every version header has a link definition" \
+    "$(unlinked_headers "$FIXTURE/CHANGELOG.md")"
 
 # --- signing: the one mandatory project guarantee ---------------------------
 #
@@ -167,6 +197,16 @@ assert_eq "both tags present on origin" \
     "$(git -C "$ORIGIN" tag -l | sort -V | tr '\n' ' ')" "v0.1.0 v0.2.0 "
 assert_eq "changelog still ends with exactly one newline after a second release" \
     "$(eof_is_single_newline "$FIXTURE/CHANGELOG.md")" "yes"
+assert_contains "Unreleased is rebased onto the newest tag" \
+    "$changelog" "[Unreleased]: $LINK_BASE/compare/v0.2.0...HEAD"
+assert_contains "the new release gets a compare link from its predecessor" \
+    "$changelog" "[v0.2.0]: $LINK_BASE/compare/v0.1.0...v0.2.0"
+assert_contains "the earlier release's link is left as it was" \
+    "$changelog" "[v0.1.0]: $LINK_BASE/releases/tag/v0.1.0"
+assert_eq "the superseded Unreleased line is not left behind" \
+    "$(grep -c '^\[Unreleased\]: ' "$FIXTURE/CHANGELOG.md")" "1"
+assert_empty "every version header still has a link definition" \
+    "$(unlinked_headers "$FIXTURE/CHANGELOG.md")"
 
 # --- third release: no non-merge conventional commits since the previous tag
 # (the "No changes recorded." fallback path) must still leave a blank line
@@ -177,7 +217,7 @@ assert_contains "third release tags despite no new commits" \
 changelog="$(cat "$FIXTURE/CHANGELOG.md")"
 assert_contains "changelog records no changes for the empty range" \
     "$changelog" "No changes recorded."
-line_before_prior_header="$(awk '/^## v0\.2\.0/{print prev; exit} {prev=$0}' "$FIXTURE/CHANGELOG.md")"
+line_before_prior_header="$(awk '/^## \[v0\.2\.0\]/{print prev; exit} {prev=$0}' "$FIXTURE/CHANGELOG.md")"
 assert_empty "blank line separates the no-changes section from the prior header" \
     "$line_before_prior_header"
 assert_eq "changelog still ends with exactly one newline after a no-changes release" \
@@ -212,7 +252,7 @@ assert_eq "failed commit leaves HEAD where it was" \
 assert_eq "failed commit leaves pyproject.toml unbumped" \
     "$(sed -n 's/^version = "\(.*\)"$/\1/p' "$FIXTURE/pyproject.toml" | head -1)" "0.3.0"
 case "$(cat "$FIXTURE/CHANGELOG.md")" in
-    *"## v0.4.0"*) leftover_section=yes ;;
+    *"## [v0.4.0]"*) leftover_section=yes ;;
     *)             leftover_section=no ;;
 esac
 assert_eq "failed commit leaves no half-written CHANGELOG section" "$leftover_section" "no"
