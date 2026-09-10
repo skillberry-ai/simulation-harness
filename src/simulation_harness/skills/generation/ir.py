@@ -32,6 +32,11 @@ class ElementField(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     name: str
     type: str
+    # Whether the element schema declared this property required. Carried so the
+    # schema stage can emit `required` on the element: without it an element is
+    # type-checked but its *shape* is not, and a seeded element may omit half the
+    # fields the response promises while still validating.
+    required: bool = False
 
 
 class ElementShape(BaseModel):

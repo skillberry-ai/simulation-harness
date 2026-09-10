@@ -194,3 +194,84 @@ def test_embedded_map_values_are_type_checked_by_the_seed_gate() -> None:
     assert validate_schema_and_db(stamped, good) == []
     assert validate_schema_and_db(stamped, bad)
     assert validate_schema_and_db(stamped, extra) == []
+
+
+def test_required_element_fields_are_stamped() -> None:
+    shape = ElementShape(
+        kind="embedded",
+        fields=(
+            ElementField(name="item_id", type="string", required=True),
+            ElementField(name="note", type="string"),
+        ),
+    )
+    out = enforce_contract(_schema("lines"), _ir(shape, "lines"))
+    items = _order_prop(out, "lines")["items"]
+    assert items["required"] == ["item_id"]
+
+
+def test_no_required_key_when_nothing_is_required() -> None:
+    """An absent `required` list must not become an empty one — `"required": []`
+    is legal but noise, and it reads as a claim that nothing is required."""
+    shape = ElementShape(
+        kind="embedded", fields=(ElementField(name="note", type="string"),)
+    )
+    out = enforce_contract(_schema("lines"), _ir(shape, "lines"))
+    assert "required" not in _order_prop(out, "lines")["items"]
+
+
+def test_link_object_required_fields_are_stamped() -> None:
+    shape = ElementShape(
+        kind="reference",
+        target_collection="payment_methods",
+        target_key="payment_method_id",
+        link_fields=(
+            ElementField(name="payment_method_id", type="string", required=True),
+            ElementField(name="amount", type="number", required=True),
+        ),
+    )
+    out = enforce_contract(_schema("payment_history"), _ir(shape, "payment_history"))
+    items = _order_prop(out, "payment_history")["items"]
+    assert items["required"] == ["payment_method_id", "amount"]
+
+
+def test_required_turns_the_seed_gate_into_a_shape_check() -> None:
+    """The case this exists for: retail seeded `products[].variants` as a flattened
+    object matching neither the spec's variant nor the `items` row it duplicates,
+    and it validated because only value *types* were pinned."""
+    schema = _schema("variants")
+    schema["$defs"]["Order"]["properties"]["variants"] = {"type": "object"}
+    shape = ElementShape(
+        kind="embedded",
+        container="map",
+        fields=(
+            ElementField(name="item_id", type="string", required=True),
+            ElementField(name="price", type="number", required=True),
+        ),
+    )
+    stamped = enforce_contract(schema, _ir(shape, "variants"))
+    flattened = {
+        "orders": [
+            {"order_id": "o1", "variants": {"v1": {"colour": "Blue", "price": 25}}}
+        ]
+    }
+    conforming = {
+        "orders": [
+            {"order_id": "o1", "variants": {"v1": {"item_id": "v1", "price": 25}}}
+        ]
+    }
+    errors = validate_schema_and_db(stamped, flattened)
+    assert errors and "'item_id' is a required property" in errors[0]
+    assert validate_schema_and_db(stamped, conforming) == []
+
+
+def test_extra_element_fields_are_still_allowed() -> None:
+    """`additionalProperties` stays open: storage may carry bookkeeping no response
+    declares, and for a nested element there is no union across sources to make
+    closing it safe."""
+    shape = ElementShape(
+        kind="embedded",
+        fields=(ElementField(name="sku", type="string", required=True),),
+    )
+    stamped = enforce_contract(_schema("lines"), _ir(shape, "lines"))
+    db = {"orders": [{"order_id": "o1", "lines": [{"sku": "s1", "internal_seq": 3}]}]}
+    assert validate_schema_and_db(stamped, db) == []

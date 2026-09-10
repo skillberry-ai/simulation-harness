@@ -12,7 +12,12 @@ try:
 except ImportError:  # pragma: no cover
     from importlib_resources import files  # type: ignore[import-not-found]
 
-from simulation_harness.skills.generation.ir import ElementShape, Entity, SpecModel
+from simulation_harness.skills.generation.ir import (
+    ElementField,
+    ElementShape,
+    Entity,
+    SpecModel,
+)
 from simulation_harness.skills.generation.llm import call_json
 from simulation_harness.skills.generation.repair import with_repair
 
@@ -124,6 +129,27 @@ def validate_schema(schema: dict, ir: SpecModel | None = None) -> list[str]:
     return errors
 
 
+def _object_element(fields: tuple[ElementField, ...]) -> dict:
+    """An object subschema for the element, with `required` where declared.
+
+    `required` is what turns a type check into a shape check. Without it a seeded
+    element may omit fields the response promises and still validate — retail's
+    `products[].variants` was seeded as a flattened `{color, size, price,
+    available}`, matching neither the spec's variant nor the `items` row it
+    duplicates, and passed. `additionalProperties` stays open: an element may carry
+    storage bookkeeping no response declares, and unlike a top-level entity there
+    is no union across sources to make closing it safe.
+    """
+    subschema: dict = {
+        "type": "object",
+        "properties": {f.name: {"type": f.type} for f in fields},
+    }
+    required = [f.name for f in fields if f.required]
+    if required:
+        subschema["required"] = required
+    return subschema
+
+
 def _element_items(shape: ElementShape) -> dict | None:
     """The ``items`` subschema for one derived element shape, or ``None``.
 
@@ -136,19 +162,13 @@ def _element_items(shape: ElementShape) -> dict | None:
     if shape.kind == "scalar":
         return {"type": shape.type} if shape.type else None
     if shape.kind == "embedded":
-        return {
-            "type": "object",
-            "properties": {f.name: {"type": f.type} for f in shape.fields},
-        }
+        return _object_element(shape.fields)
     if shape.kind == "reference":
         if not shape.link_fields:
             # A pure projection of the target: the parent stores identifiers, and
             # a primary key is a string by the schema stage's own contract.
             return {"type": "string"}
-        return {
-            "type": "object",
-            "properties": {f.name: {"type": f.type} for f in shape.link_fields},
-        }
+        return _object_element(shape.link_fields)
     return None
 
 
