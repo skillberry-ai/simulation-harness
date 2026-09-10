@@ -278,6 +278,8 @@ def test_extra_element_fields_are_still_allowed() -> None:
     stamped = enforce_contract(_schema("lines"), _ir(shape, "lines"))
     db = {"orders": [{"order_id": "o1", "lines": [{"sku": "s1", "internal_seq": 3}]}]}
     assert validate_schema_and_db(stamped, db) == []
+
+
 def test_element_ref_records_the_local_field_when_it_differs() -> None:
     """An inlined element whose own key name differs from the target's pk."""
     shape = ElementShape(
