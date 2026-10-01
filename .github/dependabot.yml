@@ -1,7 +1,9 @@
 version: 2
 updates:
-  # Python dependencies (uv-managed; Dependabot reads pyproject.toml / uv.lock)
-  - package-ecosystem: pip
+  # Python dependencies. The `uv` ecosystem updates uv.lock alongside
+  # pyproject.toml; `pip` only touched pyproject.toml, so every version-update
+  # PR failed CI's `uv sync` under UV_LOCKED=1 (see #42).
+  - package-ecosystem: uv
     directory: /
     schedule:
       interval: weekly
@@ -12,6 +14,12 @@ updates:
       - python
     commit-message:
       prefix: chore
+    ignore:
+      # ruff is pinned to match the ruff-pre-commit `rev` in
+      # .pre-commit-config.yaml (issue #15). Dependabot can't edit that file,
+      # and nothing in CI compares the two, so its bump would pass CI and leave
+      # the hook drifted. Bump both together by hand.
+      - dependency-name: ruff
 
   # GitHub Actions used in our workflows
   - package-ecosystem: github-actions
