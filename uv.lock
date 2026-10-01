@@ -2674,7 +2674,7 @@ requires-dist = [
     { name = "langchain-core", specifier = ">=0.1.0" },
     { name = "langchain-openai", specifier = ">=0.0.5" },
     { name = "langgraph", specifier = ">=0.2.0" },
-    { name = "mcp", specifier = ">=1.0.0" },
+    { name = "mcp", specifier = ">=1.0.0,<2" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8.0" },
     { name = "openapi-spec-validator", specifier = ">=0.7.0" },
     { name = "pip", marker = "extra == 'dev'", specifier = ">=26.2" },
