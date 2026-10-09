@@ -30,6 +30,18 @@ sessions:
 creation:
   max_duration_seconds: 600
 
+simulation:
+  # Data fidelity for new simulations when the request omits `fidelity`.
+  #   generative — open world: unseeded records/values are generated on demand.
+  #   strict     — closed world: the store is the complete truth; reads answer
+  #                only from stored rows and misses return the empty contract.
+  # Override with HARNESS_SIMULATION_FIDELITY.
+  fidelity: generative
+  # Strict mode only. report: log + count ungrounded responses; enforce: fail
+  # the call (MCP reason ungrounded_response).
+  # Override with HARNESS_SIMULATION_STRICT_GROUNDING.
+  strict_grounding: report
+
 generation:
   concurrency: 5
   chunk_threshold: 40

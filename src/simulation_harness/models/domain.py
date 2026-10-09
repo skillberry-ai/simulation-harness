@@ -1,9 +1,18 @@
 """Core domain models for simulation harness."""
 
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field, computed_field
+
+# Runtime data fidelity of a simulation. "generative" is open world: records and
+# values not in the store may be generated on demand. "strict" is closed world:
+# the store is the complete truth and reads answer only from stored rows.
+Fidelity = Literal["strict", "generative"]
+
+# What a strict-mode grounding violation does: log and count it ("report") or
+# fail the call ("enforce").
+StrictGrounding = Literal["report", "enforce"]
 
 
 class SimulationSpec(BaseModel):

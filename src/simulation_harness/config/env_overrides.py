@@ -51,6 +51,17 @@ def _parse_transport(name: str, raw: str) -> str:
     return TransportType(raw).value
 
 
+def _parse_choice(*choices: str) -> Callable[[str, str], str]:
+    """A parser accepting exactly one of ``choices``."""
+
+    def parse(name: str, raw: str) -> str:
+        if raw not in choices:
+            raise ValueError(f"{name} must be one of {list(choices)}, got {raw!r}")
+        return raw
+
+    return parse
+
+
 # (env var, path into the config dict, parser). The llm: block is overridable
 # because an orchestrator may deploy the image without mounting a harness.yaml
 # ConfigMap, leaving the baked-in models as the only ones reachable. provider is
@@ -84,6 +95,16 @@ _OVERRIDES: Sequence[tuple[str, tuple[str, str], Callable[[str, str], Any]]] = (
     ),
     ("HARNESS_AUTOSTART_ENABLED", ("startup", "autostart_enabled"), _parse_bool),
     ("HARNESS_AUTOSTART_SIMULATION", ("startup", "autostart_simulation"), _parse_str),
+    (
+        "HARNESS_SIMULATION_FIDELITY",
+        ("simulation", "fidelity"),
+        _parse_choice("strict", "generative"),
+    ),
+    (
+        "HARNESS_SIMULATION_STRICT_GROUNDING",
+        ("simulation", "strict_grounding"),
+        _parse_choice("report", "enforce"),
+    ),
 )
 
 RECOGNIZED_KEYS = frozenset(name for name, _, _ in _OVERRIDES) | _NON_OVERRIDE_KEYS
@@ -129,6 +150,7 @@ def apply_env_overrides(
       HARNESS_AUTOSTART_ENABLED, HARNESS_AUTOSTART_SIMULATION
       HARNESS_LLM_PROVIDER, HARNESS_LLM_SKILL_GENERATION_MODEL,
       HARNESS_LLM_SIMULATION_MODEL
+      HARNESS_SIMULATION_FIDELITY, HARNESS_SIMULATION_STRICT_GROUNDING
 
     Raises:
         ValueError: If a variable is set to a value of the wrong type, whether
