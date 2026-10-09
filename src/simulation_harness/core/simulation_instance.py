@@ -18,6 +18,7 @@ from simulation_harness.openapi.parser import OpenAPISpec
 from simulation_harness.utils.errors import (
     SessionExpiredError,
     ConcurrentQueueFullError,
+    UngroundedResponseError,
 )
 from simulation_harness.utils.logging import get_logger
 
@@ -162,6 +163,21 @@ class SimulationInstance:
                     success=True,
                     content=content,
                     error=None,
+                )
+
+            except UngroundedResponseError as e:
+                # Strict fidelity, enforce mode. Like any failed call: the
+                # counter is not incremented and the thread is preserved.
+                logger.warning(f"Ungrounded response rejected: tool={tool_name}")
+                return ToolCallResult(
+                    success=False,
+                    content="",
+                    error=str(e),
+                    reason="ungrounded_response",
+                    details={
+                        "ungrounded": e.ungrounded,
+                        "refused_writes": e.refused_writes,
+                    },
                 )
 
             except Exception as e:

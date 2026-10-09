@@ -292,4 +292,41 @@ async def test_handle_call_tool_execution_failure_includes_structured_reason(
     assert structured["reason"] == "tool_execution_failed"
 
 
+@pytest.mark.asyncio
+async def test_handle_call_tool_uses_result_reason_and_details(
+    mock_simulation_instance: MagicMock,
+) -> None:
+    mock_simulation_instance.execute_tool.return_value = ToolCallResult(
+        success=False,
+        content="",
+        error="Response contains ungrounded values",
+        reason="ungrounded_response",
+        details={"ungrounded": [{"path": "$.x", "value": "v"}], "refused_writes": []},
+    )
+    wrapper = MCPServerWrapper(mock_simulation_instance)
+    result = await wrapper._handle_call_tool("getTest", {})
+
+    assert result.isError is True
+    assert result.content[0].text == "Response contains ungrounded values"  # type: ignore[union-attr]
+    structured = json.loads(result.content[-1].text)  # type: ignore[union-attr]
+    assert structured == {
+        "reason": "ungrounded_response",
+        "ungrounded": [{"path": "$.x", "value": "v"}],
+        "refused_writes": [],
+    }
+
+
+@pytest.mark.asyncio
+async def test_details_cannot_override_reason(
+    mock_simulation_instance: MagicMock,
+) -> None:
+    mock_simulation_instance.execute_tool.return_value = ToolCallResult(
+        success=False, content="", error="e", details={"reason": "spoofed"}
+    )
+    wrapper = MCPServerWrapper(mock_simulation_instance)
+    result = await wrapper._handle_call_tool("getTest", {})
+    structured = json.loads(result.content[-1].text)  # type: ignore[union-attr]
+    assert structured["reason"] == "tool_execution_failed"
+
+
 # Made with Bob

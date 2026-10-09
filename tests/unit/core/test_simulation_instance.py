@@ -640,4 +640,32 @@ async def test_shutdown_stops_sidecar_when_present(
         mock_sidecar.stop.assert_called_once()
 
 
+@pytest.mark.asyncio
+async def test_execute_tool_maps_ungrounded_error_to_reason(
+    mock_spec: SimulationSpec, mock_agent: MagicMock
+) -> None:
+    from simulation_harness.utils.errors import UngroundedResponseError
+
+    mock_agent.generate_response = AsyncMock(
+        side_effect=UngroundedResponseError(
+            operation_id="op",
+            ungrounded=[{"path": "$.x", "value": "v"}],
+            refused_writes=[],
+        )
+    )
+    with patch(
+        "simulation_harness.core.simulation_instance.DeepAgent", return_value=mock_agent
+    ):
+        instance = create_instance(mock_spec)
+        result = await instance.execute_tool("op", {})
+
+    assert result.success is False
+    assert result.reason == "ungrounded_response"
+    assert result.details == {
+        "ungrounded": [{"path": "$.x", "value": "v"}],
+        "refused_writes": [],
+    }
+    assert instance.get_session_state().tool_call_count == 0
+
+
 # Made with Bob

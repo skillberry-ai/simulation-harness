@@ -61,6 +61,15 @@ class ToolCallResult(BaseModel):
     error: Optional[str] = Field(
         default=None, description="Error message if the tool call failed"
     )
+    reason: Optional[str] = Field(
+        default=None,
+        description="Stable MCP reason code for a failure; None means "
+        "tool_execution_failed",
+    )
+    details: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Extra fields merged into the MCP reason block",
+    )
 
 
 # Made with Bob
