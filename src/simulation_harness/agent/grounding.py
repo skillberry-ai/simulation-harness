@@ -26,6 +26,15 @@ _ISO_8601 = re.compile(
 _PUNCTUATION_ONLY = re.compile(r"^[\W_]*$")
 _HOLE = "\x00"
 
+# A string of at least this many words is prose the model writes (a miss
+# contract's message, a description), not a value copied from a row. Only its
+# identifier-like tokens must be grounded: quoted segments, and words carrying
+# a digit, "_" or "/". Short multi-word strings ("Zyxwv Bistro") stay data.
+_PROSE_MIN_WORDS = 5
+_QUOTED = re.compile(r"(?<!\w)'([^']+)'(?!\w)|\"([^\"]+)\"")
+_IDENTIFIER_HINT = re.compile(r"[0-9_/]")
+_WORD_EDGE_PUNCTUATION = ".,;:!?()[]{}'\""
+
 # The harness's own error envelope ({"error": "<free text>"}, defined in
 # simulator_system.jinja2). Its text is written by the model, not copied from
 # data, so checking it would flag every legitimate not-found error.
@@ -100,6 +109,24 @@ def _grounded(
     )
 
 
+def _prose_identifiers(value: str) -> list[str]:
+    """The identifier-like tokens of a prose string."""
+    quoted = [single or double for single, double in _QUOTED.findall(value)]
+    words = (w.strip(_WORD_EDGE_PUNCTUATION) for w in _QUOTED.sub(" ", value).split())
+    return quoted + [w for w in words if w and _IDENTIFIER_HINT.search(w)]
+
+
+def _prose_grounded(
+    value: str, dynamic: set[str], fragments: list[str], static_text: str
+) -> bool:
+    if len(value.split()) < _PROSE_MIN_WORDS:
+        return False
+    return all(
+        _grounded(token, dynamic, fragments, static_text)
+        for token in _prose_identifiers(value)
+    )
+
+
 def check_grounding(
     response: Any,
     request_args: dict[str, Any],
@@ -110,7 +137,8 @@ def check_grounding(
 
     Not checked: object keys (fixed by schema), numbers/booleans/null (computed
     by Derivation Rules), empty strings, ISO-8601 dates/datetimes (legitimate
-    "now" timestamps), and the top-level error envelope's text.
+    "now" timestamps), and the top-level error envelope's text. Prose (five or
+    more words) passes when its identifier-like tokens are grounded.
     """
     dynamic = collect_strings(store_snapshot) | collect_strings(request_args)
     fragments = sorted(
@@ -120,6 +148,9 @@ def check_grounding(
     for path, value in _string_leaves(response, "$"):
         if not value or path == _ERROR_ENVELOPE_PATH or _ISO_8601.match(value):
             continue
-        if not _grounded(value, dynamic, fragments, static_text):
-            ungrounded.append(Ungrounded(path, value))
+        if _grounded(value, dynamic, fragments, static_text):
+            continue
+        if _prose_grounded(value, dynamic, fragments, static_text):
+            continue
+        ungrounded.append(Ungrounded(path, value))
     return ungrounded

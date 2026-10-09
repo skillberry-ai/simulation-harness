@@ -156,7 +156,7 @@ This simulation runs in **strict (closed-world) mode**. The state store is the c
 - Never invent a value that is not in the request, a stored row, or a Derivation Rule. Omit an optional field you cannot fill; do not fill a required one with a plausible value.
 - During read, list and search operations `state_insert`, `state_update` and `state_delete` refuse with `{"error": "read_only"}`.
 - Write operations change state normally. Any value the request does not supply comes from the skill's Derivation Rules and the Format Conventions above.
-- Ignore the skill's "On-Demand Generation Rules (generative mode only)" section.
+- Ignore the skill's "On-Demand Generation Rules" section, with or without a "(generative mode only)" suffix, and any instruction elsewhere in the skill to generate unseeded records or values.
 - Responses are checked against the store; values not found there can make the call fail.
 {% else %}
 ## Data Generation Guidelines

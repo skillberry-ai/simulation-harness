@@ -75,10 +75,17 @@ def test_strict_render_carries_closed_world_rules() -> None:
     assert "## Format Conventions" in strict
     assert "empty-result" in strict
     assert '"read_only"' in strict
-    assert "On-Demand Generation Rules (generative mode only)" in strict
+    assert '"(generative mode only)" suffix' in strict
     # Shared guidance survives in both modes.
     assert "Never fabricate data from memory" in strict
     assert "state_get" in strict
+
+
+def test_strict_ignore_rule_covers_pre_fidelity_skill_headings() -> None:
+    """Skills generated before this feature have the unsuffixed heading."""
+    strict = render_system_prompt(_mock_spec(), fidelity="strict")
+    assert 'Ignore the skill\'s "On-Demand Generation Rules" section' in strict
+    assert "with or without" in strict
 
 
 def test_generative_render_has_no_closed_world_section() -> None:

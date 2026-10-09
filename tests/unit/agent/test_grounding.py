@@ -106,6 +106,26 @@ def test_top_level_list_response_paths() -> None:
     assert _check(["acme", "Zyxwv"]) == [Ungrounded("$[1]", "Zyxwv")]
 
 
+def test_model_written_miss_message_is_grounded() -> None:
+    """parsec-github lookup_catalog_item: the miss contract's message is prose."""
+    response = {
+        "found": False,
+        "similar_items": [],
+        "message": "No catalog item matches 'frobnicator'. The index is complete; "
+        "do not search further.",
+    }
+    assert _check(response, request={"name": "frobnicator"}) == []
+
+
+def test_invented_identifier_inside_prose_is_flagged() -> None:
+    message = "Found instance i-0zzz9 running in the requested account today."
+    assert _check({"message": message}) == [Ungrounded("$.message", message)]
+
+
+def test_short_invented_name_is_still_flagged() -> None:
+    assert _check({"name": "Zyxwv Bistro"}) == [Ungrounded("$.name", "Zyxwv Bistro")]
+
+
 def test_collect_strings_ignores_keys_and_non_strings() -> None:
     assert collect_strings({"k": ["a", {"j": "b"}, 3, None]}) == {"a", "b"}
 
