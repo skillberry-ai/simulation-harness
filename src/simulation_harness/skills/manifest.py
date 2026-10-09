@@ -100,6 +100,7 @@ def build_manifest(
     harness_version: str,
     generated_at: datetime,
     identity_provenance: dict[str, str] | None = None,
+    operation_kinds: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Build the provenance manifest for the artifacts in ``artifact_dir``.
 
@@ -113,9 +114,12 @@ def build_manifest(
     ``generated_at`` is a parameter rather than a clock read inside the function
     so callers and tests control the timestamp.
 
+    ``operation_kinds`` maps operationId to its classified kind; it is written
+    as ``operations`` only when non-empty.
+
     Returns the manifest as a plain dict; the caller serializes and writes it.
     """
-    return {
+    manifest: dict[str, Any] = {
         "manifestVersion": MANIFEST_VERSION,
         "skill": {
             "name": skill_name,
@@ -136,3 +140,8 @@ def build_manifest(
             if (artifact_dir / name).exists()
         },
     }
+    if operation_kinds:
+        # Read by the runtime's strict-fidelity write gate. Additive: readers
+        # treat a missing key as "kinds unknown".
+        manifest["operations"] = dict(sorted(operation_kinds.items()))
+    return manifest
