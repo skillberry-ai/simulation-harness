@@ -382,7 +382,9 @@ Two things the invocation above is not optional about:
   passes `extra_body={"cache": {"no-cache": True}}` to `ChatOpenAI` only when
   `HARNESS_LLM_NO_CACHE` is a truthy value in its own process's environment —
   off by default, since the cache is a real cost/latency win for ordinary
-  generation. Because that variable is read once per LLM call from the
+  generation. The runtime simulator (`agent/deep_agent.py`) honors the same
+  variable, read once when each simulation's agent is built, so runtime A/B
+  measurements need it too. Because that variable is read once per LLM call from the
   *harness's* environment, it only takes effect if the harness process itself
   was started (or restarted) with it set; exporting it only in the terminal
   that runs the script does nothing to an already-running harness. The script

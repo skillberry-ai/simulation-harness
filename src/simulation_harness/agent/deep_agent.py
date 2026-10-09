@@ -21,6 +21,7 @@ from deepagents.backends.filesystem import FilesystemBackend
 from deepagents.middleware.filesystem import FilesystemMiddleware, FsToolName
 from deepagents.middleware.skills import SkillsMiddleware
 
+from simulation_harness.config.env_source import llm_no_cache_requested
 from simulation_harness.openapi.parser import OpenAPIOperation, OpenAPISpec
 from simulation_harness.state.registry import StoreRegistry
 from simulation_harness.state.tools import create_state_tools
@@ -102,6 +103,10 @@ class DeepAgent:
         }
         if base_url is not None:
             llm_kwargs["base_url"] = base_url
+        # Read once per simulation: a harness started with HARNESS_LLM_NO_CACHE
+        # must not let repeated runtime calls replay the gateway's cache.
+        if llm_no_cache_requested():
+            llm_kwargs["extra_body"] = {"cache": {"no-cache": True}}
 
         self.llm = ChatOpenAI(**llm_kwargs)
 

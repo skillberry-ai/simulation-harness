@@ -10,7 +10,7 @@ from langchain_openai import ChatOpenAI
 from openai import APIStatusError, LengthFinishReasonError
 from pydantic import SecretStr
 
-from simulation_harness.config.env_source import harness_env
+from simulation_harness.config.env_source import llm_no_cache_requested
 
 
 class StructuredCallError(RuntimeError):
@@ -22,23 +22,8 @@ _TRUNCATED_MSG = (
     "reduce scope or raise max_tokens for this stage"
 )
 
-# Set HARNESS_LLM_NO_CACHE to a truthy value ("1", "true", "yes") to bypass the
-# shared LiteLLM gateway's whole-response cache. Off by default: the cache is a
-# real cost/latency win for ordinary generation, and only a determinism
-# measurement (scripts/check-generation-determinism.sh) needs it disabled. The
-# harness reads this once per `build_chat` call, so it must be set in the
-# environment the harness process itself was started with (or in that process's
-# `.env`) — restart the harness after changing it, don't set it only in a
-# client's shell.
-_NO_CACHE_ENV_VAR = "HARNESS_LLM_NO_CACHE"
-_TRUTHY = {"1", "true", "yes"}
-
-
-def _no_cache_requested() -> bool:
-    # Resolved through config.env_source so this variable has the same ingress as
-    # every other HARNESS_* one: process env first, then `.env` (issue #13).
-    return (harness_env(_NO_CACHE_ENV_VAR) or "").strip().lower() in _TRUTHY
-
+# The gateway cache bypass is shared with the runtime simulator; see
+# config.env_source.llm_no_cache_requested. build_chat reads it per call.
 
 # Statuses that no retry, repair, or per-stage degrade can recover from: the key
 # is wrong (401), the team cannot reach the model (403), or the endpoint has
@@ -78,7 +63,7 @@ def build_chat(
         kwargs["model_kwargs"] = {"response_format": {"type": "json_object"}}
     if base_url:
         kwargs["base_url"] = base_url
-    if _no_cache_requested():
+    if llm_no_cache_requested():
         kwargs["extra_body"] = {"cache": {"no-cache": True}}
     return ChatOpenAI(**kwargs)
 
