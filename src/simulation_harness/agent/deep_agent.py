@@ -22,6 +22,7 @@ from deepagents.middleware.filesystem import FilesystemMiddleware, FsToolName
 from deepagents.middleware.skills import SkillsMiddleware
 
 from simulation_harness.config.env_source import llm_no_cache_requested
+from simulation_harness.models.domain import Fidelity
 from simulation_harness.openapi.parser import OpenAPIOperation, OpenAPISpec
 from simulation_harness.state.registry import StoreRegistry
 from simulation_harness.state.tools import create_state_tools
@@ -48,6 +49,10 @@ logger = get_logger(__name__)
 # because wcmatch's GLOBSTAR does not imply DOTGLOB).
 _READONLY_FS_TOOLS: list[FsToolName] = ["ls", "read_file", "glob", "grep"]
 
+# Appended to every strict-mode request. The thread accumulates up to
+# max_messages turns; a per-call line keeps the closed-world rule in view.
+_STRICT_REMINDER = "Fidelity: strict (closed world). Answer only from stored rows."
+
 
 class DeepAgent:
     """Simplified agent for generating mock API responses using LangChain/LangGraph."""
@@ -64,6 +69,8 @@ class DeepAgent:
         session_timeout_seconds: int = 3600,
         skill_dir: Path | None = None,
         agent_recursion_limit: int = 50,
+        fidelity: Fidelity = "generative",
+        operation_kinds: dict[str, str] | None = None,
     ):
         """Initialize Deep Agent.
 
@@ -78,12 +85,17 @@ class DeepAgent:
             session_timeout_seconds: Session timeout in seconds
             skill_dir: Optional path to skill directory for state store
             agent_recursion_limit: Maximum recursion depth for agent (default: 10)
+            fidelity: Data fidelity mode ("generative" or "strict")
+            operation_kinds: operationId -> OperationKind value, from the skill
+                manifest; drives the strict-mode state write gate
         """
         self.spec = spec
         self.operations = operations
         self.session_timeout_seconds = session_timeout_seconds
         self.skill_dir = skill_dir
         self.agent_recursion_limit = agent_recursion_limit
+        self.fidelity = fidelity
+        self.operation_kinds = dict(operation_kinds or {})
 
         # Per-simulation staging dir for the skills backend, created lazily in
         # _create_agent and removed in shutdown().
@@ -111,7 +123,7 @@ class DeepAgent:
         self.llm = ChatOpenAI(**llm_kwargs)
 
         # Render system prompt
-        self.system_prompt = render_system_prompt(spec)
+        self.system_prompt = render_system_prompt(spec, fidelity=fidelity)
 
         logger.debug(
             f"Rendered system prompt: length={len(self.system_prompt)}, "
@@ -264,6 +276,15 @@ class DeepAgent:
             if self.store_registry:
                 config["configurable"]["store_registry"] = self.store_registry
 
+            # Read by the state tools' strict-mode write gate. The list is fresh
+            # per call, so refusals never leak between calls.
+            refused_writes: list[dict[str, str]] = []
+            config["configurable"]["fidelity"] = self.fidelity
+            config["configurable"]["operation_kind"] = self.operation_kinds.get(
+                operation.operation_id
+            )
+            config["configurable"]["refused_writes"] = refused_writes
+
             # Generate response using agent with session context
             result = await self.agent.ainvoke(
                 {"messages": [HumanMessage(content=request_prompt)]},
@@ -355,12 +376,26 @@ class DeepAgent:
             "Request Parameters:",
             json.dumps(arguments, indent=2),
             "",
-            "Generate a realistic mock response that:",
-            "1. Matches the response schema exactly",
-            "2. Uses the provided request parameters appropriately",
-            "3. Maintains consistency with previous responses in this session",
-            "4. Returns ONLY valid JSON (no explanations, no markdown)",
         ]
+        if self.fidelity == "strict":
+            prompt_parts += [
+                "Return a response that:",
+                "1. Matches the response schema exactly",
+                "2. Uses only values from the request parameters, rows returned "
+                "by the state tools, and the skill's Derivation Rules",
+                "3. Maintains consistency with previous responses in this session",
+                "4. Returns ONLY valid JSON (no explanations, no markdown)",
+                "",
+                _STRICT_REMINDER,
+            ]
+        else:
+            prompt_parts += [
+                "Generate a realistic mock response that:",
+                "1. Matches the response schema exactly",
+                "2. Uses the provided request parameters appropriately",
+                "3. Maintains consistency with previous responses in this session",
+                "4. Returns ONLY valid JSON (no explanations, no markdown)",
+            ]
 
         return "\n".join(prompt_parts)
 
