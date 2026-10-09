@@ -42,7 +42,9 @@ dependencies = [
     # hand-verified version, so widening it only needs a green CI run.
     "deepagents>=0.7.0,<0.8.0",
     "jinja2>=3.0.0",
-    "mcp>=1.0.0",
+    # mcp 2.x drops the low-level Server.list_tools()/call_tool() decorators that
+    # mcp_integration/mcp_server.py registers through; lift this with that migration.
+    "mcp>=1.0.0,<2",
     "fastapi>=0.100.0",
     "sse-starlette>=1.6.0",
     "uvicorn>=0.20.0",
