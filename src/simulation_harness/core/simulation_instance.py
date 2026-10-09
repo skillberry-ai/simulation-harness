@@ -9,12 +9,16 @@ from typing import Any
 from pydantic import SecretStr
 
 from simulation_harness.agent.deep_agent import DeepAgent
+from simulation_harness.agent.grounding import Ungrounded
 from simulation_harness.models.domain import (
+    Fidelity,
     SimulationSpec,
     SessionState,
+    StrictGrounding,
     ToolCallResult,
 )
 from simulation_harness.openapi.parser import OpenAPISpec
+from simulation_harness.skills.manifest import MANIFEST_FILENAME
 from simulation_harness.utils.errors import (
     SessionExpiredError,
     ConcurrentQueueFullError,
@@ -23,6 +27,16 @@ from simulation_harness.utils.errors import (
 from simulation_harness.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def _load_operation_kinds(skill_dir: Path | None) -> dict[str, str]:
+    """operationId -> kind from the bundle manifest; {} when not recorded."""
+    if skill_dir is None:
+        return {}
+    path = skill_dir / MANIFEST_FILENAME
+    if not path.exists():
+        return {}
+    return dict(json.loads(path.read_text()).get("operations", {}))
 
 
 class SimulationInstance:
@@ -42,6 +56,8 @@ class SimulationInstance:
         skill_dir: Path | None = None,
         agent_recursion_limit: int = 50,
         mcp_port: int | None = None,
+        fidelity: Fidelity = "generative",
+        strict_grounding: StrictGrounding = "report",
     ) -> None:
         """Initialize simulation instance.
 
@@ -58,8 +74,12 @@ class SimulationInstance:
             skill_dir: Optional path to skill directory for state store
             agent_recursion_limit: Maximum recursion depth for agent
             mcp_port: Optional port for a sidecar MCP server on a separate port.
+            fidelity: Data fidelity mode, fixed for the simulation's lifetime.
+            strict_grounding: Strict mode only: report or enforce ungrounded
+                responses.
         """
         self.spec = spec
+        self.fidelity: Fidelity = fidelity
         self.mcp_port: int | None = mcp_port
         self._sidecar = None  # Set by SimulationHost after start
         self._max_messages = max_messages
@@ -74,10 +94,18 @@ class SimulationInstance:
         self._last_activity = None  # Timer starts on first call
         self._queue_lock = asyncio.Lock()
         self._current_queue_depth = 0
+        self._ungrounded_responses = 0
 
         # Parse OpenAPI spec and create agent
         parsed_spec = OpenAPISpec(spec.openapi_spec)
         operations = parsed_spec.operations
+
+        operation_kinds = _load_operation_kinds(skill_dir)
+        if fidelity == "strict" and not operation_kinds:
+            logger.warning(
+                f"Simulation '{spec.name}': strict mode without operation kinds; "
+                "write gating disabled; regenerate the skill to enable it"
+            )
 
         self._agent = DeepAgent(
             api_key=api_key,
@@ -90,13 +118,21 @@ class SimulationInstance:
             session_timeout_seconds=idle_timeout_seconds,
             skill_dir=skill_dir,
             agent_recursion_limit=agent_recursion_limit,
+            fidelity=fidelity,
+            strict_grounding=strict_grounding,
+            operation_kinds=operation_kinds,
+            on_ungrounded=self._record_ungrounded,
         )
 
         logger.info(
             f"SimulationInstance created: name={spec.name}, "
             f"max_messages={max_messages}, idle_timeout={idle_timeout_seconds}s, "
-            f"max_queue_depth={max_queue_depth}"
+            f"max_queue_depth={max_queue_depth}, fidelity={fidelity}"
         )
+
+    def _record_ungrounded(self, ungrounded: list[Ungrounded]) -> None:  # noqa: ARG002
+        """DeepAgent callback: count one ungrounded strict-mode response."""
+        self._ungrounded_responses += 1
 
     async def execute_tool(
         self, tool_name: str, arguments: dict[str, Any]
@@ -231,11 +267,14 @@ class SimulationInstance:
             last_activity=self._last_activity,
             queue_depth=self._current_queue_depth,
             max_queue_depth=self._max_queue_depth,
+            fidelity=self.fidelity,
+            ungrounded_responses=self._ungrounded_responses,
         )
 
     async def reset_session(self) -> None:
         """Reset the session state."""
         self._tool_call_count = 0
+        self._ungrounded_responses = 0
         self._last_activity = None  # Timer starts on first call after reset
         await self._agent.reset()
         logger.info("Session reset")

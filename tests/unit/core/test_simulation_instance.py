@@ -1,7 +1,10 @@
 """Tests for SimulationInstance."""
 
 import asyncio
+import json
+import logging
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -666,6 +669,85 @@ async def test_execute_tool_maps_ungrounded_error_to_reason(
         "refused_writes": [],
     }
     assert instance.get_session_state().tool_call_count == 0
+
+
+def _skill_dir_with_manifest(tmp_path: Path, manifest: dict[str, Any] | None) -> Path:
+    skill_dir = tmp_path / "skill"
+    skill_dir.mkdir()
+    if manifest is not None:
+        (skill_dir / "manifest.json").write_text(json.dumps(manifest))
+    return skill_dir
+
+
+def test_instance_passes_fidelity_and_manifest_kinds_to_agent(
+    mock_spec: SimulationSpec, tmp_path: Path
+) -> None:
+    skill_dir = _skill_dir_with_manifest(tmp_path, {"operations": {"getX": "read"}})
+    with patch("simulation_harness.core.simulation_instance.DeepAgent") as agent_cls:
+        agent_cls.return_value = MagicMock()
+        create_instance(
+            mock_spec,
+            skill_dir=skill_dir,
+            fidelity="strict",
+            strict_grounding="enforce",
+        )
+    kwargs = agent_cls.call_args.kwargs
+    assert kwargs["fidelity"] == "strict"
+    assert kwargs["strict_grounding"] == "enforce"
+    assert kwargs["operation_kinds"] == {"getX": "read"}
+    assert callable(kwargs["on_ungrounded"])
+
+
+def test_strict_without_manifest_kinds_warns_once(
+    mock_spec: SimulationSpec, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    skill_dir = _skill_dir_with_manifest(tmp_path, None)
+    with patch("simulation_harness.core.simulation_instance.DeepAgent") as agent_cls:
+        agent_cls.return_value = MagicMock()
+        with caplog.at_level(logging.WARNING):
+            create_instance(mock_spec, skill_dir=skill_dir, fidelity="strict")
+    assert agent_cls.call_args.kwargs["operation_kinds"] == {}
+    warnings = [r for r in caplog.records if "write gating disabled" in r.getMessage()]
+    assert len(warnings) == 1
+
+
+def test_generative_without_kinds_does_not_warn(
+    mock_spec: SimulationSpec, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    skill_dir = _skill_dir_with_manifest(tmp_path, None)
+    with patch("simulation_harness.core.simulation_instance.DeepAgent") as agent_cls:
+        agent_cls.return_value = MagicMock()
+        with caplog.at_level(logging.WARNING):
+            create_instance(mock_spec, skill_dir=skill_dir)
+    assert not [r for r in caplog.records if "write gating" in r.getMessage()]
+
+
+def test_session_state_reports_fidelity_and_counter(
+    mock_spec: SimulationSpec, mock_agent: MagicMock
+) -> None:
+    with patch(
+        "simulation_harness.core.simulation_instance.DeepAgent", return_value=mock_agent
+    ) as agent_cls:
+        instance = create_instance(mock_spec, fidelity="strict")
+        on_ungrounded = agent_cls.call_args.kwargs["on_ungrounded"]
+    on_ungrounded([])
+    on_ungrounded([])
+    state = instance.get_session_state()
+    assert state.fidelity == "strict"
+    assert state.ungrounded_responses == 2
+
+
+@pytest.mark.asyncio
+async def test_reset_session_zeroes_ungrounded_counter(
+    mock_spec: SimulationSpec, mock_agent: MagicMock
+) -> None:
+    with patch(
+        "simulation_harness.core.simulation_instance.DeepAgent", return_value=mock_agent
+    ) as agent_cls:
+        instance = create_instance(mock_spec, fidelity="strict")
+        agent_cls.call_args.kwargs["on_ungrounded"]([])
+    await instance.reset_session()
+    assert instance.get_session_state().ungrounded_responses == 0
 
 
 # Made with Bob

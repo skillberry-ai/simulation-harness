@@ -42,6 +42,14 @@ class SessionState(BaseModel):
     )
     queue_depth: int = Field(..., ge=0, description="Current queue depth")
     max_queue_depth: int = Field(..., gt=0, description="Maximum queue depth allowed")
+    fidelity: Fidelity = Field(
+        "generative", description="Data fidelity mode of this simulation"
+    )
+    ungrounded_responses: int = Field(
+        0,
+        ge=0,
+        description="Strict mode: responses found to carry values not in the store",
+    )
 
     @computed_field
     @property

@@ -695,4 +695,38 @@ async def test_start_simulation_missing_artifacts_raises(
     assert await host.get_record() is None
 
 
+def test_default_factory_resolves_fidelity_from_config(tmp_path: Path) -> None:
+    from unittest.mock import patch
+
+    from simulation_harness.core import simulation_host as H
+
+    config = MagicMock()
+    config.simulation.fidelity = "strict"
+    config.simulation.strict_grounding = "enforce"
+    spec = {"openapi": "3.0.0", "info": {"title": "T", "version": "1"}}
+    with (
+        patch.object(H, "get_config", return_value=config),
+        patch.object(H, "get_secrets", return_value=MagicMock()),
+        patch.object(H, "SimulationInstance") as instance_cls,
+    ):
+        H._default_instance_factory(
+            simulation_name="s",
+            openapi_spec=spec,
+            skill_dir=tmp_path,
+            mcp_port=None,
+            fidelity=None,
+        )
+        assert instance_cls.call_args.kwargs["fidelity"] == "strict"
+        assert instance_cls.call_args.kwargs["strict_grounding"] == "enforce"
+
+        H._default_instance_factory(
+            simulation_name="s",
+            openapi_spec=spec,
+            skill_dir=tmp_path,
+            mcp_port=None,
+            fidelity="generative",
+        )
+        assert instance_cls.call_args.kwargs["fidelity"] == "generative"
+
+
 # Made with Bob
