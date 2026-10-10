@@ -414,4 +414,63 @@ def test_empty_string_base_url_is_forwarded_not_silently_dropped(
         assert call_kwargs["base_url"] == ""
 
 
+def _build_agent_capturing_llm_kwargs(
+    mock_spec: MagicMock, mock_operation: MagicMock
+) -> dict[str, object]:
+    with patch("simulation_harness.agent.deep_agent.ChatOpenAI") as mock_chat:
+        mock_chat.return_value = Mock()
+        DeepAgent(
+            api_key=SecretStr("test-key"),
+            model="gpt-4",
+            temperature=0.0,
+            max_tokens=1000,
+            base_url=None,
+            spec=mock_spec,
+            operations=[mock_operation],
+        )
+        return dict(mock_chat.call_args.kwargs)
+
+
+@pytest.fixture
+def _dotenv_free_cwd(
+    monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory
+) -> None:
+    """DeepAgent consults `.env`; keep the developer's own out of these tests."""
+    monkeypatch.chdir(tmp_path_factory.mktemp("dotenv-free"))
+
+
+@pytest.mark.usefixtures("_dotenv_free_cwd")
+def test_runtime_llm_omits_extra_body_by_default(
+    monkeypatch: pytest.MonkeyPatch, mock_spec: MagicMock, mock_operation: MagicMock
+) -> None:
+    monkeypatch.delenv("HARNESS_LLM_NO_CACHE", raising=False)
+    kwargs = _build_agent_capturing_llm_kwargs(mock_spec, mock_operation)
+    assert "extra_body" not in kwargs
+
+
+@pytest.mark.usefixtures("_dotenv_free_cwd")
+@pytest.mark.parametrize("value", ["1", "true", " Yes "])
+def test_runtime_llm_bypasses_gateway_cache_when_no_cache_env_is_truthy(
+    monkeypatch: pytest.MonkeyPatch,
+    mock_spec: MagicMock,
+    mock_operation: MagicMock,
+    value: str,
+) -> None:
+    """The simulator's own calls must honor the same toggle as generation, or
+    repeated runtime measurements replay the gateway's cached responses."""
+    monkeypatch.setenv("HARNESS_LLM_NO_CACHE", value)
+    kwargs = _build_agent_capturing_llm_kwargs(mock_spec, mock_operation)
+    assert kwargs["extra_body"] == {"cache": {"no-cache": True}}
+
+
+@pytest.mark.usefixtures("_dotenv_free_cwd")
+def test_runtime_llm_reads_no_cache_from_dotenv(
+    monkeypatch: pytest.MonkeyPatch, mock_spec: MagicMock, mock_operation: MagicMock
+) -> None:
+    monkeypatch.delenv("HARNESS_LLM_NO_CACHE", raising=False)
+    Path(".env").write_text("HARNESS_LLM_NO_CACHE=1\n")
+    kwargs = _build_agent_capturing_llm_kwargs(mock_spec, mock_operation)
+    assert kwargs["extra_body"] == {"cache": {"no-cache": True}}
+
+
 # Made with Bob

@@ -54,6 +54,24 @@ def harness_env(name: str, *, env_file: str | None = DEFAULT_ENV_FILE) -> str | 
     return env_value(name, dotenv_snapshot(env_file))
 
 
+# Set HARNESS_LLM_NO_CACHE to a truthy value ("1", "true", "yes") to bypass the
+# shared LiteLLM gateway's whole-response cache, for both skill generation
+# (skills/generation/llm.py) and the runtime simulator (agent/deep_agent.py).
+# Off by default: the cache is a real cost/latency win for ordinary use, and only
+# a measurement that repeats identical requests (determinism checks, A/B runs)
+# needs it disabled. It is read from the harness process's own environment (or
+# that process's `.env`), so restart the harness after changing it — setting it
+# only in a client's shell does nothing.
+LLM_NO_CACHE_ENV_VAR = "HARNESS_LLM_NO_CACHE"
+_TRUTHY = {"1", "true", "yes"}
+
+
+def llm_no_cache_requested(*, env_file: str | None = DEFAULT_ENV_FILE) -> bool:
+    """True when HARNESS_LLM_NO_CACHE asks to bypass the gateway response cache."""
+    value = harness_env(LLM_NO_CACHE_ENV_VAR, env_file=env_file) or ""
+    return value.strip().lower() in _TRUTHY
+
+
 def resolve_config_path(*, env_file: str | None = DEFAULT_ENV_FILE) -> str:
     """Resolve the harness YAML path: process env, then ``env_file``, then default."""
     return harness_env("HARNESS_CONFIG_PATH", env_file=env_file) or DEFAULT_CONFIG_PATH

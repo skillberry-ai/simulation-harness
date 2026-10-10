@@ -19,8 +19,7 @@ from .models import HarnessConfig, TransportType
 
 # Variables that belong in `.env` but are not config overrides, so the typo
 # check below must not flag them: secrets (config/secrets.py owns those), the
-# path to the YAML itself, and the gateway cache toggle read by
-# skills/generation/llm.py.
+# path to the YAML itself, and the gateway cache toggle in env_source.
 _NON_OVERRIDE_KEYS = frozenset(
     {"HARNESS_CONFIG_PATH", "HARNESS_LLM_NO_CACHE"},
 )
