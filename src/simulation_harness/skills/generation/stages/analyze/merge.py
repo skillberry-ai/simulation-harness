@@ -195,6 +195,23 @@ def _pin_element_shapes(fields: list[Field], derived: DerivedEntity) -> list[Fie
     ]
 
 
+def _pin_enums(fields: list[Field], derived: DerivedEntity) -> list[Field]:
+    """Re-assert each spec-declared enum on the field the enrich LLM returned.
+
+    The spec's values replace the LLM's, which may have dropped or invented some;
+    a field the spec declares no enum for keeps whatever enrich wrote, as prose
+    for the prompts. Only the spec-derived values become contract, through
+    ``StoreMetadata.enum_map``.
+    """
+    enums = {name: list(values) for name, values in derived.enums}
+    return [
+        f.model_copy(update={"enum": enums[f.name]})
+        if f.name in enums and f.enum != enums[f.name]
+        else f
+        for f in fields
+    ]
+
+
 def compose_data_model(
     api_name: str,
     identity: IdentityModel,
@@ -248,7 +265,7 @@ def compose_data_model(
                     "name": d.name,
                     "collection": d.collection,
                     "primary_key": d.primary_key,
-                    "fields": _pin_element_shapes(e.fields, d),
+                    "fields": _pin_enums(_pin_element_shapes(e.fields, d), d),
                 }
             )
         )
@@ -278,6 +295,11 @@ def compose_data_model(
             store_metadata=StoreMetadata(
                 collections=[e.collection for e in merged],
                 pk_map={e.collection: e.primary_key for e in merged},
+                enum_map={
+                    d.collection: {name: list(values) for name, values in d.enums}
+                    for d in identity.entities
+                    if d.enums
+                },
             ),
             declined=declined,
         ),

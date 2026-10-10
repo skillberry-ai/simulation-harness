@@ -141,6 +141,30 @@ def validate_schema(schema: dict, ir: SpecModel | None = None) -> list[str]:
     return errors
 
 
+def _element_property(f: ElementField) -> dict:
+    prop: dict = {"type": f.type}
+    if f.enum and f.type == "string":
+        prop["enum"] = list(f.enum)
+    return prop
+
+
+def _stamp_enums(entity_def: dict, enums: dict[str, list[str]]) -> None:
+    """Write each spec-derived enum onto its top-level property.
+
+    Replaces whatever enum the schema LLM transcribed, since the spec's values are
+    known exactly. Skips a property that is missing or not a string: a string enum
+    there would be unsatisfiable, and that mismatch is ``validate_schema``'s to
+    report rather than this stamp's to bury.
+    """
+    props = entity_def.get("properties")
+    if not isinstance(props, dict):
+        return
+    for name, values in enums.items():
+        prop = props.get(name)
+        if isinstance(prop, dict) and prop.get("type") == "string":
+            prop["enum"] = list(values)
+
+
 def _object_element(fields: tuple[ElementField, ...]) -> dict:
     """An object subschema for the element, with `required` where declared.
 
@@ -154,7 +178,7 @@ def _object_element(fields: tuple[ElementField, ...]) -> dict:
     """
     subschema: dict = {
         "type": "object",
-        "properties": {f.name: {"type": f.type} for f in fields},
+        "properties": {f.name: _element_property(f) for f in fields},
     }
     required = [f.name for f in fields if f.required]
     if required:
@@ -243,7 +267,7 @@ def enforce_contract(schema: dict, ir: SpecModel) -> dict:
     shape falls through to ``validate_schema`` as repair feedback instead of
     an exception escaping the repair loop.
 
-    Stamps three things:
+    Stamps four things:
     - Top level: ``required`` is set to exactly ``store_metadata.collections``
       and ``additionalProperties`` to ``False``, so ``db.json``'s collection
       set is checked against the IR too (via ``validate_schema_and_db``, in
@@ -252,6 +276,9 @@ def enforce_contract(schema: dict, ir: SpecModel) -> dict:
     - Per collection: the primary key is written onto the ``$def`` the
       collection's items ``$ref`` resolves to (where the runtime reads it
       from), and added to that ``$def``'s ``required`` list.
+    - Per top-level field with a spec-declared enum
+      (``store_metadata.enum_map``): that field's ``enum``, and per element
+      field likewise inside the stamped ``items``. Same reasoning as below.
     - Per array field with a derived element shape: that field's ``items``. The
       prompt cannot transcribe an element shape it was never given, and until it
       is stamped ``items`` stays ``{}``, which accepts anything — so the seed
@@ -274,6 +301,7 @@ def enforce_contract(schema: dict, ir: SpecModel) -> dict:
         entity = entities.get(collection)
         if entity is not None:
             _stamp_element_shapes(entity_def, entity)
+        _stamp_enums(entity_def, ir.store_metadata.enum_map.get(collection, {}))
     return schema
 
 
