@@ -804,4 +804,119 @@ def test_get_request_example_none_when_no_request_body() -> None:
     assert op.get_request_example() is None
 
 
+_AFFILIATE_HEADER = {
+    "name": "X-Affiliate-Id",
+    "in": "header",
+    "required": True,
+    "schema": {"type": "integer"},
+    "description": "Affiliate id",
+}
+
+
+def _spec_with_component_parameters(
+    paths: dict[str, Any], parameters: dict[str, Any]
+) -> OpenAPISpec:
+    """Build an OpenAPISpec with a components.parameters section."""
+    return OpenAPISpec(
+        {
+            "openapi": "3.0.0",
+            "info": {"title": "Test API", "version": "1.0.0"},
+            "paths": paths,
+            "components": {"parameters": parameters},
+        }
+    )
+
+
+def test_ref_parameter_is_resolved_into_operation_parameters() -> None:
+    """A `$ref` parameter must reach the operation as the referenced object.
+
+    Consumers read `name`/`in`/`required` straight off each entry; a raw
+    `{"$ref": ...}` crashed tool generation and was silently counted as an
+    optional, nameless parameter by skill generation.
+    """
+    spec = _spec_with_component_parameters(
+        {
+            "/search": {
+                "post": {
+                    "operationId": "search",
+                    "parameters": [
+                        {"$ref": "#/components/parameters/AffiliateIdHeader"}
+                    ],
+                    "responses": {},
+                }
+            }
+        },
+        {"AffiliateIdHeader": _AFFILIATE_HEADER},
+    )
+
+    op = spec.get_operation_by_id("search")
+    assert op is not None
+    assert op.parameters == [_AFFILIATE_HEADER]
+    assert [p["name"] for p in op.get_required_parameters()] == ["X-Affiliate-Id"]
+    assert op.get_optional_parameters() == []
+
+
+def test_ref_parameter_at_path_level_is_resolved_for_every_operation() -> None:
+    spec = _spec_with_component_parameters(
+        {
+            "/search": {
+                "parameters": [{"$ref": "#/components/parameters/AffiliateIdHeader"}],
+                "get": {"operationId": "searchGet", "responses": {}},
+                "post": {"operationId": "searchPost", "responses": {}},
+            }
+        },
+        {"AffiliateIdHeader": _AFFILIATE_HEADER},
+    )
+
+    for op_id in ("searchGet", "searchPost"):
+        op = spec.get_operation_by_id(op_id)
+        assert op is not None, op_id
+        assert op.parameters == [_AFFILIATE_HEADER]
+
+
+def test_operation_level_ref_parameter_overrides_path_level_on_name_and_in() -> None:
+    """Override on (name, in) must apply to referenced parameters too."""
+    path_level = {**_AFFILIATE_HEADER, "required": False, "description": "path-level"}
+    spec = _spec_with_component_parameters(
+        {
+            "/search": {
+                "parameters": [path_level],
+                "post": {
+                    "operationId": "search",
+                    "parameters": [
+                        {"$ref": "#/components/parameters/AffiliateIdHeader"}
+                    ],
+                    "responses": {},
+                },
+            }
+        },
+        {"AffiliateIdHeader": _AFFILIATE_HEADER},
+    )
+
+    op = spec.get_operation_by_id("search")
+    assert op is not None
+    assert op.parameters == [_AFFILIATE_HEADER]
+
+
+def test_unresolvable_ref_parameter_is_kept_verbatim() -> None:
+    """A dangling `$ref` is preserved rather than dropped or raising."""
+    dangling = {"$ref": "#/components/parameters/Missing"}
+    spec = _spec_with_component_parameters(
+        {
+            "/search": {
+                "post": {
+                    "operationId": "search",
+                    "parameters": [dangling],
+                    "responses": {},
+                }
+            }
+        },
+        {},
+    )
+
+    op = spec.get_operation_by_id("search")
+    assert op is not None
+    assert op.parameters == [dangling]
+
+
 # Made with Bob

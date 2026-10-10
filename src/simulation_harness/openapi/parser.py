@@ -300,8 +300,8 @@ class OpenAPISpec:
                 # parameters override them on matching (name, in). Merge so
                 # shared path params like {id} reach every operation's schema.
                 parameters = self._merge_parameters(
-                    path_item.get("parameters", []),
-                    operation_data.get("parameters", []),
+                    self._resolve_parameters(path_item.get("parameters", [])),
+                    self._resolve_parameters(operation_data.get("parameters", [])),
                 )
                 request_body = operation_data.get("requestBody")
                 responses = operation_data.get("responses", {})
@@ -321,6 +321,20 @@ class OpenAPISpec:
                 )
 
                 self.operations.append(operation)
+
+    def _resolve_parameters(self, params: list[Any]) -> list[Any]:
+        """Replace each `$ref` parameter with the object it references.
+
+        Resolving before the merge lets a referenced parameter take part in
+        the (name, in) override and gives every consumer real `name`/`in`/
+        `required` keys. A `$ref` that does not resolve is kept verbatim.
+        """
+        resolved: list[Any] = []
+        for param in params:
+            if isinstance(param, dict) and "$ref" in param:
+                param = self.resolve_ref(param["$ref"]) or param
+            resolved.append(param)
+        return resolved
 
     @staticmethod
     def _merge_parameters(

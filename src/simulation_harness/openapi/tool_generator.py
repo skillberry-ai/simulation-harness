@@ -114,6 +114,10 @@ def _build_input_schema(
 
     # Add parameters to schema
     for param in operation.parameters:
+        # The parser resolves `$ref` parameters; one that did not resolve has
+        # no name to expose, and must not fail tools/list for every operation.
+        if "name" not in param:
+            continue
         param_name = param["name"]
         param_schema = param.get("schema", {"type": "string"})
         param_description = param.get("description", "")
