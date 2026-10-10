@@ -37,6 +37,10 @@ class ElementField(BaseModel):
     # type-checked but its *shape* is not, and a seeded element may omit half the
     # fields the response promises while still validating.
     required: bool = False
+    # The spec's enum for this property, unioned across every source that
+    # declares one. Derived in code only, so the schema stage can stamp it as
+    # contract: without it the seed stage may store a value no response allows.
+    enum: tuple[str, ...] | None = None
 
 
 class ElementShape(BaseModel):
@@ -152,6 +156,10 @@ class StoreMetadata(BaseModel):
     model_config = ConfigDict(extra="forbid")
     collections: list[str]
     pk_map: dict[str, str]
+    # Spec-declared enums per collection and top-level field, derived in code
+    # like the rest of this model. The schema stage stamps these as contract;
+    # an enum only an LLM supplied on ``Field.enum`` is never stamped.
+    enum_map: dict[str, dict[str, list[str]]] = {}
 
 
 class OperationEvidence(BaseModel):

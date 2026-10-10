@@ -402,3 +402,69 @@ def test_compose_falls_back_to_structural_entities_when_enrichment_is_empty() ->
     dm, provenance = compose_data_model("Shop", IDENTITY, [], None)
     assert [e.name for e in dm.entities] == ["Order"]
     assert provenance == {"Order": "derived"}
+
+
+def _status_identity(enums: tuple[tuple[str, tuple[str, ...]], ...]) -> IdentityModel:
+    return IdentityModel(
+        entities=(
+            DerivedEntity(
+                name="Order",
+                collection="orders",
+                primary_key="order_id",
+                fields=(("order_id", "string"), ("status", "string")),
+                sources=("get_order__response",),
+                enums=enums,
+            ),
+        ),
+        undecidable=(),
+    )
+
+
+def _enriched_status(enum: list[str] | None) -> list[Entity]:
+    return [
+        Entity(
+            name="Order",
+            collection="orders",
+            primary_key="order_id",
+            fields=[
+                IRField(name="order_id", type="string", required=True),
+                IRField(name="status", type="string", enum=enum, description="d"),
+            ],
+        )
+    ]
+
+
+def _status_field(dm: object) -> IRField:
+    entity = dm.entities[0]  # type: ignore[attr-defined]
+    return next(f for f in entity.fields if f.name == "status")
+
+
+def test_compose_pins_the_spec_enum_over_the_enriched_one() -> None:
+    identity = _status_identity((("status", ("pending", "delivered")),))
+    dm, _ = compose_data_model("Shop", identity, _enriched_status(["invented"]), None)
+    status = _status_field(dm)
+    assert status.enum == ["pending", "delivered"]
+    assert status.description == "d"
+    assert dm.store_metadata.enum_map == {
+        "orders": {"status": ["pending", "delivered"]}
+    }
+
+
+def test_compose_fills_a_spec_enum_the_enrich_llm_dropped() -> None:
+    identity = _status_identity((("status", ("pending", "delivered")),))
+    dm, _ = compose_data_model("Shop", identity, _enriched_status(None), None)
+    assert _status_field(dm).enum == ["pending", "delivered"]
+
+
+def test_compose_keeps_the_enriched_enum_when_the_spec_declares_none() -> None:
+    dm, _ = compose_data_model(
+        "Shop", _status_identity(()), _enriched_status(["x"]), None
+    )
+    assert _status_field(dm).enum == ["x"]
+
+
+def test_structural_floor_carries_spec_enums() -> None:
+    """The no-LLM degradation path must not lose them either."""
+    identity = _status_identity((("status", ("pending", "delivered")),))
+    dm, _ = compose_data_model("Shop", identity, [], None)
+    assert _status_field(dm).enum == ["pending", "delivered"]

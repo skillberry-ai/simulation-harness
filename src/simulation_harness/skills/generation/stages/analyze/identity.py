@@ -231,6 +231,9 @@ class DerivedEntity:
     fields: tuple[tuple[str, str], ...]
     sources: tuple[str, ...]
     elements: tuple[tuple[str, ElementShape], ...] = ()
+    # Spec-declared string enums per top-level field, as sorted
+    # ``(field_name, values)`` pairs. See :func:`_union_enum`.
+    enums: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -262,6 +265,10 @@ class _Cluster:
     # without provenance, "is this element a subset of its target?" is circular
     # and trivially true, so a link object could never be detected.
     field_sources: dict[str, set[str]] = field(default_factory=dict)
+    # Declared enum per field, and per container property's element field,
+    # unioned across sources. ``None`` marks a field some source made nullable.
+    enums: dict[str, list[str] | None] = field(default_factory=dict)
+    element_enums: dict[str, dict[str, list[str] | None]] = field(default_factory=dict)
 
 
 def _json_type(prop: dict) -> str:
@@ -371,6 +378,39 @@ def _container_element(prop: dict) -> tuple[str, dict] | None:
     return None
 
 
+def _nullable(prop: dict) -> bool:
+    declared = prop.get("type")
+    return (
+        prop.get("nullable") is True
+        or (isinstance(declared, list) and "null" in declared)
+        or None in (prop.get("enum") or [])
+    )
+
+
+def _union_enum(into: dict[str, list[str] | None], name: str, prop: object) -> None:
+    """Fold one source's enum for ``name`` into the accumulator.
+
+    The result is the union of every *declared* enum, in first-seen order: a value
+    any declaring source permits must stay storable. A source that declares no
+    enum constrains nothing — typically a loosely typed request body — so it does
+    not erase one. A source that makes the field nullable, or declares a
+    non-string enum, blocks the field for good: ``Field.enum`` is strings only,
+    and stamping a string enum there would reject a value the spec allows.
+    """
+    if not isinstance(prop, dict) or into.get(name, []) is None:
+        return
+    values = prop.get("enum")
+    if _nullable(prop) or (
+        isinstance(values, list) and not all(isinstance(v, str) for v in values)
+    ):
+        into[name] = None
+        return
+    if not isinstance(values, list) or not values:
+        return
+    existing = into.get(name) or []
+    into[name] = existing + [v for v in values if v not in existing]
+
+
 def _absorb(
     clusters: dict[str, _Cluster],
     noun: str,
@@ -390,6 +430,7 @@ def _absorb(
                     prop_name, _json_type(prop if isinstance(prop, dict) else {})
                 )
                 cluster.field_sources.setdefault(prop_name, set()).add(source)
+                _union_enum(cluster.enums, prop_name, prop)
                 if isinstance(prop, dict):
                     # setdefault, and iteration over sorted names, so a property
                     # described by two source schemas resolves the same way every
@@ -397,10 +438,20 @@ def _absorb(
                     captured = _container_element(prop)
                     if captured is not None:
                         cluster.element_schemas.setdefault(prop_name, captured)
+                        # Enums are unioned across every source's element, not
+                        # just the first one kept above for the shape decision.
+                        element_props = captured[1].get("properties")
+                        if isinstance(element_props, dict):
+                            acc = cluster.element_enums.setdefault(prop_name, {})
+                            for name in sorted(element_props):
+                                if isinstance(name, str):
+                                    _union_enum(acc, name, element_props[name])
     cluster.sources.append(source)
 
 
-def _element_fields(element: dict) -> tuple[ElementField, ...]:
+def _element_fields(
+    element: dict, enums: dict[str, list[str] | None] | None = None
+) -> tuple[ElementField, ...]:
     props = element.get("properties")
     if not isinstance(props, dict):
         return ()
@@ -415,6 +466,7 @@ def _element_fields(element: dict) -> tuple[ElementField, ...]:
             name=name,
             type=_json_type(props[name] if isinstance(props[name], dict) else {}),
             required=name in required,
+            enum=tuple(values) if (values := (enums or {}).get(name)) else None,
         )
         for name in sorted(props)
         if isinstance(name, str)
@@ -576,7 +628,7 @@ def _element_shape(
             else None
         )
 
-    fields = _element_fields(element)
+    fields = _element_fields(element, parent.element_enums.get(prop_name))
     embedded = ElementShape(kind="embedded", container=container, fields=fields)
     nested = identity_key(prop_name, element, synthetic=synthetic, nested=True)
     if nested is None or nested == parent.primary_key:
@@ -787,6 +839,11 @@ def derive_identity(
             sources=tuple(clusters[noun].sources),
             elements=tuple(
                 sorted(element_shapes.get(noun, {}).items(), key=lambda kv: kv[0])
+            ),
+            enums=tuple(
+                (name, tuple(values))
+                for name, values in sorted(clusters[noun].enums.items())
+                if values
             ),
         )
         for noun in sorted(clusters)

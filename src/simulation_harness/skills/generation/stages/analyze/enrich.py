@@ -34,8 +34,8 @@ def _load_prompt() -> str:
 def structural_entities(identity: IdentityModel) -> list[Entity]:
     """Build entities from the derived structure alone, with no LLM.
 
-    The degradation floor: field names and JSON types come straight from the
-    schemas, descriptions and enums are simply absent. A skill generated from
+    The degradation floor: field names, JSON types and declared enums come
+    straight from the schemas; descriptions are simply absent. A skill generated from
     this is duller but still contract-correct and still runnable.
     """
     return [
@@ -49,6 +49,9 @@ def structural_entities(identity: IdentityModel) -> list[Entity]:
                     type=field_type,
                     required=field_name == derived.primary_key,
                     element=dict(derived.elements).get(field_name),
+                    enum=list(values)
+                    if (values := dict(derived.enums).get(field_name))
+                    else None,
                 )
                 for field_name, field_type in derived.fields
             ],
