@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from simulation_harness.openapi.parser import load_openapi_spec
+from simulation_harness.openapi.parser import OpenAPISpec, load_openapi_spec
 from simulation_harness.openapi.tool_generator import (
     ToolGenerationError,
     generate_tool_from_operation,
@@ -278,6 +278,61 @@ def test_tool_generation_error() -> None:
     # This is a simple test to ensure the exception exists
     with pytest.raises(ToolGenerationError):
         raise ToolGenerationError("Test error")
+
+
+def _component_parameter_spec(parameter_entry: dict[str, Any]) -> OpenAPISpec:
+    return OpenAPISpec(
+        {
+            "openapi": "3.0.0",
+            "info": {"title": "Test API", "version": "1.0.0"},
+            "paths": {
+                "/search": {
+                    "post": {
+                        "operationId": "search",
+                        "parameters": [parameter_entry],
+                        "responses": {},
+                    }
+                }
+            },
+            "components": {
+                "parameters": {
+                    "AffiliateIdHeader": {
+                        "name": "X-Affiliate-Id",
+                        "in": "header",
+                        "required": True,
+                        "schema": {"type": "integer"},
+                        "description": "Affiliate id",
+                    }
+                }
+            },
+        }
+    )
+
+
+def test_ref_parameter_becomes_tool_input_property() -> None:
+    """A `$ref` parameter used to raise KeyError('name'), failing tools/list."""
+    spec = _component_parameter_spec(
+        {"$ref": "#/components/parameters/AffiliateIdHeader"}
+    )
+
+    tools = generate_tools_from_spec(spec)
+
+    schema = tools[0]["inputSchema"]
+    assert schema["properties"]["X-Affiliate-Id"] == {
+        "type": "integer",
+        "description": "Affiliate id",
+    }
+    assert schema["required"] == ["X-Affiliate-Id"]
+
+
+def test_unresolvable_ref_parameter_does_not_fail_tool_generation() -> None:
+    """One dangling reference must not take down every tool in tools/list."""
+    spec = _component_parameter_spec({"$ref": "#/components/parameters/Missing"})
+
+    tools = generate_tools_from_spec(spec)
+
+    assert tools[0]["name"] == "search"
+    assert tools[0]["inputSchema"]["properties"] == {}
 
 
 # Made with Bob
