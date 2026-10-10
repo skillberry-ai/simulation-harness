@@ -123,3 +123,14 @@ async def test_no_manifest_left_behind_on_failure(skills_dir: Path) -> None:
 
     assert not (skills_dir / "demo").exists()
     assert [d for d in skills_dir.iterdir() if d.name.startswith(".")] == []
+
+
+async def test_generate_skill_writes_operation_kinds(skills_dir: Path) -> None:
+    bundle = SkillBundle(
+        skill_md="---\nname: demo\n---\n# Demo\n",
+        schema={"type": "object", "properties": {}},
+        db={"items": []},
+        operation_kinds={"getItem": "read"},
+    )
+    skill_dir = await _generate(skills_dir, bundle)
+    assert _manifest(skill_dir)["operations"] == {"getItem": "read"}

@@ -23,10 +23,12 @@ each as an H3 (`###`) heading with the exact text shown:
 - Numeric relationships stated in an operation's `description` are authoritative
   and must appear as Derivation Rules even when no schema field encodes them.
 
-### On-Demand Generation Rules
+### On-Demand Generation Rules (generative mode only)
 - State how to deterministically generate any records or numeric fields that are
   not seeded, so regenerating the same logical record yields identical numbers.
-  Cover ordering and non-negativity constraints.
+  Cover ordering and non-negativity constraints. These rules apply only when the
+  simulation runs in generative mode; in strict (closed-world) mode the
+  simulator ignores them.
 
 Use bullet lists, not prose. Reference only entity field names that appear in
 the input; do not invent fields. Do not wrap the whole output in a code fence.

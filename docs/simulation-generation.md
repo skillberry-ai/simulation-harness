@@ -222,8 +222,9 @@ simulator computes and keeps values consistent, especially numeric ones. It has
 three fixed subsections: **Numeric Ranges and Ordering** (domain value ranges
 and ordering constraints), **Derivation Rules** (cross-field/cross-operation
 formulas — e.g. a payment amount equals the sum of per-item charges plus fees),
-and **On-Demand Generation Rules** (deterministic generation of unseeded numeric
-records so repeat calls stay stable). This section is injected into the preamble
+and **On-Demand Generation Rules (generative mode only)** (deterministic
+generation of unseeded numeric records so repeat calls stay stable; ignored in
+strict fidelity mode). This section is injected into the preamble
 under *Realism Guidelines* (Stage 8) and is what the per-operation *Derived
 fields* notes defer to.
 

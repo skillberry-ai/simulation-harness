@@ -1,9 +1,18 @@
 """Core domain models for simulation harness."""
 
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field, computed_field
+
+# Runtime data fidelity of a simulation. "generative" is open world: records and
+# values not in the store may be generated on demand. "strict" is closed world:
+# the store is the complete truth and reads answer only from stored rows.
+Fidelity = Literal["strict", "generative"]
+
+# What a strict-mode grounding violation does: log and count it ("report") or
+# fail the call ("enforce").
+StrictGrounding = Literal["report", "enforce"]
 
 
 class SimulationSpec(BaseModel):
@@ -33,6 +42,14 @@ class SessionState(BaseModel):
     )
     queue_depth: int = Field(..., ge=0, description="Current queue depth")
     max_queue_depth: int = Field(..., gt=0, description="Maximum queue depth allowed")
+    fidelity: Fidelity = Field(
+        "generative", description="Data fidelity mode of this simulation"
+    )
+    ungrounded_responses: int = Field(
+        0,
+        ge=0,
+        description="Strict mode: responses found to carry values not in the store",
+    )
 
     @computed_field
     @property
@@ -51,6 +68,15 @@ class ToolCallResult(BaseModel):
     content: str = Field(..., description="Content returned by the tool")
     error: Optional[str] = Field(
         default=None, description="Error message if the tool call failed"
+    )
+    reason: Optional[str] = Field(
+        default=None,
+        description="Stable MCP reason code for a failure; None means "
+        "tool_execution_failed",
+    )
+    details: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Extra fields merged into the MCP reason block",
     )
 
 

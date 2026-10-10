@@ -49,7 +49,7 @@ def _ir() -> SpecModel:
 WELL_FORMED = (
     "### Numeric Ranges and Ordering\n- price 10-100\n\n"
     "### Derivation Rules\n- total = sum of prices\n\n"
-    "### On-Demand Generation Rules\n- deterministic price by id\n"
+    "### On-Demand Generation Rules (generative mode only)\n- deterministic price by id\n"
 )
 
 
@@ -175,7 +175,7 @@ def _headed(body: str) -> str:
     return (
         body
         + "\n### Numeric Ranges and Ordering\n- x\n"
-        + "### On-Demand Generation Rules\n- y\n"
+        + "### On-Demand Generation Rules (generative mode only)\n- y\n"
     )
 
 
@@ -186,3 +186,20 @@ async def test_guard_is_wired_into_generation() -> None:
         with pytest.raises(GenerationStageError) as excinfo:
             await B.generate_behavior(_ir(), llm=object(), retries=0)
     assert "cannot observe" in str(excinfo.value)
+
+
+def test_on_demand_heading_is_marked_generative_only() -> None:
+    assert (
+        "### On-Demand Generation Rules (generative mode only)" in B.REQUIRED_HEADINGS
+    )
+
+
+async def test_unmarked_on_demand_heading_is_rejected() -> None:
+    legacy = (
+        "### Numeric Ranges and Ordering\n- x\n"
+        "### Derivation Rules\n- y\n"
+        "### On-Demand Generation Rules\n- z\n"
+    )
+    with patch.object(B, "call_text", AsyncMock(return_value=legacy)):
+        with pytest.raises(GenerationStageError):
+            await B.generate_behavior(_ir(), llm=object(), retries=0)

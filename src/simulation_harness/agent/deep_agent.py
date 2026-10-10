@@ -6,6 +6,7 @@ LangChain and LangGraph directly (without the deepagents library).
 
 import json
 import shutil
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -21,8 +22,15 @@ from deepagents.backends.filesystem import FilesystemBackend
 from deepagents.middleware.filesystem import FilesystemMiddleware, FsToolName
 from deepagents.middleware.skills import SkillsMiddleware
 
+from simulation_harness.agent.grounding import (
+    Ungrounded,
+    check_grounding,
+    static_evidence,
+)
 from simulation_harness.config.env_source import llm_no_cache_requested
+from simulation_harness.models.domain import Fidelity, StrictGrounding
 from simulation_harness.openapi.parser import OpenAPIOperation, OpenAPISpec
+from simulation_harness.utils.errors import UngroundedResponseError
 from simulation_harness.state.registry import StoreRegistry
 from simulation_harness.state.tools import create_state_tools
 from simulation_harness.utils.logging import get_logger
@@ -48,6 +56,22 @@ logger = get_logger(__name__)
 # because wcmatch's GLOBSTAR does not imply DOTGLOB).
 _READONLY_FS_TOOLS: list[FsToolName] = ["ls", "read_file", "glob", "grep"]
 
+# Appended to every strict-mode request. The thread accumulates up to
+# max_messages turns; a per-call line keeps the closed-world rule in view.
+_STRICT_REMINDER = "Fidelity: strict (closed world). Answer only from stored rows."
+
+# Cap on ungrounded values carried in an MCP error and in the next reprompt.
+_MAX_REPORTED_UNGROUNDED = 10
+
+
+def _load_static_text(skill_dir: Path) -> str:
+    """Spec strings plus SKILL.md: the static evidence for the grounding check."""
+    api_path = skill_dir / "api.json"
+    skill_path = skill_dir / "SKILL.md"
+    api = json.loads(api_path.read_text()) if api_path.exists() else {}
+    skill_md = skill_path.read_text() if skill_path.exists() else ""
+    return static_evidence(api, skill_md)
+
 
 class DeepAgent:
     """Simplified agent for generating mock API responses using LangChain/LangGraph."""
@@ -64,6 +88,10 @@ class DeepAgent:
         session_timeout_seconds: int = 3600,
         skill_dir: Path | None = None,
         agent_recursion_limit: int = 50,
+        fidelity: Fidelity = "generative",
+        operation_kinds: dict[str, str] | None = None,
+        strict_grounding: StrictGrounding = "report",
+        on_ungrounded: Callable[[list[Ungrounded]], None] | None = None,
     ):
         """Initialize Deep Agent.
 
@@ -78,12 +106,30 @@ class DeepAgent:
             session_timeout_seconds: Session timeout in seconds
             skill_dir: Optional path to skill directory for state store
             agent_recursion_limit: Maximum recursion depth for agent (default: 10)
+            fidelity: Data fidelity mode ("generative" or "strict")
+            operation_kinds: operationId -> OperationKind value, from the skill
+                manifest; drives the strict-mode state write gate
+            strict_grounding: Strict mode only: "report" logs and counts
+                ungrounded responses, "enforce" raises UngroundedResponseError
+            on_ungrounded: Called with the findings whenever a strict-mode
+                response is ungrounded, in either grounding mode
         """
         self.spec = spec
         self.operations = operations
         self.session_timeout_seconds = session_timeout_seconds
         self.skill_dir = skill_dir
         self.agent_recursion_limit = agent_recursion_limit
+        self.fidelity = fidelity
+        self.operation_kinds = dict(operation_kinds or {})
+        self.strict_grounding = strict_grounding
+        self._on_ungrounded = on_ungrounded
+        # thread_id -> values rejected on that thread's last call (enforce mode),
+        # carried into the next request so the agent does not reuse them.
+        self._pending_rejections: dict[str, list[Ungrounded]] = {}
+        # Assembled once: the spec and skill do not change during a simulation.
+        self._static_text = (
+            _load_static_text(skill_dir) if fidelity == "strict" and skill_dir else ""
+        )
 
         # Per-simulation staging dir for the skills backend, created lazily in
         # _create_agent and removed in shutdown().
@@ -111,7 +157,7 @@ class DeepAgent:
         self.llm = ChatOpenAI(**llm_kwargs)
 
         # Render system prompt
-        self.system_prompt = render_system_prompt(spec)
+        self.system_prompt = render_system_prompt(spec, fidelity=fidelity)
 
         logger.debug(
             f"Rendered system prompt: length={len(self.system_prompt)}, "
@@ -126,6 +172,10 @@ class DeepAgent:
         if skill_dir:
             self.store_registry = StoreRegistry(skill_dir)
             logger.info(f"State store registry initialized for skill: {skill_dir}")
+        elif fidelity == "strict":
+            logger.warning(
+                "strict fidelity without a skill directory: grounding check disabled"
+            )
 
         # Initialize session cleanup manager
         self.session_manager = SessionManager(
@@ -240,16 +290,18 @@ class DeepAgent:
         )
 
         try:
-            # Create prompt for this specific request
-            request_prompt = self._create_request_prompt(operation, arguments)
+            # Determine effective thread_id
+            effective_thread_id = thread_id or "default"
+
+            # Create prompt for this specific request, carrying any values the
+            # previous call on this thread was rejected for (strict, enforce).
+            rejected = self._pending_rejections.pop(effective_thread_id, None)
+            request_prompt = self._create_request_prompt(operation, arguments, rejected)
 
             logger.debug(
                 f"Request prompt: tool={tool_name}, prompt={request_prompt}, "
-                f"thread_id={thread_id or 'default'}"
+                f"thread_id={effective_thread_id}"
             )
-
-            # Determine effective thread_id
-            effective_thread_id = thread_id or "default"
 
             # Record session activity for cleanup tracking
             self.session_manager.record_activity(effective_thread_id)
@@ -263,6 +315,15 @@ class DeepAgent:
             # Add store_registry to config if available
             if self.store_registry:
                 config["configurable"]["store_registry"] = self.store_registry
+
+            # Read by the state tools' strict-mode write gate. The list is fresh
+            # per call, so refusals never leak between calls.
+            refused_writes: list[dict[str, str]] = []
+            config["configurable"]["fidelity"] = self.fidelity
+            config["configurable"]["operation_kind"] = self.operation_kinds.get(
+                operation.operation_id
+            )
+            config["configurable"]["refused_writes"] = refused_writes
 
             # Generate response using agent with session context
             result = await self.agent.ainvoke(
@@ -295,6 +356,14 @@ class DeepAgent:
                     f"Parsed response: tool={tool_name}, type={type(parsed_response).__name__}"
                 )
 
+                self._check_grounding(
+                    operation.operation_id,
+                    arguments,
+                    parsed_response,
+                    effective_thread_id,
+                    refused_writes,
+                )
+
                 return parsed_response
 
             except json.JSONDecodeError as e:
@@ -308,6 +377,10 @@ class DeepAgent:
                     "error": "Failed to generate valid JSON response",
                     "details": str(e),
                 }
+
+        except UngroundedResponseError:
+            # A verdict, not an agent failure: let SimulationInstance map it.
+            raise
 
         except Exception as e:
             logger.error(
@@ -334,16 +407,51 @@ class DeepAgent:
                 return operation
         return None
 
+    def _check_grounding(
+        self,
+        operation_id: str,
+        arguments: dict[str, Any],
+        response: Any,
+        thread_id: str,
+        refused_writes: list[dict[str, str]],
+    ) -> None:
+        """Strict mode: report or reject a response the store cannot account for."""
+        if self.fidelity != "strict" or self.store_registry is None:
+            return
+        snapshot = self.store_registry.for_thread(thread_id).snapshot()
+        ungrounded = check_grounding(response, arguments, snapshot, self._static_text)
+        if not ungrounded:
+            return
+        shown = ungrounded[:_MAX_REPORTED_UNGROUNDED]
+        logger.warning(
+            f"Ungrounded strict-mode response: operation={operation_id}, "
+            f"count={len(ungrounded)}, mode={self.strict_grounding}, "
+            f"ungrounded={json.dumps([u.as_dict() for u in shown])}, "
+            f"refused_writes={json.dumps(refused_writes)}"
+        )
+        if self._on_ungrounded is not None:
+            self._on_ungrounded(ungrounded)
+        if self.strict_grounding == "enforce":
+            self._pending_rejections[thread_id] = shown
+            raise UngroundedResponseError(
+                operation_id=operation_id,
+                ungrounded=[u.as_dict() for u in shown],
+                refused_writes=list(refused_writes),
+            )
+
     def _create_request_prompt(
         self,
         operation: OpenAPIOperation,
         arguments: dict[str, Any],
+        rejected: list[Ungrounded] | None = None,
     ) -> str:
         """Create prompt for specific request.
 
         Args:
             operation: API operation
             arguments: Request arguments
+            rejected: Values the previous call on this thread was rejected for
+                (strict mode, enforce); named in the prompt so they are not reused
 
         Returns:
             Formatted request prompt
@@ -355,12 +463,32 @@ class DeepAgent:
             "Request Parameters:",
             json.dumps(arguments, indent=2),
             "",
-            "Generate a realistic mock response that:",
-            "1. Matches the response schema exactly",
-            "2. Uses the provided request parameters appropriately",
-            "3. Maintains consistency with previous responses in this session",
-            "4. Returns ONLY valid JSON (no explanations, no markdown)",
         ]
+        if self.fidelity == "strict":
+            prompt_parts += [
+                "Return a response that:",
+                "1. Matches the response schema exactly",
+                "2. Uses only values from the request parameters, rows returned "
+                "by the state tools, and the skill's Derivation Rules",
+                "3. Maintains consistency with previous responses in this session",
+                "4. Returns ONLY valid JSON (no explanations, no markdown)",
+                "",
+                _STRICT_REMINDER,
+            ]
+            if rejected:
+                values = ", ".join(repr(u.value) for u in rejected)
+                prompt_parts.append(
+                    "Your previous response was rejected; these values are not "
+                    f"in the store: {values}"
+                )
+        else:
+            prompt_parts += [
+                "Generate a realistic mock response that:",
+                "1. Matches the response schema exactly",
+                "2. Uses the provided request parameters appropriately",
+                "3. Maintains consistency with previous responses in this session",
+                "4. Returns ONLY valid JSON (no explanations, no markdown)",
+            ]
 
         return "\n".join(prompt_parts)
 
@@ -381,6 +509,7 @@ class DeepAgent:
             # Reset store for this thread if registry exists
             if self.store_registry:
                 self.store_registry.reset(thread_id)
+            self._pending_rejections.pop(thread_id, None)
         else:
             # Reset all sessions
             count = self.session_manager.clear_all_sessions()
@@ -389,6 +518,7 @@ class DeepAgent:
             # Drop all stores if registry exists
             if self.store_registry:
                 self.store_registry.drop_all()
+            self._pending_rejections.clear()
 
     async def shutdown(self) -> None:
         """Shutdown the agent and cleanup resources."""

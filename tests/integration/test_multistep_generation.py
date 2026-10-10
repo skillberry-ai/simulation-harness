@@ -66,7 +66,7 @@ SCHEMA = {
 BEHAVIOR_SECTION = (
     "### Numeric Ranges and Ordering\n- id is an opaque string\n\n"
     "### Derivation Rules\n- none\n\n"
-    "### On-Demand Generation Rules\n- none\n"
+    "### On-Demand Generation Rules (generative mode only)\n- none\n"
 )
 
 

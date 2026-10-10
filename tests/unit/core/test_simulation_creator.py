@@ -311,3 +311,21 @@ async def test_start_only_missing_artifacts_fails(
     assert record.error.code == "instance_init_failed"
     skill_registry.ensure_skill.assert_not_awaited()
     factory.assert_not_called()
+
+
+async def test_creator_passes_fidelity_to_factory(
+    record: Any, skill_registry: MagicMock, instance_factory: Any
+) -> None:
+    factory, _ = instance_factory
+    creator = SimulationCreator(
+        record=record,
+        skill_registry=skill_registry,
+        instance_factory=factory,
+        openapi_spec={"openapi": "3.0.0", "info": {"title": "T", "version": "1"}},
+        regenerate=False,
+        max_duration_seconds=5,
+        skill_exists=lambda _name: True,
+        fidelity="strict",
+    )
+    await creator.run()
+    assert factory.call_args.kwargs["fidelity"] == "strict"
