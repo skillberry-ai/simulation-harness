@@ -28,7 +28,6 @@ updates:
       day: monday
     labels:
       - dependencies
-      - ci
     commit-message:
       prefix: chore
     ignore:
@@ -54,6 +53,5 @@ updates:
       day: monday
     labels:
       - dependencies
-      - docker
     commit-message:
       prefix: chore
