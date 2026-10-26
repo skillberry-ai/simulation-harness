@@ -161,6 +161,7 @@ async def create_simulation(
             regenerate=body.regenerate_skill,
             mcp_port=body.mcp_port,
             skill_registry=skill_registry,
+            fidelity=body.fidelity,
         )
     except SimulationAlreadyExistsError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
@@ -245,6 +246,7 @@ async def start_simulation(
         name=simulation_name,
         mcp_port=body.mcp_port,
         skill_registry=skill_registry,
+        fidelity=body.fidelity,
     )
     return _record_to_response(record, request)
 

@@ -5,6 +5,8 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from simulation_harness.models.domain import Fidelity, StrictGrounding
+
 
 class TransportType(str, Enum):
     """Supported transport types for MCP communication."""
@@ -66,6 +68,23 @@ class CreationConfig(BaseModel):
         gt=0,
         description="Wall-clock budget for async simulation creation; "
         "exceeded creations transition to failed with code 'creation_timeout'.",
+    )
+
+
+class SimulationConfig(BaseModel):
+    """Runtime data-fidelity defaults for new simulations."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    fidelity: Fidelity = Field(
+        "generative",
+        description="Default data fidelity when a create/start request omits it: "
+        "'generative' (invent data on demand) or 'strict' (closed world).",
+    )
+    strict_grounding: StrictGrounding = Field(
+        "report",
+        description="Strict mode only: 'report' logs and counts ungrounded "
+        "responses; 'enforce' fails the call with reason ungrounded_response.",
     )
 
 
@@ -181,6 +200,10 @@ class HarnessConfig(BaseModel):
     creation: CreationConfig = Field(
         default_factory=CreationConfig,
         description="Async simulation-creation tuning.",
+    )
+    simulation: SimulationConfig = Field(
+        default_factory=SimulationConfig,
+        description="Runtime data-fidelity configuration.",
     )
     generation: GenerationConfig = Field(
         default_factory=GenerationConfig,

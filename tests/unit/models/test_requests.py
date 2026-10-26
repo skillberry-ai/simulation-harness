@@ -231,4 +231,26 @@ class TestUnknownFieldsAreRejected:
         assert request.openapi_spec["x-vendor-extension"] == {"anything": ["at", "all"]}
 
 
+_SPEC = {"openapi": "3.0.0", "info": {"title": "T", "version": "1"}, "paths": {}}
+
+
+def test_create_request_fidelity_defaults_to_none() -> None:
+    assert CreateSimulationRequest(openapi_spec=_SPEC).fidelity is None
+
+
+@pytest.mark.parametrize("mode", ["strict", "generative"])
+def test_create_request_accepts_fidelity(mode: str) -> None:
+    req = CreateSimulationRequest(openapi_spec=_SPEC, fidelity=mode)  # type: ignore[arg-type]
+    assert req.fidelity == mode
+
+
+def test_create_request_rejects_unknown_fidelity() -> None:
+    with pytest.raises(ValidationError):
+        CreateSimulationRequest(openapi_spec=_SPEC, fidelity="loose")  # type: ignore[arg-type]
+
+
+def test_start_request_accepts_fidelity() -> None:
+    assert StartSimulationRequest(name="x", fidelity="strict").fidelity == "strict"
+
+
 # Made with Bob

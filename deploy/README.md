@@ -112,6 +112,8 @@ These override the values in the mounted `harness.yaml`:
 | `HARNESS_SESSIONS_MAX_MESSAGES`                | `sessions.max_messages`                     |
 | `HARNESS_SESSIONS_IDLE_TIMEOUT_SECONDS`        | `sessions.idle_timeout_seconds`             |
 | `HARNESS_SESSIONS_MAX_CONCURRENT_QUEUE_DEPTH`  | `sessions.max_concurrent_queue_depth`       |
+| `HARNESS_SIMULATION_FIDELITY`                  | `simulation.fidelity` (`strict`/`generative`)|
+| `HARNESS_SIMULATION_STRICT_GROUNDING`          | `simulation.strict_grounding` (`report`/`enforce`)|
 
 Each variable resolves in this order: **process environment** (a Kubernetes
 `env:` block, or an exported shell var), then a **`.env` file** in the working

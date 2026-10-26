@@ -126,6 +126,7 @@ async def test_run_pipeline_produces_bundle_with_scenarios() -> None:
     assert "assembling" in phases
     assert "describing_behavior" in phases
     assert "### Derivation Rules" in bundle.skill_md
+    assert bundle.operation_kinds == {"getFeature": "read"}
 
 
 async def test_run_pipeline_disabled_scenarios_skips_stage() -> None:
@@ -325,3 +326,7 @@ def test_skill_bundle_carries_identity_provenance() -> None:
 
 def test_skill_bundle_identity_provenance_defaults_to_empty() -> None:
     assert P.SkillBundle(skill_md="x", schema={}, db={}).identity_provenance == {}
+
+
+def test_skill_bundle_operation_kinds_defaults_to_empty() -> None:
+    assert P.SkillBundle(skill_md="x", schema={}, db={}).operation_kinds == {}

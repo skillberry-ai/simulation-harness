@@ -4,6 +4,15 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from simulation_harness.models.domain import Fidelity
+
+
+_FIDELITY_DESCRIPTION = (
+    "Data fidelity for this simulation: 'strict' (closed world: answer only "
+    "from stored rows) or 'generative' (invent data on demand). Defaults to "
+    "simulation.fidelity in harness.yaml. Ignored by /simulation/setup."
+)
+
 
 class CreateSimulationRequest(BaseModel):
     """Request model for creating a simulation."""
@@ -33,6 +42,7 @@ class CreateSimulationRequest(BaseModel):
         le=65535,
         description="Port to expose the MCP server on. Defaults to the harness port.",
     )
+    fidelity: Fidelity | None = Field(default=None, description=_FIDELITY_DESCRIPTION)
 
 
 class StartSimulationRequest(BaseModel):
@@ -49,6 +59,7 @@ class StartSimulationRequest(BaseModel):
         le=65535,
         description="Port to expose the MCP server on. Defaults to the harness port.",
     )
+    fidelity: Fidelity | None = Field(default=None, description=_FIDELITY_DESCRIPTION)
 
 
 # Made with Bob

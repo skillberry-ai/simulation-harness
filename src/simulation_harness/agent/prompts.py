@@ -8,6 +8,7 @@ from typing import Any
 
 from jinja2 import Environment, Template
 
+from simulation_harness.models.domain import Fidelity
 from simulation_harness.openapi.parser import OpenAPISpec
 from simulation_harness.utils.logging import get_logger
 
@@ -55,6 +56,7 @@ def _load_template() -> Template:
 
 def render_system_prompt(
     spec: OpenAPISpec,
+    fidelity: Fidelity = "generative",
     **kwargs: Any,
 ) -> str:
     """Render the simulator system prompt from the template.
@@ -65,6 +67,8 @@ def render_system_prompt(
 
     Args:
         spec: OpenAPI specification
+        fidelity: Data fidelity mode; selects the closed-world or on-demand
+            data guidance.
         **kwargs: Additional template variables
 
     Returns:
@@ -79,6 +83,7 @@ def render_system_prompt(
                 "version": spec.info.get("version", "1.0.0"),
                 "description": spec.info.get("description", ""),
             },
+            "fidelity": fidelity,
             **kwargs,
         }
 
