@@ -19,6 +19,13 @@ updates:
       # and nothing in CI compares the two, so its bump would pass CI and leave
       # the hook drifted. Bump both together by hand.
       - dependency-name: ruff
+      # mcp 2.x breaks MCPServerWrapper (issue #71); pyproject caps it at <2.
+      # Dependabot still proposes the major bump (#52, #91) and widens the cap.
+      # Remove this together with the cap in the migration PR. Minor/patch
+      # 1.x security releases still come through.
+      - dependency-name: mcp
+        update-types:
+          - version-update:semver-major
 
   # GitHub Actions used in our workflows
   - package-ecosystem: github-actions
@@ -28,7 +35,6 @@ updates:
       day: monday
     labels:
       - dependencies
-      - ci
     commit-message:
       prefix: chore
     ignore:
@@ -54,6 +60,5 @@ updates:
       day: monday
     labels:
       - dependencies
-      - docker
     commit-message:
       prefix: chore
