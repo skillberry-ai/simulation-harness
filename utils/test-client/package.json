@@ -28,14 +28,14 @@
     "prettier": "^3.3.0",
     "react-router": "^8.3.0",
     "typescript": "^5.5.0",
-    "vitest": "^5.0.0"
+    "vitest": "^5.0.5"
   },
   "overrides": {
     "qs": "^6.16.0",
-    "dompurify": "3.4.16",
-    "vite": "^6.4.3",
+    "dompurify": "3.4.17",
+    "vite": "^6.4.5",
     "postcss": "^8.5.18",
-    "fast-uri": "^3.1.5",
+    "fast-uri": "^3.1.9",
     "@hono/node-server": "^2.0.5",
     "hono": "^4.12.34"
   }
