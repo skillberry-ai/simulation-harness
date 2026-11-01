@@ -2,7 +2,7 @@
 
 import os
 import tempfile
-from typing import Any, cast
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -53,7 +53,9 @@ class TestAppStartup:
             assert app is not None
             assert app.title == "Simulation Harness"
 
-            routes = [route.path for route in cast(list[Any], app.routes)]
+            # Use the OpenAPI path table rather than app.routes: fastapi>=0.161
+            # wraps include_router() entries in _IncludedRouter, which has no .path.
+            routes = set(app.openapi()["paths"])
             assert "/api/v1/simulation" in routes
             assert "/api/v1/simulation/reset" in routes
 
@@ -118,7 +120,9 @@ class TestMCPTransportMounting:
         try:
             from simulation_harness.main import app
 
-            routes = [route.path for route in cast(list[Any], app.routes)]
+            # Use the OpenAPI path table rather than app.routes: fastapi>=0.161
+            # wraps include_router() entries in _IncludedRouter, which has no .path.
+            routes = set(app.openapi()["paths"])
             assert "/mcp/sse" in routes
             assert "/mcp/messages" in routes
 
