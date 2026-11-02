@@ -220,4 +220,23 @@ async def test_both_transports_share_same_server_instance(
     assert result1 == result2
 
 
+@pytest.mark.asyncio
+async def test_both_transports_report_ungrounded_response_identically(
+    mock_simulation_instance: MagicMock, sse_app: Any, http_app: Any
+) -> None:
+    mock_simulation_instance.execute_tool.return_value = ToolCallResult(
+        success=False,
+        content="",
+        error="ungrounded",
+        reason="ungrounded_response",
+        details={"ungrounded": [], "refused_writes": []},
+    )
+    _, sse_wrapper = sse_app
+    _, http_wrapper = http_app
+    sse_result = await sse_wrapper._handle_call_tool("getTest", {})
+    http_result = await http_wrapper._handle_call_tool("getTest", {})
+    assert sse_result.model_dump() == http_result.model_dump()
+    assert '"ungrounded_response"' in sse_result.content[-1].text  # type: ignore[union-attr]
+
+
 # Made with Bob

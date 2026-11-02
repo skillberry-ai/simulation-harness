@@ -4,6 +4,7 @@ These tools expose the SimulationStore to the LLM via structured tool calls.
 Each tool resolves the per-thread store from a registry passed via RunnableConfig.
 """
 
+import logging
 from typing import Annotated, Any
 
 from langchain_core.runnables import RunnableConfig
@@ -17,6 +18,8 @@ from .errors import (
     UnknownStoreError,
     BadQueryError,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # Pydantic models for tool arguments
@@ -128,6 +131,32 @@ def _error_to_dict(error: Exception) -> dict:
         return {"error": "internal_error", "message": str(error)}
 
 
+# Operation kinds that only read. In strict (closed-world) fidelity a write
+# during one of these could only materialize an invented record, so it is
+# refused. Unknown kinds (None) are never gated: bundles generated before kinds
+# were recorded in manifest.json must keep working.
+_READ_KINDS = frozenset({"read", "list", "search"})
+
+
+def _refuse_write(tool: str, store: str, config: RunnableConfig) -> dict | None:
+    """Return a read_only error dict if this write must be refused, else None."""
+    configurable = config.get("configurable", {})
+    kind = configurable.get("operation_kind")
+    if configurable.get("fidelity") != "strict" or kind not in _READ_KINDS:
+        return None
+    logger.warning(f"Refused {tool} on store '{store}' during strict {kind} operation")
+    refused = configurable.get("refused_writes")
+    if refused is not None:
+        refused.append({"tool": tool, "store": store})
+    return {
+        "error": "read_only",
+        "message": (
+            f"Closed-world mode: {kind} operations cannot write to the store. "
+            "Return the operation's empty-result contract instead."
+        ),
+    }
+
+
 def state_get(
     store: str, id: str, *, config: Annotated[RunnableConfig, InjectedToolArg]
 ) -> dict:
@@ -236,6 +265,9 @@ def state_insert(
     Returns:
         The inserted entity (echoed), or an error dict
     """
+    refused = _refuse_write("state_insert", store, config)
+    if refused is not None:
+        return refused
     try:
         sim_store = _get_store_from_config(config)
         return sim_store.insert(store, entity)
@@ -262,6 +294,9 @@ def state_update(
     Returns:
         The updated entity, or an error dict
     """
+    refused = _refuse_write("state_update", store, config)
+    if refused is not None:
+        return refused
     try:
         sim_store = _get_store_from_config(config)
         return sim_store.update(store, id, patch)
@@ -283,6 +318,9 @@ def state_delete(
     Returns:
         The deleted entity, or an error dict
     """
+    refused = _refuse_write("state_delete", store, config)
+    if refused is not None:
+        return refused
     try:
         sim_store = _get_store_from_config(config)
         return sim_store.delete(store, id)

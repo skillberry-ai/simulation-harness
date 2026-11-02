@@ -397,4 +397,79 @@ class TestThreadIsolation:
         assert result2["error"] == "not_found"
 
 
+_NEW_RESTAURANT: dict[str, Any] = {"id": "rest_900", "name": "Gate Test"}
+
+
+def _write(tools: Any, name: str, config: dict[str, Any]) -> Any:
+    tool = next(t for t in tools if t.name == name)
+    if name == "state_insert":
+        return tool.func(store="restaurants", entity=_NEW_RESTAURANT, config=config)
+    if name == "state_update":
+        return tool.func(
+            store="restaurants", id="rest_001", patch={"name": "X"}, config=config
+        )
+    return tool.func(store="restaurants", id="rest_001", config=config)
+
+
+class TestStrictWriteGate:
+    @pytest.mark.parametrize(
+        "tool_name", ["state_insert", "state_update", "state_delete"]
+    )
+    @pytest.mark.parametrize("kind", ["read", "list", "search"])
+    def test_strict_read_kinds_refuse_writes(
+        self, tools: Any, mock_config: dict[str, Any], tool_name: str, kind: str
+    ) -> None:
+        refused: list[dict[str, str]] = []
+        mock_config["configurable"].update(
+            fidelity="strict", operation_kind=kind, refused_writes=refused
+        )
+        result = _write(tools, tool_name, mock_config)
+        assert result["error"] == "read_only"
+        assert kind in result["message"]
+        assert refused == [{"tool": tool_name, "store": "restaurants"}]
+
+    @pytest.mark.parametrize(
+        "tool_name", ["state_insert", "state_update", "state_delete"]
+    )
+    @pytest.mark.parametrize(
+        ("fidelity", "kind"),
+        [
+            ("strict", "create"),
+            ("strict", "update"),
+            ("strict", "delete"),
+            ("strict", "action"),
+            ("strict", None),
+            ("generative", "read"),
+            ("generative", "search"),
+        ],
+    )
+    def test_other_combinations_are_not_gated(
+        self,
+        tools: Any,
+        mock_config: dict[str, Any],
+        tool_name: str,
+        fidelity: str,
+        kind: str | None,
+    ) -> None:
+        refused: list[dict[str, str]] = []
+        mock_config["configurable"].update(
+            fidelity=fidelity, operation_kind=kind, refused_writes=refused
+        )
+        result = _write(tools, tool_name, mock_config)
+        assert not (isinstance(result, dict) and result.get("error") == "read_only")
+        assert refused == []
+
+    def test_missing_fidelity_keys_are_not_gated(
+        self, tools: Any, mock_config: dict[str, Any]
+    ) -> None:
+        result = _write(tools, "state_delete", mock_config)
+        assert result.get("error") != "read_only"
+
+    def test_refusal_without_collector_still_refuses(
+        self, tools: Any, mock_config: dict[str, Any]
+    ) -> None:
+        mock_config["configurable"].update(fidelity="strict", operation_kind="read")
+        assert _write(tools, "state_delete", mock_config)["error"] == "read_only"
+
+
 # Made with Bob

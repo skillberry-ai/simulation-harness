@@ -5,6 +5,22 @@
         "additionalProperties": false,
         "description": "Request model for creating a simulation.",
         "properties": {
+          "fidelity": {
+            "anyOf": [
+              {
+                "enum": [
+                  "strict",
+                  "generative"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Data fidelity for this simulation: 'strict' (closed world: answer only from stored rows) or 'generative' (invent data on demand). Defaults to simulation.fidelity in harness.yaml. Ignored by /simulation/setup.",
+            "title": "Fidelity"
+          },
           "mcp_port": {
             "anyOf": [
               {
@@ -128,6 +144,16 @@
       "SessionState": {
         "description": "Current session state with counters and limits.",
         "properties": {
+          "fidelity": {
+            "default": "generative",
+            "description": "Data fidelity mode of this simulation",
+            "enum": [
+              "strict",
+              "generative"
+            ],
+            "title": "Fidelity",
+            "type": "string"
+          },
           "idle_timeout_seconds": {
             "description": "Idle timeout in seconds",
             "exclusiveMinimum": 0.0,
@@ -182,6 +208,13 @@
             "description": "Number of tool calls made in this session",
             "minimum": 0.0,
             "title": "Tool Call Count",
+            "type": "integer"
+          },
+          "ungrounded_responses": {
+            "default": 0,
+            "description": "Strict mode: responses found to carry values not in the store",
+            "minimum": 0.0,
+            "title": "Ungrounded Responses",
             "type": "integer"
           }
         },
@@ -301,6 +334,22 @@
         "additionalProperties": false,
         "description": "Request model for starting a simulation from baked artifacts.",
         "properties": {
+          "fidelity": {
+            "anyOf": [
+              {
+                "enum": [
+                  "strict",
+                  "generative"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Data fidelity for this simulation: 'strict' (closed world: answer only from stored rows) or 'generative' (invent data on demand). Defaults to simulation.fidelity in harness.yaml. Ignored by /simulation/setup.",
+            "title": "Fidelity"
+          },
           "mcp_port": {
             "anyOf": [
               {

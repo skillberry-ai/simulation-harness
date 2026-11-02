@@ -289,4 +289,20 @@ class TestSimulationArtifactsNotFoundError:
         assert "db.json" in str(err)
 
 
+def test_ungrounded_response_error_carries_details() -> None:
+    from simulation_harness.utils.errors import UngroundedResponseError
+
+    err = UngroundedResponseError(
+        operation_id="searchRestaurants",
+        ungrounded=[{"path": "$.items[0].name", "value": "Zyxwv"}],
+        refused_writes=[{"tool": "state_insert", "store": "restaurants"}],
+    )
+    assert err.operation_id == "searchRestaurants"
+    assert err.ungrounded[0]["value"] == "Zyxwv"
+    assert err.refused_writes == [{"tool": "state_insert", "store": "restaurants"}]
+    assert "searchRestaurants" in str(err)
+    assert "1 value(s)" in str(err)
+    assert "'Zyxwv'" in str(err)
+
+
 # Made with Bob

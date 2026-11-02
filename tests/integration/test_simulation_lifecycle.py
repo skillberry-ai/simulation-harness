@@ -177,6 +177,48 @@ class TestSimulationCreation:
         assert final["mcp_url"] == "http://testserver/mcp/sse"
         assert "created_at" in final
 
+    def test_create_simulation_reports_requested_fidelity(
+        self, app_client: Any, valid_openapi_spec: dict[str, Any]
+    ) -> None:
+        with patch(
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
+        ) as mock_gen:
+            mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
+            response = app_client.post(
+                "/api/v1/simulation",
+                json={"openapi_spec": valid_openapi_spec, "fidelity": "strict"},
+            )
+            assert response.status_code == 202
+            final = poll_until_ready(app_client, timeout=30.0)
+
+        assert final["status"] == "ready", final
+        assert final["session_state"]["fidelity"] == "strict"
+        assert final["session_state"]["ungrounded_responses"] == 0
+
+    def test_create_simulation_defaults_to_generative(
+        self, app_client: Any, valid_openapi_spec: dict[str, Any]
+    ) -> None:
+        with patch(
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
+        ) as mock_gen:
+            mock_gen.return_value = Path("/tmp/fake-skill/SKILL.md")
+            app_client.post(
+                "/api/v1/simulation", json={"openapi_spec": valid_openapi_spec}
+            )
+            final = poll_until_ready(app_client, timeout=30.0)
+        assert final["session_state"]["fidelity"] == "generative"
+
+    def test_create_simulation_rejects_unknown_fidelity(
+        self, app_client: Any, valid_openapi_spec: dict[str, Any]
+    ) -> None:
+        response = app_client.post(
+            "/api/v1/simulation",
+            json={"openapi_spec": valid_openapi_spec, "fidelity": "loose"},
+        )
+        assert response.status_code == 422
+
     def test_create_simulation_openapi_31_accepted(
         self, app_client: Any, valid_openapi_spec_31: dict[str, Any]
     ) -> None:
@@ -790,6 +832,39 @@ def test_setup_then_start_then_tool_call(
             tools = app_client.get("/api/v1/simulation/tools")
             assert tools.status_code == 200
             assert len(tools.json()) > 0
+    finally:
+        shutil.rmtree(skills_dir / "test-api", ignore_errors=True)
+
+
+def test_start_simulation_accepts_fidelity(
+    app_client: Any, valid_openapi_spec: dict[str, Any]
+) -> None:
+    """Start takes its own fidelity; setup ignores one."""
+    from simulation_harness.config.settings import get_config
+
+    skills_dir = Path(get_config().skills.folder)
+    try:
+        with patch(
+            "simulation_harness.skills.generator.SkillGenerator.generate_skill",
+            new_callable=AsyncMock,
+        ) as mock_gen:
+            mock_gen.side_effect = _fake_generate_writing_artifacts
+            r = app_client.post(
+                "/api/v1/simulation/setup",
+                json={"openapi_spec": valid_openapi_spec},
+            )
+            assert r.status_code == 202
+            gen = _poll_until(app_client, "generated")
+            assert gen["status"] == "generated", f"expected generated, got: {gen}"
+
+            name = app_client.get("/api/v1/simulation").json()["name"]
+            r = app_client.post(
+                "/api/v1/simulation/start", json={"name": name, "fidelity": "strict"}
+            )
+            assert r.status_code == 202
+            final = poll_until_ready(app_client, timeout=30.0)
+            assert final["status"] == "ready", f"expected ready, got: {final}"
+            assert final["session_state"]["fidelity"] == "strict"
     finally:
         shutil.rmtree(skills_dir / "test-api", ignore_errors=True)
 

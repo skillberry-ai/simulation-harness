@@ -170,6 +170,8 @@ Response when ready:
     "last_activity": null,
     "queue_depth": 0,
     "max_queue_depth": 8,
+    "fidelity": "generative",
+    "ungrounded_responses": 0,
     "seconds_since_last_call": null
   },
   "mcp_url": "http://localhost:8086/mcp/petstore",
@@ -186,6 +188,11 @@ Response when ready:
 The `mcp_url` field is only populated when `status == "ready"`. Where you
 actually connect depends on the configured `mcp.transport` — see
 [MCP transport](#mcp-transport).
+
+`session_state.fidelity` is the simulation's data-fidelity mode (see
+[`POST /api/v1/simulation`](#post-apiv1simulation)). `ungrounded_responses`
+counts strict-mode responses that carried values not found in the store; it is
+always `0` in generative mode and resets with the session.
 
 ### 3. List the tools the simulation exposes
 
@@ -271,6 +278,20 @@ Create the active simulation from an OpenAPI 3.x spec.
 | `name` | string | spec `info.title` | Override for the simulation name. Lowercased and spaces are replaced with `-`. |
 | `regenerate_skill` | boolean | `false` | Force LLM regeneration of the skill even if `<skills_folder>/<name>/SKILL.md` already exists. |
 | `mcp_port` | integer (1–65535) | harness port | If set, the MCP server is started on this dedicated port instead of being mounted on the harness app. |
+| `fidelity` | `"strict"` \| `"generative"` | `simulation.fidelity` (`generative`) | Data fidelity mode, fixed for the simulation's lifetime. See below. |
+
+**Data fidelity.** `generative` (open world) lets the simulator generate
+plausible records and values that are not in the store, so a simulation with
+no real data can still play along with the caller. `strict` (closed world)
+treats the store as the complete truth: reads answer only from stored rows, a
+miss returns the operation's documented empty or not-found result, and store
+writes during read/list/search operations are refused. In strict mode every
+response is also checked against the store; with `simulation.strict_grounding:
+report` (the default) violations are logged and counted in
+`session_state.ungrounded_responses`, and with `enforce` the call fails with
+MCP reason `ungrounded_response`. Write blocking needs the operation kinds
+recorded in the skill's `manifest.json`; skills generated before this feature
+must be regenerated to get it.
 
 **Unknown fields are rejected.** Any key outside the table above returns `422`
 naming that key, rather than being ignored. A misspelled flag is therefore a
@@ -307,7 +328,8 @@ session later with no LLM cost or cross-replica drift.
 
 **Request body** — identical to
 [`POST /api/v1/simulation`](#post-apiv1simulation) (`openapi_spec`, optional
-`name`, `regenerate_skill`). `mcp_port` is not used (no session is started).
+`name`, `regenerate_skill`). `mcp_port` and `fidelity` are accepted but not
+used (no session is started); pass `fidelity` to `start` instead.
 
 **Body limit:** 10 MB. Larger bodies return `413`.
 
@@ -349,6 +371,7 @@ never calls the LLM generator; the OpenAPI spec is reconstructed from the baked
 |---|---|---|---|
 | `name` | string | required | Name of the skill whose artifacts to start. Sanitized like the create `name`. |
 | `mcp_port` | integer (1–65535) | harness port | If set, the MCP server is started on this dedicated port instead of being mounted on the harness app. |
+| `fidelity` | `"strict"` \| `"generative"` | `simulation.fidelity` (`generative`) | Data fidelity mode; see [`POST /api/v1/simulation`](#post-apiv1simulation). Autostart uses the configured default. |
 
 **Responses**
 
@@ -670,10 +693,14 @@ codes and their extra fields:
 | `session_expired` | Session limit reached | `limit`, `observed` |
 | `concurrent_queue_full` | Queue depth exceeded | — |
 | `tool_execution_failed` | Simulated tool returned a failure | — |
+| `ungrounded_response` | Strict fidelity with `strict_grounding: enforce`: the response carried values not found in the store | `ungrounded` (≤10 `{path, value}`), `refused_writes` (`{tool, store}`) |
 
 For `session_expired`, recover with `POST /api/v1/simulation/reset`. For
 `concurrent_queue_full`, back off and retry. For `tool_execution_failed`, the
 session counter is **not** advanced and the agent thread is preserved.
+`ungrounded_response` behaves the same way, and is not worth retrying as-is:
+either the seed data lacks what was asked for, or the simulator invented it.
+The next call on the thread is told which values were rejected.
 
 Truly unexpected exceptions inside a tool call are not wrapped — they bubble
 through the MCP SDK's standard error path.

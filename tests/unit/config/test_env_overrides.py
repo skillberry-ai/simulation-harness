@@ -139,6 +139,26 @@ class TestApplyEnvOverrides:
         with pytest.raises(ValueError):
             apply_env_overrides(_base())
 
+    def test_simulation_fidelity_override(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("HARNESS_SIMULATION_FIDELITY", "strict")
+        assert apply_env_overrides(_base()).simulation.fidelity == "strict"
+
+    def test_simulation_strict_grounding_override(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("HARNESS_SIMULATION_STRICT_GROUNDING", "enforce")
+        out = apply_env_overrides(_base())
+        assert out.simulation.strict_grounding == "enforce"
+
+    def test_invalid_fidelity_override_raises(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("HARNESS_SIMULATION_FIDELITY", "loose")
+        with pytest.raises(ValueError, match="HARNESS_SIMULATION_FIDELITY"):
+            apply_env_overrides(_base())
+
 
 class TestLLMOverrides:
     """The llm: block is overridable so an orchestrator that mounts no ConfigMap

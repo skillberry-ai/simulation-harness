@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
     from simulation_harness.core.simulation_instance import SimulationInstance
     from simulation_harness.core.skill_registry import SkillRegistry
+    from simulation_harness.models.domain import Fidelity
 
 
 logger = get_logger(__name__)
@@ -39,6 +40,7 @@ class SimulationCreator:
         mcp_port: int | None = None,
         generate: bool = True,
         start: bool = True,
+        fidelity: "Fidelity | None" = None,
     ) -> None:
         self._record = record
         self._skill_registry = skill_registry
@@ -50,6 +52,8 @@ class SimulationCreator:
         self._mcp_port = mcp_port
         self._generate = generate
         self._start = start
+        # None means "use the configured default"; the instance factory resolves it.
+        self._fidelity = fidelity
 
     async def run(self) -> None:
         """Run the creation pipeline; mutates the record in place.
@@ -147,6 +151,7 @@ class SimulationCreator:
             openapi_spec=self._openapi_spec,
             skill_dir=skill_dir,
             mcp_port=self._mcp_port,
+            fidelity=self._fidelity,
         )
 
         self._record.mark_ready(instance)

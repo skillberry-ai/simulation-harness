@@ -43,6 +43,10 @@ class SkillBundle:
     db: dict
     scenarios: list[dict] = field(default_factory=list)
     identity_provenance: dict[str, str] = field(default_factory=dict)
+    # operationId -> OperationKind value. Persisted in manifest.json so the
+    # runtime can tell reads from writes (strict fidelity's write gate), even
+    # when every operation is a POST.
+    operation_kinds: dict[str, str] = field(default_factory=dict)
 
 
 def _noop(_: str) -> None:
@@ -210,4 +214,5 @@ async def run_pipeline(
         db=db,
         scenarios=scenario_dicts,
         identity_provenance=dict(ir.identity_provenance),
+        operation_kinds={op.operation_id: op.kind.value for op in ir.operations},
     )

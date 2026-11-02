@@ -129,4 +129,27 @@ class SimulationArtifactsNotFoundError(Exception):
         )
 
 
+class UngroundedResponseError(Exception):
+    """A strict-fidelity response carried values the store cannot account for.
+
+    Holds plain dicts rather than agent types: utils must not import agent.
+    """
+
+    def __init__(
+        self,
+        *,
+        operation_id: str,
+        ungrounded: list[dict[str, str]],
+        refused_writes: list[dict[str, str]],
+    ) -> None:
+        self.operation_id = operation_id
+        self.ungrounded = ungrounded
+        self.refused_writes = refused_writes
+        shown = ", ".join(f"{u['path']}={u['value']!r}" for u in ungrounded[:3])
+        super().__init__(
+            f"Response for '{operation_id}' contains {len(ungrounded)} value(s) "
+            f"not found in the store (closed-world mode): {shown}"
+        )
+
+
 # Made with Bob

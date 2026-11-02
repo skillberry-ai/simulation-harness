@@ -107,7 +107,12 @@ class MCPServerWrapper:
                         ),
                         TextContent(
                             type="text",
-                            text=json.dumps({"reason": "tool_execution_failed"}),
+                            text=json.dumps(
+                                {
+                                    **result.details,
+                                    "reason": result.reason or "tool_execution_failed",
+                                }
+                            ),
                         ),
                     ],
                     isError=True,
