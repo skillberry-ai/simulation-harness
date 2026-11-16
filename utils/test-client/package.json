@@ -36,8 +36,8 @@
     "vite": "^6.4.5",
     "postcss": "^8.5.18",
     "fast-uri": "^3.1.9",
-    "@hono/node-server": "^2.0.5",
-    "hono": "^4.12.34",
+    "@hono/node-server": "^2.1.6",
+    "hono": "^4.13.16",
     "@typescript-eslint/typescript-estree": {
       "minimatch": "^11.0.1"
     }
