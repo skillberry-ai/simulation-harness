@@ -78,7 +78,7 @@ Domain exceptions in `utils/errors.py` are mapped to HTTP status by handlers in 
 - `SessionExpiredError` → 410
 - `ConcurrentQueueFullError` → 503
 
-MCP `tools/call` errors return two content blocks: a human-readable text message first, then a JSON block `{"reason": "<code>", ...}` last. Stable reason codes: `session_expired` (+ `limit`, `observed`), `concurrent_queue_full`, `tool_execution_failed`. Preserve these codes when adding new error paths.
+MCP `tools/call` errors return two content blocks: a human-readable text message first, then a JSON block `{"reason": "<code>", ...}` last. Stable reason codes: `session_expired` (+ `limit`, `observed`), `concurrent_queue_full`, `tool_execution_failed`, `ungrounded_response` (+ `ungrounded`, `refused_writes`; strict fidelity with `strict_grounding: enforce`). Preserve these codes when adding new error paths. The code comes from `ToolCallResult.reason` (set in `SimulationInstance.execute_tool`, rendered by `MCPServerWrapper`), not from `main.py`.
 
 ### Layout that isn't obvious from the tree
 - `agent/templates/` and `skills/assets/` hold Jinja2 prompt templates packaged with the wheel (see `pyproject.toml` `package-data`).

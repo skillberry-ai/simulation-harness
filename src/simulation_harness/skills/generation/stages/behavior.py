@@ -24,7 +24,9 @@ from simulation_harness.skills.generation.stages.schema import entity_summary
 REQUIRED_HEADINGS: tuple[str, ...] = (
     "### Numeric Ranges and Ordering",
     "### Derivation Rules",
-    "### On-Demand Generation Rules",
+    # Marked so one bundle serves both fidelity modes: the strict-mode runtime
+    # prompt tells the simulator to ignore this subsection by this exact name.
+    "### On-Demand Generation Rules (generative mode only)",
 )
 
 

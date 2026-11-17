@@ -213,3 +213,31 @@ def test_manifest_identity_provenance_defaults_to_empty(tmp_path: Path) -> None:
         generated_at=datetime(2026, 9, 4, tzinfo=timezone.utc),
     )
     assert manifest["identity"] == {"provenance": {}}
+
+
+def test_manifest_records_operation_kinds_sorted(tmp_path: Path) -> None:
+    (tmp_path / "SKILL.md").write_text("x")
+    manifest = build_manifest(
+        tmp_path,
+        skill_name="shop",
+        openapi_spec={"openapi": "3.0.0", "info": {"title": "S", "version": "1"}},
+        model="m",
+        harness_version="0.1.2",
+        generated_at=datetime(2026, 10, 9, tzinfo=timezone.utc),
+        operation_kinds={"searchItems": "search", "createOrder": "create"},
+    )
+    assert manifest["operations"] == {"createOrder": "create", "searchItems": "search"}
+    assert list(manifest["operations"]) == ["createOrder", "searchItems"]
+
+
+def test_manifest_omits_operations_when_none_given(tmp_path: Path) -> None:
+    (tmp_path / "SKILL.md").write_text("x")
+    manifest = build_manifest(
+        tmp_path,
+        skill_name="shop",
+        openapi_spec={"openapi": "3.0.0", "info": {"title": "S", "version": "1"}},
+        model="m",
+        harness_version="0.1.2",
+        generated_at=datetime(2026, 10, 9, tzinfo=timezone.utc),
+    )
+    assert "operations" not in manifest

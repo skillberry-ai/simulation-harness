@@ -13,6 +13,7 @@ from simulation_harness.core.simulation_record import (
 )
 from simulation_harness.core.skill_registry import SkillRegistry
 from simulation_harness.mcp_integration.sidecar_server import SidecarMCPServer
+from simulation_harness.models.domain import Fidelity
 from simulation_harness.utils.errors import (
     SimulationAlreadyExistsError,
     SimulationArtifactsNotFoundError,
@@ -31,8 +32,13 @@ def _default_instance_factory(
     openapi_spec: dict[str, Any],
     skill_dir: Path,
     mcp_port: int | None,
+    fidelity: Fidelity | None = None,
 ) -> SimulationInstance:
-    """Build a SimulationInstance using global config + secrets."""
+    """Build a SimulationInstance using global config + secrets.
+
+    A ``fidelity`` of None (the request omitted it) falls back to
+    ``simulation.fidelity`` in the config.
+    """
     from simulation_harness.models.domain import SimulationSpec
 
     config = get_config()
@@ -51,6 +57,8 @@ def _default_instance_factory(
         skill_dir=skill_dir,
         agent_recursion_limit=config.sessions.agent_recursion_limit,
         mcp_port=mcp_port,
+        fidelity=fidelity or config.simulation.fidelity,
+        strict_grounding=config.simulation.strict_grounding,
     )
 
 
@@ -72,6 +80,7 @@ class SimulationHost:
         skill_registry: SkillRegistry,
         instance_factory: Callable[..., SimulationInstance] = _default_instance_factory,
         max_duration_seconds: float | None = None,
+        fidelity: Fidelity | None = None,
     ) -> SimulationRecord:
         """Declare a new simulation. Returns immediately with status=pending.
 
@@ -100,6 +109,7 @@ class SimulationHost:
                 mcp_port=mcp_port,
                 generate=True,
                 start=True,
+                fidelity=fidelity,
             )
             return record
 
@@ -115,6 +125,7 @@ class SimulationHost:
         mcp_port: int | None,
         generate: bool,
         start: bool,
+        fidelity: Fidelity | None,
     ) -> None:
         """Build a SimulationCreator with explicit flags and spawn the background task.
 
@@ -135,6 +146,7 @@ class SimulationHost:
             mcp_port=mcp_port,
             generate=generate,
             start=start,
+            fidelity=fidelity,
         )
         self._creation_task = asyncio.create_task(
             self._run_creation(creator, mcp_port if start else None)
@@ -171,6 +183,8 @@ class SimulationHost:
                 mcp_port=None,
                 generate=True,
                 start=False,
+                # Setup opens no session; /simulation/start takes the mode.
+                fidelity=None,
             )
             return record
 
@@ -182,6 +196,7 @@ class SimulationHost:
         skill_registry: SkillRegistry,
         instance_factory: Callable[..., SimulationInstance] = _default_instance_factory,
         max_duration_seconds: float | None = None,
+        fidelity: Fidelity | None = None,
     ) -> SimulationRecord:
         """Start a session from baked artifacts. No generation.
 
@@ -224,6 +239,7 @@ class SimulationHost:
                 mcp_port=mcp_port,
                 generate=False,
                 start=True,
+                fidelity=fidelity,
             )
             return record
 
